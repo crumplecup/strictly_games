@@ -8,6 +8,7 @@ use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_router, tool_handler
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
 use tracing::{debug, info, instrument};
 
 /// Request for making a move.
@@ -21,6 +22,8 @@ pub struct MakeMoveRequest {
 pub struct GameServer {
     game: Arc<Mutex<Game>>,
     tool_router: ToolRouter<Self>,
+    /// Channel to send agent moves to orchestrator (optional for TUI mode).
+    move_tx: Option<mpsc::UnboundedSender<usize>>,
 }
 
 #[tool_router]
@@ -32,6 +35,21 @@ impl GameServer {
         Self {
             game: Arc::new(Mutex::new(Game::new())),
             tool_router,
+            move_tx: None,
+        }
+    }
+
+    /// Creates a new game server with move notification channel.
+    /// 
+    /// When agent calls make_move, the position is sent via this channel
+    /// to the orchestrator for TUI integration.
+    pub fn with_move_channel(move_tx: mpsc::UnboundedSender<usize>) -> Self {
+        info!("Creating game server with move channel");
+        let tool_router = Self::tool_router();
+        Self {
+            game: Arc::new(Mutex::new(Game::new())),
+            tool_router,
+            move_tx: Some(move_tx),
         }
     }
 
@@ -83,6 +101,15 @@ impl GameServer {
             status = ?state.status(),
             "Move completed"
         );
+
+        // Notify orchestrator if channel exists (TUI mode)
+        if let Some(tx) = &self.move_tx {
+            if let Err(e) = tx.send(position) {
+                tracing::warn!(error = %e, "Failed to send move to orchestrator");
+            } else {
+                debug!(position, "Sent move to orchestrator");
+            }
+        }
 
         let message = format!("{}\n\n{}", status_msg, state.board().display());
         Ok(CallToolResult::success(vec![Content::text(message)]))

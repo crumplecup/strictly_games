@@ -3,6 +3,7 @@
 #![warn(missing_docs)]
 
 mod app;
+mod mode;
 mod ui;
 mod orchestrator;
 mod players;
@@ -13,6 +14,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use mode::GameMode;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 use tokio::sync::mpsc;
@@ -21,7 +23,7 @@ use tracing_subscriber::EnvFilter;
 
 use app::App;
 use orchestrator::{GameEvent, Orchestrator};
-use players::{HumanPlayer, SimpleAI};
+use players::{AgentPlayer, HumanPlayer, SimpleAI};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -30,6 +32,11 @@ async fn main() -> Result<()> {
         .init();
 
     info!("Starting Strictly Games TUI");
+
+    // TODO: Add mode selection UI
+    // For now, default to HumanVsAI
+    let mode = GameMode::default();
+    info!(mode = ?mode, "Selected game mode");
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -41,9 +48,23 @@ async fn main() -> Result<()> {
     let (key_tx, key_rx) = mpsc::unbounded_channel();
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
 
-    // Create players
+    // Create players based on mode
     let player_x = Box::new(HumanPlayer::new("Human", key_rx));
-    let player_o = Box::new(SimpleAI::new("AI"));
+    
+    let player_o: Box<dyn players::Player> = match mode {
+        GameMode::HumanVsAI => {
+            Box::new(SimpleAI::new("SimpleAI"))
+        }
+        GameMode::HumanVsAgent => {
+            // Create channel for agent moves
+            let (agent_move_tx, agent_move_rx) = mpsc::unbounded_channel();
+            
+            // TODO: Spawn MCP server with agent_move_tx
+            info!("Agent mode selected - MCP server needs to be started separately");
+            
+            Box::new(AgentPlayer::new("Agent", agent_move_rx))
+        }
+    };
 
     // Create orchestrator
     let mut orchestrator = Orchestrator::new(player_x, player_o, event_tx);
