@@ -98,7 +98,9 @@ cat > ~/.copilot/mcp-config.json << 'EOF'
 {
   "mcpServers": {
     "strictly-games": {
-      "command": "/absolute/path/to/strictly_games/target/release/strictly_games"
+      "command": "/absolute/path/to/strictly_games/target/release/strictly_games",
+      "args": [],
+      "env": {}
     }
   }
 }
@@ -111,11 +113,27 @@ copilot
 **Or use the command-line flag for one-time use:**
 
 ```bash
+# From the project directory
+cd /path/to/strictly_games
+
 # Pass config as JSON
-copilot --additional-mcp-config '{"mcpServers":{"strictly-games":{"command":"'$(pwd)'/target/release/strictly_games"}}}'
+copilot --additional-mcp-config '{"mcpServers":{"strictly-games":{"command":"'$(pwd)'/target/release/strictly_games","args":[],"env":{}}}}'
 
 # Or from a file
-copilot --additional-mcp-config @/path/to/config.json
+copilot --additional-mcp-config @mcp-config.json
+```
+
+**Example config file** (`mcp-config.json`):
+```json
+{
+  "mcpServers": {
+    "strictly-games": {
+      "command": "/home/user/strictly_games/target/release/strictly_games",
+      "args": [],
+      "env": {}
+    }
+  }
+}
 ```
 
 ### VS Code Integration
