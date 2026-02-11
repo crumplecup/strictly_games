@@ -90,24 +90,32 @@ code ~/.config/Claude/claude_desktop_config.json
 
 ## Connecting to GitHub Copilot CLI
 
-Pass the server directly via command-line flag:
+GitHub Copilot CLI uses a configuration file at `~/.copilot/mcp-config.json`:
 
 ```bash
-# Using absolute path
-copilot --mcp-server strictly-games=/path/to/strictly_games/target/release/strictly_games
+# Create/edit the config file
+cat > ~/.copilot/mcp-config.json << 'EOF'
+{
+  "mcpServers": {
+    "strictly-games": {
+      "command": "/absolute/path/to/strictly_games/target/release/strictly_games"
+    }
+  }
+}
+EOF
 
-# Or from the project directory
-copilot --mcp-server strictly-games=$(pwd)/target/release/strictly_games
+# Then run copilot normally
+copilot
 ```
 
-You can also add to your shell profile for persistent access:
+**Or use the command-line flag for one-time use:**
 
 ```bash
-# Add to ~/.bashrc or ~/.zshrc
-export COPILOT_MCP_SERVERS="strictly-games=/path/to/strictly_games/target/release/strictly_games"
+# Pass config as JSON
+copilot --additional-mcp-config '{"mcpServers":{"strictly-games":{"command":"'$(pwd)'/target/release/strictly_games"}}}'
 
-# Then just run
-copilot
+# Or from a file
+copilot --additional-mcp-config @/path/to/config.json
 ```
 
 ### VS Code Integration
