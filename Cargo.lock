@@ -1417,8 +1417,11 @@ name = "strictly_games_tui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "crossterm",
+ "elicitation",
  "ratatui",
+ "serde_json",
  "strictly_games",
  "tokio",
  "tracing",
