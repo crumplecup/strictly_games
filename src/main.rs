@@ -25,7 +25,8 @@ async fn main() -> anyhow::Result<()> {
     let server = GameServer::new();
     
     info!("Server ready - connect via MCP protocol");
-    server.serve(rmcp::transport::stdio()).await?;
+    let service = server.serve(rmcp::transport::stdio()).await?;
+    service.waiting().await?;
 
     Ok(())
 }
