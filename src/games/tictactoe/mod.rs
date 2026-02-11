@@ -1,5 +1,5 @@
 mod types;
 mod rules;
 
-pub use types::{GameStatus};
+pub use types::{Board, Player, Square, GameState, GameStatus};
 pub use rules::Game;

@@ -1,3 +1,7 @@
+[workspace]
+members = ["strictly_games_tui"]
+resolver = "2"
+
 [package]
 name = "strictly_games"
 version = "0.1.0"
