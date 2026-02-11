@@ -1,37 +1,98 @@
-//! AI agent player that receives moves via MCP server.
+//! AI agent player that prompts agent via MCP sampling.
 
 use super::Player;
 use anyhow::{Context, Result};
+use rmcp::model::{Content, CreateMessageRequestParams, Role, SamplingMessage};
+use rmcp::service::{Peer, RoleServer};
+use std::sync::Arc;
 use strictly_games::games::tictactoe::Game;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
-/// Agent player that waits for moves from MCP server.
+/// Agent player that prompts an MCP client for moves.
 /// 
-/// When the agent calls make_move via MCP, the server sends
-/// the move through this channel.
+/// Uses MCP's sampling API to send prompts to the agent,
+/// then waits for the agent to call make_move via MCP tools.
 pub struct AgentPlayer {
     name: String,
+    peer: Option<Arc<Peer<RoleServer>>>,
     move_rx: mpsc::UnboundedReceiver<usize>,
 }
 
 impl AgentPlayer {
-    /// Creates a new agent player with a move receiver channel.
-    pub fn new(name: impl Into<String>, move_rx: mpsc::UnboundedReceiver<usize>) -> Self {
+    /// Creates a new agent player with optional MCP peer for prompting.
+    pub fn new(
+        name: impl Into<String>,
+        move_rx: mpsc::UnboundedReceiver<usize>,
+        peer: Option<Arc<Peer<RoleServer>>>,
+    ) -> Self {
         let name = name.into();
-        info!(agent = %name, "Creating agent player");
+        info!(agent = %name, has_peer = peer.is_some(), "Creating agent player");
 
-        Self { name, move_rx }
+        Self {
+            name,
+            peer,
+            move_rx,
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl Player for AgentPlayer {
-    async fn get_move(&mut self, _game: &Game) -> Result<usize> {
-        debug!(agent = %self.name, "Waiting for agent move via MCP");
+    async fn get_move(&mut self, game: &Game) -> Result<usize> {
+        debug!(agent = %self.name, "Agent's turn");
 
-        // Wait for agent to call make_move tool
-        let position = self.move_rx.recv()
+        // If we have a peer, send a prompt to the agent
+        if let Some(peer) = &self.peer {
+            let state = game.state();
+            let board = state.board().display();
+            let current_player = state.current_player();
+
+            let prompt = format!(
+                "It's your turn! You are playing as {:?}.\n\n\
+                Current board:\n{}\n\n\
+                Please call the make_move tool with a position (0-8) for your next move.\n\
+                Positions are numbered left-to-right, top-to-bottom (0=top-left, 8=bottom-right).",
+                current_player, board
+            );
+
+            info!(agent = %self.name, "Sending prompt to agent");
+
+            let params = CreateMessageRequestParams {
+                meta: None,
+                task: None,
+                messages: vec![SamplingMessage {
+                    role: Role::User,
+                    content: Content::text(prompt),
+                }],
+                model_preferences: None,
+                system_prompt: Some(
+                    "You are playing tic-tac-toe. Use the make_move tool to make your moves.".to_string()
+                ),
+                include_context: None,
+                temperature: None,
+                max_tokens: 100,
+                stop_sequences: None,
+                metadata: None,
+            };
+
+            match peer.create_message(params).await {
+                Ok(_response) => {
+                    debug!(agent = %self.name, "Agent responded to prompt");
+                    // Response might contain the tool call, but we still wait for channel
+                }
+                Err(e) => {
+                    warn!(agent = %self.name, error = %e, "Failed to send prompt to agent");
+                }
+            }
+        } else {
+            info!(agent = %self.name, "No peer connection - waiting for manual move");
+        }
+
+        // Wait for agent to call make_move tool (sent via channel)
+        let position = self
+            .move_rx
+            .recv()
             .await
             .context("Agent disconnected (MCP channel closed)")?;
 

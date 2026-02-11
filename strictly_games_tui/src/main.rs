@@ -62,10 +62,55 @@ async fn main() -> Result<()> {
             // Create channel for agent moves
             let (agent_move_tx, agent_move_rx) = mpsc::unbounded_channel();
             
-            // TODO: Spawn MCP server with agent_move_tx
-            info!("Agent mode selected - MCP server needs to be started separately");
+            // Spawn MCP server in background
+            info!("Spawning MCP server for agent communication");
             
-            Box::new(AgentPlayer::new("Agent", agent_move_rx))
+            let (server_tx, mut server_rx): (
+                mpsc::UnboundedSender<std::sync::Arc<rmcp::service::Peer<rmcp::service::RoleServer>>>,
+                mpsc::UnboundedReceiver<std::sync::Arc<rmcp::service::Peer<rmcp::service::RoleServer>>>,
+            ) = mpsc::unbounded_channel();
+            
+            tokio::spawn(async move {
+                use rmcp::ServiceExt;
+                use strictly_games::server::GameServer;
+                
+                // Create game server with move channel
+                let server = GameServer::with_move_channel(agent_move_tx);
+                
+                // Create MCP service with stdio transport  
+                match server.serve(rmcp::transport::stdio()).await {
+                    Ok(service) => {
+                        // Send peer back to main thread (wrapped in Arc)
+                        let peer = std::sync::Arc::new(service.peer().clone());
+                        let _ = server_tx.send(peer);
+                        
+                        // Run the service
+                        if let Err(e) = service.waiting().await {
+                            tracing::error!(error = %e, "MCP server error");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to create MCP service");
+                    }
+                }
+            });
+            
+            // Wait for peer (with timeout)
+            let peer = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                server_rx.recv()
+            )
+            .await
+            .ok()
+            .flatten();
+            
+            if peer.is_some() {
+                info!("MCP server started successfully");
+            } else {
+                tracing::warn!("Failed to get MCP server peer");
+            }
+            
+            Box::new(AgentPlayer::new("Agent", agent_move_rx, peer))
         }
     };
 
