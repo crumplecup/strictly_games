@@ -1,55 +1,66 @@
-//! AI agent player that uses MCP to make moves.
+//! AI agent player that uses elicitation to get moves.
 
 use super::Player;
-use anyhow::Result;
+use anyhow::{Context, Result};
+use elicitation::{ElicitClient, Elicitation};
+use rmcp::service::{Peer, RoleClient};
+use std::sync::Arc;
 use strictly_games::games::tictactoe::Game;
 use tracing::{debug, info};
 
-/// AI agent player using MCP.
+/// Agent player that uses elicitation to ask an agent for moves.
 pub struct AgentPlayer {
     name: String,
-    client: Arc<ElicitClient>,
+    client: ElicitClient,
 }
 
 impl AgentPlayer {
-    /// Creates a new agent player.
-    pub fn new(name: impl Into<String>, client: Arc<ElicitClient>) -> Self {
-        Self {
-            name: name.into(),
-            client,
-        }
+    /// Creates a new agent player with an MCP client.
+    pub fn new(name: impl Into<String>, peer: Arc<Peer<RoleClient>>) -> Self {
+        let name = name.into();
+        info!(agent = %name, "Creating agent player");
+
+        let client = ElicitClient::new(peer);
+
+        Self { name, client }
     }
 }
 
 #[async_trait::async_trait]
 impl Player for AgentPlayer {
     async fn get_move(&mut self, game: &Game) -> Result<usize> {
-        info!(agent = %self.name, "Agent making move");
+        debug!(agent = %self.name, "Eliciting move from agent");
+
+        // Show the agent the current board
+        let board = game.state().board().display();
+        let current_player = game.state().current_player();
         
-        let state = game.state();
-        let board_display = state.board().display();
-        
-        // Call the make_move tool via MCP
-        let tool_name = "make_move";
-        let args = serde_json::json!({
-            "board": board_display,
-            "current_player": format!("{:?}", state.current_player()),
-        });
-        
-        debug!(tool = tool_name, args = ?args, "Calling agent tool");
-        
-        // TODO: This is a placeholder - we need to actually call the MCP tool
-        // For now, let's make a simple AI move (first empty square)
-        for pos in 0..9 {
-            if state.board().is_empty(pos) {
-                return Ok(pos);
-            }
+        info!(
+            agent = %self.name,
+            board = %board,
+            "Asking agent for move"
+        );
+
+        // TODO: Need to provide context to the agent somehow
+        // For now, elicit a simple number (1-9)
+        let position: u8 = u8::elicit(&self.client)
+            .await
+            .context("Failed to elicit move from agent")?;
+
+        // Validate range
+        if position < 1 || position > 9 {
+            anyhow::bail!("Agent returned invalid position: {}", position);
         }
+
+        // Convert 1-9 to 0-8
+        let pos = (position - 1) as usize;
+        debug!(agent = %self.name, position = pos, "Agent chose position");
         
-        anyhow::bail!("No valid moves available")
+        Ok(pos)
     }
-    
+
     fn name(&self) -> &str {
         &self.name
     }
 }
+

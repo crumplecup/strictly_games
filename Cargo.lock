@@ -1421,6 +1421,7 @@ dependencies = [
  "crossterm",
  "elicitation",
  "ratatui",
+ "rmcp",
  "serde_json",
  "strictly_games",
  "tokio",
