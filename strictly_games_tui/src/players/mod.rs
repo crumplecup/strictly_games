@@ -5,8 +5,10 @@ mod agent;
 mod simple_ai;
 
 pub use human::HumanPlayer;
-pub use agent::AgentPlayer;
 pub use simple_ai::SimpleAI;
+
+#[allow(unused_imports)]
+pub use agent::AgentPlayer;
 
 use anyhow::Result;
 use strictly_games::games::tictactoe::Game;

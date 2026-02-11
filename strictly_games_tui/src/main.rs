@@ -4,6 +4,8 @@
 
 mod app;
 mod ui;
+mod orchestrator;
+mod players;
 
 use anyhow::Result;
 use crossterm::{
@@ -13,10 +15,13 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
+use tokio::sync::mpsc;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 use app::App;
+use orchestrator::{GameEvent, Orchestrator};
+use players::{HumanPlayer, SimpleAI};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,8 +37,29 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    // Create channels for communication
+    let (key_tx, key_rx) = mpsc::unbounded_channel();
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+
+    // Create players
+    let player_x = Box::new(HumanPlayer::new("Human", key_rx));
+    let player_o = Box::new(SimpleAI::new("AI"));
+
+    // Create orchestrator
+    let mut orchestrator = Orchestrator::new(player_x, player_o, event_tx);
+
+    // Spawn orchestrator in background
+    let orchestrator_handle = tokio::spawn(async move {
+        if let Err(e) = orchestrator.run().await {
+            tracing::error!(error = %e, "Orchestrator error");
+        }
+    });
+
     let app = App::new();
-    let res = run_app(&mut terminal, app).await;
+    let res = run_app(&mut terminal, app, key_tx, &mut event_rx).await;
+
+    // Clean up orchestrator
+    orchestrator_handle.abort();
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
@@ -49,22 +75,30 @@ async fn main() -> Result<()> {
 async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     mut app: App,
+    key_tx: mpsc::UnboundedSender<KeyCode>,
+    event_rx: &mut mpsc::UnboundedReceiver<GameEvent>,
 ) -> Result<()> {
     loop {
         terminal.draw(|f| ui::draw(f, &app))?;
 
+        // Check for UI events from orchestrator
+        if let Ok(event) = event_rx.try_recv() {
+            app.handle_event(event);
+        }
+
+        // Check for keyboard input
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Char('r') => app.restart(),
-                    KeyCode::Char(c) if c.is_ascii_digit() => {
-                        let digit = c.to_digit(10).unwrap() as usize;
-                        if digit >= 1 && digit <= 9 {
-                            app.make_move(digit - 1)?;
-                        }
+                    KeyCode::Char('r') => {
+                        // TODO: Need to restart orchestrator
+                        app.restart();
                     }
-                    _ => {}
+                    code => {
+                        // Send all keys to human player
+                        let _ = key_tx.send(code);
+                    }
                 }
             }
         }

@@ -75,10 +75,20 @@ impl Orchestrator {
             
             // Get current player
             let current_player = state.current_player();
-            let (player, player_name) = if current_player == strictly_games::games::tictactoe::Player::X {
-                (&mut self.player_x, self.player_x.name().to_string())
+            let is_x = current_player == strictly_games::games::tictactoe::Player::X;
+            
+            // Get player name first (immutable borrow)
+            let player_name = if is_x {
+                self.player_x.name().to_string()
             } else {
-                (&mut self.player_o, self.player_o.name().to_string())
+                self.player_o.name().to_string()
+            };
+            
+            // Then get mutable reference
+            let player = if is_x {
+                &mut self.player_x
+            } else {
+                &mut self.player_o
             };
             
             // Notify UI if agent is thinking
@@ -91,7 +101,7 @@ impl Orchestrator {
             let position = player.get_move(&self.game).await?;
             
             // Make the move
-            self.game.make_move(position)?;
+            self.game.make_move(position).map_err(|e| anyhow::anyhow!(e))?;
             
             // Notify UI
             self.event_tx.send(GameEvent::MoveMade {

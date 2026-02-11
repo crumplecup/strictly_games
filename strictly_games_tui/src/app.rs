@@ -1,13 +1,15 @@
 //! Application state and logic.
 
-use anyhow::Result;
-use strictly_games::games::tictactoe::{Game, GameStatus};
+use strictly_games::games::tictactoe::Game;
 use tracing::debug;
+
+use crate::orchestrator::GameEvent;
 
 /// Main application state.
 pub struct App {
     game: Game,
     status_message: String,
+    current_player_name: Option<String>,
 }
 
 impl App {
@@ -15,7 +17,8 @@ impl App {
     pub fn new() -> Self {
         Self {
             game: Game::new(),
-            status_message: "Player X's turn. Press 1-9 to make a move.".to_string(),
+            status_message: "Waiting for game to start...".to_string(),
+            current_player_name: None,
         }
     }
 
@@ -29,29 +32,39 @@ impl App {
         &self.status_message
     }
 
-    /// Makes a move at the given position.
-    pub fn make_move(&mut self, position: usize) -> Result<()> {
-        debug!(position, "Making move");
+    /// Handles a game event from the orchestrator.
+    pub fn handle_event(&mut self, event: GameEvent) {
+        debug!(?event, "Handling game event");
 
-        match self.game.make_move(position) {
-            Ok(()) => {
-                let state = self.game.state();
-                self.status_message = match state.status() {
-                    GameStatus::InProgress => {
-                        format!("Player {:?}'s turn", state.current_player())
+        match event {
+            GameEvent::StateChanged(message) => {
+                self.status_message = message;
+            }
+            GameEvent::AgentThinking => {
+                if let Some(name) = &self.current_player_name {
+                    self.status_message = format!("{} is thinking...", name);
+                } else {
+                    self.status_message = "AI is thinking...".to_string();
+                }
+            }
+            GameEvent::MoveMade { player, position } => {
+                // Update our game state
+                if let Err(e) = self.game.make_move(position) {
+                    self.status_message = format!("Move error: {}", e);
+                } else {
+                    debug!(player = %player, position, "Move applied to UI state");
+                    self.status_message = format!("{} played position {}", player, position + 1);
+                }
+            }
+            GameEvent::GameOver { winner } => {
+                self.status_message = match winner {
+                    Some(player) => {
+                        format!("{} wins! Press 'r' to restart or 'q' to quit.", player)
                     }
-                    GameStatus::Won(player) => {
-                        format!("Player {:?} wins! Press 'r' to restart or 'q' to quit.", player)
-                    }
-                    GameStatus::Draw => {
+                    None => {
                         "Game ended in a draw! Press 'r' to restart or 'q' to quit.".to_string()
                     }
                 };
-                Ok(())
-            }
-            Err(e) => {
-                self.status_message = format!("Invalid move: {}. Try again.", e);
-                Ok(())
             }
         }
     }
@@ -60,6 +73,7 @@ impl App {
     pub fn restart(&mut self) {
         debug!("Restarting game");
         self.game = Game::new();
-        self.status_message = "Player X's turn. Press 1-9 to make a move.".to_string();
+        self.status_message = "Game restarted. Player X's turn.".to_string();
+        self.current_player_name = None;
     }
 }

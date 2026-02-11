@@ -2,9 +2,6 @@
 
 use super::Player;
 use anyhow::Result;
-use elicitation::ElicitClient;
-use serde_json::Value;
-use std::sync::Arc;
 use strictly_games::games::tictactoe::Game;
 use tracing::{debug, info};
 
