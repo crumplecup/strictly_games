@@ -27,15 +27,18 @@ use players::{AgentPlayer, HumanPlayer, SimpleAI};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Setup logging to file to avoid interfering with TUI
+    let log_file = std::fs::File::create("strictly_games_tui.log")?;
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
+        .with_writer(std::sync::Arc::new(log_file))
+        .with_ansi(false)
         .init();
 
     info!("Starting Strictly Games TUI");
 
-    // TODO: Add mode selection UI
-    // For now, default to HumanVsAI
-    let mode = GameMode::default();
+    // Parse command-line mode argument
+    let mode = parse_mode_arg();
     info!(mode = ?mode, "Selected game mode");
 
     enable_raw_mode()?;
@@ -123,5 +126,32 @@ async fn run_app<B: ratatui::backend::Backend>(
                 }
             }
         }
+    }
+}
+
+/// Parses game mode from command-line arguments.
+fn parse_mode_arg() -> GameMode {
+    let args: Vec<String> = std::env::args().collect();
+    
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "ai" | "simple" => GameMode::HumanVsAI,
+            "agent" | "mcp" => GameMode::HumanVsAgent,
+            _ => {
+                eprintln!("Unknown mode: {}. Using default (ai)", args[1]);
+                eprintln!("Valid modes: ai, agent");
+                GameMode::default()
+            }
+        }
+    } else {
+        // No argument provided, show available modes
+        eprintln!("Strictly Games TUI");
+        eprintln!("Usage: strictly_games_tui [mode]");
+        eprintln!("Modes:");
+        eprintln!("  ai     - Play against SimpleAI (default)");
+        eprintln!("  agent  - Play against MCP agent (requires server running)");
+        eprintln!();
+        eprintln!("Starting with default mode: ai");
+        GameMode::default()
     }
 }
