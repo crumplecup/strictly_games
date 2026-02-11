@@ -88,9 +88,41 @@ code ~/.config/Claude/claude_desktop_config.json
 # Restart Claude Desktop
 ```
 
-## Connecting to GitHub Copilot
+## Connecting to GitHub Copilot CLI
 
-Configure in VS Code's MCP settings or via CLI.
+Pass the server directly via command-line flag:
+
+```bash
+# Using absolute path
+copilot --mcp-server strictly-games=/path/to/strictly_games/target/release/strictly_games
+
+# Or from the project directory
+copilot --mcp-server strictly-games=$(pwd)/target/release/strictly_games
+```
+
+You can also add to your shell profile for persistent access:
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+export COPILOT_MCP_SERVERS="strictly-games=/path/to/strictly_games/target/release/strictly_games"
+
+# Then just run
+copilot
+```
+
+### VS Code Integration
+
+For VS Code, add to `.vscode/settings.json` in your workspace:
+
+```json
+{
+  "github.copilot.chat.mcp.servers": {
+    "strictly-games": {
+      "command": "/path/to/strictly_games/target/release/strictly_games"
+    }
+  }
+}
+```
 
 ## Playing Tic-Tac-Toe
 
