@@ -307,13 +307,9 @@ async fn waker_task(
                 }
             });
             
-            if let Ok(msg) = serde_json::to_string(&notification) {
-                if notification_tx.send(msg).is_ok() {
-                    info!("Queued turn notification for Copilot");
-                } else {
-                    error!("Failed to send notification - channel closed");
-                }
-            }
+            // Try writing a user-visible message to stderr (Copilot may display this)
+            eprintln!("\n🎮 GAME UPDATE: It's your turn, {}! Check the board with get_board and make your move.\n", player_name);
+            info!("Turn detected, wrote notification to stderr");
             
             last_prompt_time = std::time::Instant::now();
         }

@@ -1,6 +1,7 @@
 //! Core domain types for tic-tac-toe.
 
 use elicitation::{Elicit, Prompt, Select};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Player in the game.
@@ -172,4 +173,11 @@ impl Default for GameState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// A move in the game (position 0-8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Elicit)]
+pub struct Move {
+    /// Position on the board (0-8, where 0=top-left, 8=bottom-right).
+    pub position: u8,
 }

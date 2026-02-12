@@ -1,0 +1,11 @@
+2026-02-12T07:21:36.294411Z  INFO strictly_games_tui: Starting Strictly Games TUI
+2026-02-12T07:21:36.294497Z  INFO strictly_games_tui: Selected game mode mode=HumanVsAgent
+2026-02-12T07:21:36.295518Z  INFO strictly_games_tui: HTTP mode - thin client connecting to game server
+2026-02-12T07:21:36.295548Z  INFO strictly_games_tui: Connecting to HTTP game server server_url=http://localhost:3000 session_id=test
+2026-02-12T07:21:36.295694Z  INFO register{base_url=http://localhost:3000 session_id=test name=Human}: strictly_games_tui::http_client: Registering with HTTP game server base_url=http://localhost:3000 session_id=test name=Human
+2026-02-12T07:21:36.331023Z  INFO register{base_url=http://localhost:3000 session_id=test name=Human}: strictly_games_tui::http_client: Registered successfully with server session_id=test player_id=test_human
+2026-02-12T07:21:36.331150Z  INFO strictly_games_tui: Registered with server, starting HTTP game loop
+2026-02-12T07:21:36.331198Z  INFO run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Starting HTTP thin client game loop
+2026-02-12T07:22:16.309325Z  INFO run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Sending move to server position=4
+2026-02-12T07:22:16.309532Z  INFO run_http_game{session_id=test player_id=test_human}:make_move{position=4 session_id=test player_id=test_human}: strictly_games_tui::http_client: Sending move to server position=4
+2026-02-12T07:22:16.314904Z  INFO run_http_game{session_id=test player_id=test_human}:make_move{position=4 session_id=test player_id=test_human}: strictly_games_tui::http_client: Move completed successfully position=4

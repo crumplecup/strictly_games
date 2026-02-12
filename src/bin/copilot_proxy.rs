@@ -37,6 +37,7 @@ use axum::{
     Router,
 };
 use http_body_util::BodyExt;
+use hyper::body::Bytes;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -204,7 +205,7 @@ async fn proxy_handler(
                     );
                     StatusCode::BAD_GATEWAY
                 })?;
-            let body_bytes = collected.to_bytes();
+            let mut body_bytes = collected.to_bytes();
             let body_len = body_bytes.len();
             let body_preview = String::from_utf8_lossy(&body_bytes[..body_bytes.len().min(200)]).to_string();
             
@@ -214,22 +215,61 @@ async fn proxy_handler(
                 "Body collected from backend"
             );
             
+            // Fix rmcp's empty tools capability in initialize response
+            // Copilot CLI won't call tools/list if capabilities.tools is {}
+            if body_preview.contains("\"method\":\"initialize\"") || body_preview.contains("\"capabilities\":{\"tools\":{}") {
+                if let Ok(body_str) = String::from_utf8(body_bytes.to_vec()) {
+                    // Strip SSE "data: " prefix if present
+                    let json_str = if body_str.starts_with("data: ") {
+                        body_str.strip_prefix("data: ").unwrap_or(&body_str).trim()
+                    } else {
+                        &body_str
+                    };
+                    
+                    if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(json_str) {
+                        // Check if this is an initialize response with empty tools
+                        if let Some(result) = json.get_mut("result") {
+                            if let Some(caps) = result.get_mut("capabilities") {
+                                if let Some(tools) = caps.get("tools") {
+                                    if tools.is_object() && tools.as_object().unwrap().is_empty() {
+                                        warn!("Detected rmcp empty tools capability bug - injecting listChanged:true");
+                                        caps["tools"] = serde_json::json!({"listChanged": true});
+                                        
+                                        // Re-serialize with SSE prefix if needed
+                                        let fixed_json = serde_json::to_string(&json).unwrap();
+                                        let fixed_body = if body_str.starts_with("data: ") {
+                                            format!("data: {}\n\n", fixed_json)
+                                        } else {
+                                            fixed_json
+                                        };
+                                        
+                                        body_bytes = Bytes::from(fixed_body);
+                                        info!("Fixed initialize response to advertise tools capability");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Remove Transfer-Encoding: chunked since we've collected the full body
             let had_transfer_encoding = parts.headers.remove("transfer-encoding").is_some();
             debug!(had_transfer_encoding, "Removed transfer-encoding header");
             
-            // Set Content-Length since we have the full body now
+            // Set Content-Length with the actual body size (may have been modified above)
+            let final_body_len = body_bytes.len();
             parts.headers.insert(
                 "content-length",
-                body_len.to_string().parse().unwrap(),
+                final_body_len.to_string().parse().unwrap(),
             );
-            debug!(content_length = body_len, "Set content-length header");
+            debug!(content_length = final_body_len, "Set content-length header");
             
             let response = Response::from_parts(parts, Body::from(body_bytes));
             
             info!(
                 status = %status,
-                content_length = body_len,
+                content_length = final_body_len,
                 "Forwarding response to client"
             );
             Ok(response)

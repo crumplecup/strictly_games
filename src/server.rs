@@ -1,14 +1,17 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::GameStatus;
+use crate::games::tictactoe::{GameStatus, Move};
 use crate::session::{PlayerType, SessionManager};
+use elicitation::Elicitation;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
+use rmcp::service::{Peer, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_router, tool_handler};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, instrument};
+use serde_json::Value;
+use tracing::{debug, error, info, instrument};
 
 /// Request for registering a player.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -31,6 +34,15 @@ pub struct MakeMoveRequest {
     pub player_id: String,
     /// Position on board (0-8, where 0=top-left, 8=bottom-right).
     pub position: usize,
+}
+
+/// Request for playing a game with elicitation.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PlayGameRequest {
+    /// Session ID.
+    pub session_id: String,
+    /// Player name.
+    pub player_name: String,
 }
 
 /// Request for getting board state.
@@ -267,6 +279,130 @@ impl GameServer {
         
         info!(session_count = session_ids.len(), "Listed available sessions");
         Ok(CallToolResult::success(vec![Content::text(result)]))
+    }
+
+    /// Play a game of tic-tac-toe using elicitation
+    #[instrument(skip(self, peer, req), fields(session_id = %req.session_id, player_name = %req.player_name))]
+    #[tool(description = "Play a complete game of tic-tac-toe. The agent will be prompted for moves interactively until the game ends.")]
+    pub async fn play_game(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(req): Parameters<PlayGameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        use crate::games::tictactoe::Move;
+        use elicitation::Elicitation;
+        
+        info!(session_id = %req.session_id, player_name = %req.player_name, "Starting elicitation-based game");
+        
+        // Register the agent player
+        let player_id = format!("{}_{}", req.session_id, req.player_name.to_lowercase().replace(' ', "_"));
+        
+        // Get or create session
+        if self.sessions.get_session(&req.session_id).is_none() {
+            info!(session_id = %req.session_id, "Creating new session for game");
+            self.sessions
+                .create_session(req.session_id.clone())
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        }
+        
+        // Get session and register player
+        let mut session = self.sessions.get_session(&req.session_id)
+            .ok_or_else(|| McpError::internal_error("Session not found after creation", None))?;
+        
+        let mark = session
+            .register_player(player_id.clone(), req.player_name.clone(), PlayerType::Agent)
+            .map_err(|e| {
+                error!(error = %e, "Failed to register player");
+                let msg = format!("Failed to register: {}", e);
+                McpError::invalid_params(msg, None)
+            })?;
+        
+        info!(player_id = %player_id, mark = ?mark, "Agent registered, entering elicitation loop");
+        
+        // Game loop - continue until game is over
+        loop {
+            let game_state = session.game.state();
+            
+            // Check if game is over
+            match game_state.status() {
+                GameStatus::Won(winner) => {
+                    let winner_name = if *winner == mark {
+                        req.player_name.clone()
+                    } else {
+                        "opponent".to_string()
+                    };
+                    
+                    let message = format!(
+                        "🎉 Game Over! {} wins!\n\nFinal Board:\n{}\n\nMoves: {}",
+                        winner_name,
+                        game_state.board().display(),
+                        game_state.history().len()
+                    );
+                    
+                    info!(winner = ?winner, moves = game_state.history().len(), "Game ended with winner");
+                    self.sessions.update_session(session);
+                    return Ok(CallToolResult::success(vec![Content::text(message)]));
+                }
+                GameStatus::Draw => {
+                    let message = format!(
+                        "🤝 Game Over! It's a draw.\n\nFinal Board:\n{}\n\nMoves: {}",
+                        game_state.board().display(),
+                        game_state.history().len()
+                    );
+                    
+                    info!(moves = game_state.history().len(), "Game ended in draw");
+                    self.sessions.update_session(session);
+                    return Ok(CallToolResult::success(vec![Content::text(message)]));
+                }
+                GameStatus::InProgress => {
+                    // Check whose turn it is
+                    if game_state.current_player() != mark {
+                        // Wait for opponent - shouldn't happen in agent-only games
+                        info!("Waiting for opponent's move");
+                        
+                        let message = format!(
+                            "⏳ Waiting for opponent's move...\n\nCurrent Board:\n{}\n\nYou are playing as {}",
+                            game_state.board().display(),
+                            if mark == crate::games::tictactoe::Player::X { "X" } else { "O" }
+                        );
+                        
+                        self.sessions.update_session(session);
+                        return Ok(CallToolResult::success(vec![Content::text(message)]));
+                    }
+                    
+                    // It's our turn - elicit move from agent using sampling
+                    info!(mark = ?mark, "Agent's turn, eliciting move via sampling");
+                    
+                    // Use elicitation to interactively get the move
+                    let agent_move = Move::elicit_checked(peer.clone())
+                        .await
+                        .map_err(|e| {
+                            error!(error = ?e, "Failed to elicit move from agent");
+                            let msg = format!("Elicitation failed: {:?}", e);
+                            McpError::internal_error(msg, None)
+                        })?;
+                    
+                    info!(position = agent_move.position, "Agent selected move via elicitation");
+                    
+                    // Apply the move
+                    session.game.make_move(agent_move.position as usize)
+                        .map_err(|e| {
+                            error!(error = %e, position = agent_move.position, "Invalid move attempted");
+                            let msg = format!("Invalid move: {}", e);
+                            McpError::invalid_params(msg, None)
+                        })?;
+                    
+                    info!(position = agent_move.position, "Move applied successfully, continuing loop");
+                    
+                    // Update session and continue loop
+                    self.sessions.update_session(session.clone());
+                    
+                    // Reload session for next iteration
+                    session = self.sessions.get_session(&req.session_id)
+                        .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
+                }
+            }
+        }
     }
 }
 
