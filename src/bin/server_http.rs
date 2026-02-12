@@ -31,6 +31,11 @@ async fn main() -> Result<()> {
 
     let session_manager = Arc::new(LocalSessionManager::default());
     
+    // Configure for STATELESS mode (no session management required)
+    let mut config = StreamableHttpServerConfig::default();
+    config.stateful_mode = false;  // Simpler protocol, no session IDs needed
+    debug!(?config, "HTTP service configuration");
+    
     // Factory creates new GameServer for each session
     let http_service = StreamableHttpService::new(
         || {
@@ -38,7 +43,7 @@ async fn main() -> Result<()> {
             Ok(GameServer::new())
         },
         session_manager,
-        StreamableHttpServerConfig::default(),
+        config,
     );
     
     // Wrap service with request logging
@@ -53,13 +58,14 @@ async fn main() -> Result<()> {
                 );
                 req
             })
-            .service(tower::service_fn(move |req| {
+            .service(tower::service_fn(move |req: Request| {
                 let mut service = http_service.clone();
                 async move {
+                    let uri = req.uri().clone();
                     let result = tower::Service::call(&mut service, req).await;
                     match &result {
-                        Ok(resp) => debug!(status = ?resp.status(), "Response sent"),
-                        Err(e) => warn!(error = ?e, "Request failed"),
+                        Ok(resp) => info!(status = ?resp.status(), uri = %uri, "Response sent"),
+                        Err(e) => warn!(error = ?e, uri = %uri, "Request failed"),
                     }
                     result
                 }
