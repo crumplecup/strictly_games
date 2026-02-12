@@ -25,14 +25,15 @@ Check `~/.copilot/mcp-config.json` has:
 {
   "mcpServers": {
     "strictly-games": {
-      "transport": {
-        "type": "http",
-        "url": "http://localhost:3000"
-      }
+      "type": "sse",
+      "url": "http://localhost:3000",
+      "tools": ["*"]
     }
   }
 }
 ```
+
+**Important:** Use `"type": "sse"` (Server-Sent Events), not `"http"`. The `tools` field is required.
 
 ### Step 3: Start Copilot CLI
 

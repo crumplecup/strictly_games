@@ -41,14 +41,15 @@ Update `~/.copilot/mcp-config.json`:
 {
   "mcpServers": {
     "strictly-games": {
-      "transport": {
-        "type": "http",
-        "url": "http://localhost:3000"
-      }
+      "type": "sse",
+      "url": "http://localhost:3000",
+      "tools": ["*"]
     }
   }
 }
 ```
+
+Note: Use `"type": "sse"` for Server-Sent Events transport. The `"tools": ["*"]` enables all tools.
 
 ### 3. Connect Agent
 
