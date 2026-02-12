@@ -1,14 +1,12 @@
 //! Player trait and implementations.
 
 mod human;
-mod agent;
 mod simple_ai;
+mod http;
 
 pub use human::HumanPlayer;
 pub use simple_ai::SimpleAI;
-
-#[allow(unused_imports)]
-pub use agent::AgentPlayer;
+pub use http::HttpOpponent;
 
 use anyhow::Result;
 use strictly_games::games::tictactoe::Game;

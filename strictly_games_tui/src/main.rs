@@ -7,6 +7,7 @@ mod mode;
 mod ui;
 mod orchestrator;
 mod players;
+mod http_client;
 
 use anyhow::Result;
 use crossterm::{
@@ -23,7 +24,7 @@ use tracing_subscriber::EnvFilter;
 
 use app::App;
 use orchestrator::{GameEvent, Orchestrator};
-use players::{AgentPlayer, HumanPlayer, SimpleAI};
+use players::{HumanPlayer, SimpleAI};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -66,18 +67,10 @@ async fn main() -> Result<()> {
             (player_x, player_o)
         }
         GameMode::HumanVsAgent => {
-            // Create channel for agent moves
-            let (agent_move_tx, agent_move_rx) = mpsc::unbounded_channel();
-            
-            info!("Agent mode - expecting external MCP server with move channel");
-            info!("Note: MCP server must be started separately and connected to agent");
-            
-            // Agent player waits for moves via channel (no peer for sampling)
-            // The external MCP server will send moves through a shared channel
-            // TODO: Need to pass agent_move_tx to external server somehow
-            
+            info!("HTTP mode - human vs agent over HTTP not yet implemented");
+            info!("Falling back to AI mode");
             let player_x = Box::new(HumanPlayer::new("Human", key_rx));
-            let player_o = Box::new(AgentPlayer::new("Agent", agent_move_rx, None));
+            let player_o = Box::new(SimpleAI::new("AI"));
             (player_x, player_o)
         }
     };
