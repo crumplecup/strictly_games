@@ -3,6 +3,7 @@
 use super::types::{GameState, GameStatus, Player, Square};
 
 /// Tic-tac-toe game engine.
+#[derive(Debug, Clone)]
 pub struct Game {
     state: GameState,
 }
