@@ -5,8 +5,10 @@
 pub enum GameMode {
     /// Human vs Simple AI  
     HumanVsAI,
-    /// Human vs Agent (via MCP)
+    /// Human vs Agent (via MCP - requires manual setup)
     HumanVsAgent,
+    /// AI vs AI (SimpleAI vs SimpleAI for testing)
+    AIVsAI,
 }
 
 impl GameMode {
@@ -15,6 +17,7 @@ impl GameMode {
         match self {
             GameMode::HumanVsAI => "Human vs AI",
             GameMode::HumanVsAgent => "Human vs Agent",
+            GameMode::AIVsAI => "AI vs AI",
         }
     }
 }

@@ -90,14 +90,22 @@ impl Player for AgentPlayer {
         }
 
         // Wait for agent to call make_move tool (sent via channel)
-        let position = self
-            .move_rx
-            .recv()
-            .await
-            .context("Agent disconnected (MCP channel closed)")?;
-
-        debug!(agent = %self.name, position, "Received move from agent");
-        Ok(position)
+        // Use timeout to allow user to quit/restart if agent is stuck
+        let timeout_duration = std::time::Duration::from_secs(60);
+        
+        match tokio::time::timeout(timeout_duration, self.move_rx.recv()).await {
+            Ok(Some(position)) => {
+                debug!(agent = %self.name, position, "Received move from agent");
+                Ok(position)
+            }
+            Ok(None) => {
+                anyhow::bail!("Agent disconnected (MCP channel closed)")
+            }
+            Err(_) => {
+                warn!(agent = %self.name, "Agent move timed out after 60s");
+                anyhow::bail!("Agent did not respond within 60 seconds")
+            }
+        }
     }
 
     fn name(&self) -> &str {

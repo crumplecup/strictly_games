@@ -52,65 +52,33 @@ async fn main() -> Result<()> {
     let (event_tx, mut event_rx) = mpsc::unbounded_channel();
 
     // Create players based on mode
-    let player_x = Box::new(HumanPlayer::new("Human", key_rx));
-    
-    let player_o: Box<dyn players::Player> = match mode {
+    let (player_x, player_o): (Box<dyn players::Player>, Box<dyn players::Player>) = match mode {
         GameMode::HumanVsAI => {
-            Box::new(SimpleAI::new("SimpleAI"))
+            let player_x = Box::new(HumanPlayer::new("Human", key_rx));
+            let player_o = Box::new(SimpleAI::new("SimpleAI"));
+            (player_x, player_o)
+        }
+        GameMode::AIVsAI => {
+            // AI vs AI demo mode
+            info!("AI vs AI demo mode");
+            let player_x = Box::new(SimpleAI::new("AI-X"));
+            let player_o = Box::new(SimpleAI::new("AI-O"));
+            (player_x, player_o)
         }
         GameMode::HumanVsAgent => {
             // Create channel for agent moves
             let (agent_move_tx, agent_move_rx) = mpsc::unbounded_channel();
             
-            // Spawn MCP server in background
-            info!("Spawning MCP server for agent communication");
+            info!("Agent mode - expecting external MCP server with move channel");
+            info!("Note: MCP server must be started separately and connected to agent");
             
-            let (server_tx, mut server_rx): (
-                mpsc::UnboundedSender<std::sync::Arc<rmcp::service::Peer<rmcp::service::RoleServer>>>,
-                mpsc::UnboundedReceiver<std::sync::Arc<rmcp::service::Peer<rmcp::service::RoleServer>>>,
-            ) = mpsc::unbounded_channel();
+            // Agent player waits for moves via channel (no peer for sampling)
+            // The external MCP server will send moves through a shared channel
+            // TODO: Need to pass agent_move_tx to external server somehow
             
-            tokio::spawn(async move {
-                use rmcp::ServiceExt;
-                use strictly_games::server::GameServer;
-                
-                // Create game server with move channel
-                let server = GameServer::with_move_channel(agent_move_tx);
-                
-                // Create MCP service with stdio transport  
-                match server.serve(rmcp::transport::stdio()).await {
-                    Ok(service) => {
-                        // Send peer back to main thread (wrapped in Arc)
-                        let peer = std::sync::Arc::new(service.peer().clone());
-                        let _ = server_tx.send(peer);
-                        
-                        // Run the service
-                        if let Err(e) = service.waiting().await {
-                            tracing::error!(error = %e, "MCP server error");
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(error = %e, "Failed to create MCP service");
-                    }
-                }
-            });
-            
-            // Wait for peer (with timeout)
-            let peer = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
-                server_rx.recv()
-            )
-            .await
-            .ok()
-            .flatten();
-            
-            if peer.is_some() {
-                info!("MCP server started successfully");
-            } else {
-                tracing::warn!("Failed to get MCP server peer");
-            }
-            
-            Box::new(AgentPlayer::new("Agent", agent_move_rx, peer))
+            let player_x = Box::new(HumanPlayer::new("Human", key_rx));
+            let player_o = Box::new(AgentPlayer::new("Agent", agent_move_rx, None));
+            (player_x, player_o)
         }
     };
 
@@ -182,9 +150,10 @@ fn parse_mode_arg() -> GameMode {
         match args[1].as_str() {
             "ai" | "simple" => GameMode::HumanVsAI,
             "agent" | "mcp" => GameMode::HumanVsAgent,
+            "demo" | "aivsai" => GameMode::AIVsAI,
             _ => {
                 eprintln!("Unknown mode: {}. Using default (ai)", args[1]);
-                eprintln!("Valid modes: ai, agent");
+                eprintln!("Valid modes: ai, agent, demo");
                 GameMode::default()
             }
         }
@@ -195,6 +164,7 @@ fn parse_mode_arg() -> GameMode {
         eprintln!("Modes:");
         eprintln!("  ai     - Play against SimpleAI (default)");
         eprintln!("  agent  - Play against MCP agent (requires server running)");
+        eprintln!("  demo   - Watch AI vs AI gameplay");
         eprintln!();
         eprintln!("Starting with default mode: ai");
         GameMode::default()
