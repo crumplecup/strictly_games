@@ -48,14 +48,20 @@ pub struct GameServer {
 
 #[tool_router]
 impl GameServer {
+    /// Creates a new game server with shared session manager.
+    #[instrument]
+    pub fn with_sessions(sessions: SessionManager) -> Self {
+        info!("Creating game server with shared session manager");
+        Self {
+            sessions,
+            tool_router: Self::tool_router(),
+        }
+    }
+
     /// Creates a new game server.
     pub fn new() -> Self {
         info!("Creating game server with session management");
-        let tool_router = Self::tool_router();
-        Self {
-            sessions: SessionManager::new(),
-            tool_router,
-        }
+        Self::with_sessions(SessionManager::new())
     }
 
     /// Registers a player in a session.
