@@ -8,6 +8,8 @@ use tracing::{debug, info, instrument, warn};
 /// Game board state from server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoardState {
+    /// The 9-cell board.
+    pub board: Vec<Option<String>>,
     /// Current player's turn (X or O).
     pub current_player: String,
     /// Game status.
@@ -16,6 +18,8 @@ pub struct BoardState {
     pub player_x: Option<String>,
     /// Player O name.
     pub player_o: Option<String>,
+    /// Winner (if game over).
+    pub winner: Option<String>,
 }
 
 /// HTTP client for game server.
@@ -197,10 +201,12 @@ impl HttpGameClient {
 
     /// Parses board state from server text response.
     fn parse_board_state(text: &str) -> Result<BoardState> {
+        let mut board = vec![None; 9];
         let mut current_player = String::new();
         let mut status = String::new();
         let mut player_x = None;
         let mut player_o = None;
+        let mut winner = None;
 
         for line in text.lines() {
             if line.starts_with("Player X:") {
@@ -211,14 +217,18 @@ impl HttpGameClient {
                 current_player = line.split(": ").nth(1).unwrap_or("").to_string();
             } else if line.starts_with("Status:") {
                 status = line.split(": ").nth(1).unwrap_or("").to_string();
+            } else if line.starts_with("Winner:") {
+                winner = Some(line.split(": ").nth(1).unwrap_or("").to_string());
             }
         }
 
         Ok(BoardState {
+            board,
             current_player,
             status,
             player_x,
             player_o,
+            winner,
         })
     }
 }

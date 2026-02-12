@@ -3,10 +3,12 @@
 mod human;
 mod simple_ai;
 mod http;
+mod http_human;
 
 pub use human::HumanPlayer;
 pub use simple_ai::SimpleAI;
 pub use http::HttpOpponent;
+pub use http_human::HttpHumanPlayer;
 
 use anyhow::Result;
 use strictly_games::games::tictactoe::Game;

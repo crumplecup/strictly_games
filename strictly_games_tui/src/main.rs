@@ -6,6 +6,7 @@ mod app;
 mod mode;
 mod ui;
 mod orchestrator;
+mod http_orchestrator;
 mod players;
 mod http_client;
 
@@ -24,7 +25,9 @@ use tracing_subscriber::EnvFilter;
 
 use app::App;
 use orchestrator::{GameEvent, Orchestrator};
-use players::{HumanPlayer, SimpleAI};
+use http_orchestrator::HttpOrchestrator;
+use players::{HumanPlayer, HttpHumanPlayer, HttpOpponent, SimpleAI};
+use http_client::HttpGameClient;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -67,11 +70,41 @@ async fn main() -> Result<()> {
             (player_x, player_o)
         }
         GameMode::HumanVsAgent => {
-            info!("HTTP mode - human vs agent over HTTP not yet implemented");
-            info!("Falling back to AI mode");
-            let player_x = Box::new(HumanPlayer::new("Human", key_rx));
-            let player_o = Box::new(SimpleAI::new("AI"));
-            (player_x, player_o)
+            info!("HTTP mode - thin client connecting to game server");
+            
+            // Parse server URL and session ID from environment or use defaults
+            let server_url = std::env::var("GAME_SERVER_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string());
+            let session_id = std::env::var("GAME_SESSION_ID")
+                .unwrap_or_else(|_| "test_session".to_string());
+            
+            info!(server_url = %server_url, session_id = %session_id, "Connecting to HTTP game server");
+            
+            // Register as human player
+            let client = HttpGameClient::register(
+                server_url,
+                session_id,
+                "Human".to_string(),
+            ).await?;
+            
+            info!("Registered with server, starting HTTP game loop");
+            
+            // Run HTTP thin client loop
+            let res = run_http_game(&mut terminal, client, &mut event_rx).await;
+            
+            disable_raw_mode()?;
+            execute!(
+                terminal.backend_mut(),
+                LeaveAlternateScreen,
+                DisableMouseCapture
+            )?;
+            terminal.show_cursor()?;
+            
+            if let Err(err) = res {
+                eprintln!("Error: {:?}", err);
+            }
+            
+            return Ok(());
         }
     };
 
@@ -100,6 +133,103 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Thin client HTTP game loop - just display and send moves.
+async fn run_http_game<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    client: HttpGameClient,
+    _event_rx: &mut mpsc::UnboundedReceiver<GameEvent>,
+) -> Result<()> {
+    use tokio::time::{sleep, Duration};
+    
+    info!("Starting HTTP thin client game loop");
+    
+    loop {
+        // Poll server for current state
+        let state = match client.get_board().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to get board state");
+                sleep(Duration::from_millis(500)).await;
+                continue;
+            }
+        };
+        
+        // Draw current board state
+        terminal.draw(|f| {
+            use ratatui::prelude::*;
+            use ratatui::widgets::{Block, Borders, Paragraph};
+            
+            let board_text = format_http_board(&state.board);
+            let game_over = state.status != "InProgress";
+            let status = if game_over {
+                format!("Game Over! Winner: {}", state.winner.as_deref().unwrap_or("Draw"))
+            } else {
+                format!("Current player: {}", state.current_player)
+            };
+            
+            let text = format!("{}\n\n{}\n\nPress 1-9 to move, 'q' to quit", status, board_text);
+            
+            let paragraph = Paragraph::new(text)
+                .block(Block::default().title("Tic-Tac-Toe (HTTP)").borders(Borders::ALL));
+            
+            f.render_widget(paragraph, f.size());
+        })?;
+        
+        // Check if game over
+        if state.status != "InProgress" {
+            info!("Game over detected");
+            sleep(Duration::from_secs(3)).await;
+            return Ok(());
+        }
+        
+        // Check for keyboard input (non-blocking)
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                match key.code {
+                    KeyCode::Char('q') => {
+                        info!("User quit");
+                        return Ok(());
+                    }
+                    KeyCode::Char(c) if c.is_ascii_digit() => {
+                        if let Some(digit) = c.to_digit(10) {
+                            let pos = digit as usize;
+                            if pos >= 1 && pos <= 9 {
+                                let position = pos - 1;
+                                info!(position, "Sending move to server");
+                                
+                                if let Err(e) = client.make_move(position).await {
+                                    tracing::warn!(error = %e, "Move failed");
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        
+        // Poll rate
+        sleep(Duration::from_millis(200)).await;
+    }
+}
+
+fn format_http_board(board: &[Option<String>]) -> String {
+    let mut result = String::new();
+    for (i, cell) in board.iter().enumerate() {
+        if i % 3 == 0 && i > 0 {
+            result.push_str("\n-----------\n");
+        }
+        match cell {
+            Some(mark) => result.push_str(&format!(" {} ", mark)),
+            None => result.push_str(&format!(" {} ", i + 1)),
+        }
+        if i % 3 < 2 {
+            result.push('|');
+        }
+    }
+    result
 }
 
 async fn run_app<B: ratatui::backend::Backend>(
