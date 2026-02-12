@@ -32,9 +32,13 @@ use http_client::HttpGameClient;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Setup logging to file to avoid interfering with TUI
+    // Always log at info level (or from RUST_LOG if set)
     let log_file = std::fs::File::create("strictly_games_tui.log")?;
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info"))
+        )
         .with_writer(std::sync::Arc::new(log_file))
         .with_ansi(false)
         .init();
