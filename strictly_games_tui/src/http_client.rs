@@ -243,8 +243,19 @@ impl HttpGameClient {
         let mut player_x = None;
         let mut player_o = None;
         let mut winner = None;
-
+        
+        // Parse the visual board grid
+        // Expected format:
+        //  1 | 2 | 3
+        // -----------
+        //  4 | X | 6  
+        // -----------
+        //  7 | 8 | 9
+        let mut in_board = false;
+        let mut row = 0;
+        
         for line in text.lines() {
+            // Parse metadata
             if line.starts_with("Player X:") {
                 player_x = Some(line.split(": ").nth(1).unwrap_or("").to_string());
             } else if line.starts_with("Player O:") {
@@ -256,7 +267,34 @@ impl HttpGameClient {
             } else if line.starts_with("Winner:") {
                 winner = Some(line.split(": ").nth(1).unwrap_or("").to_string());
             }
+            
+            // Parse board grid (lines with | separators)
+            if line.contains('|') && !line.contains('-') {
+                in_board = true;
+                let cells: Vec<&str> = line.split('|').map(|s| s.trim()).collect();
+                
+                if cells.len() == 3 {
+                    for (col, cell) in cells.iter().enumerate() {
+                        let pos = row * 3 + col;
+                        if pos < 9 {
+                            board[pos] = match *cell {
+                                "X" => Some("X".to_string()),
+                                "O" => Some("O".to_string()),
+                                _ => None,
+                            };
+                        }
+                    }
+                    row += 1;
+                }
+            }
         }
+
+        debug!(
+            board = ?board,
+            current_player = %current_player,
+            status = %status,
+            "Parsed board state"
+        );
 
         Ok(BoardState {
             board,

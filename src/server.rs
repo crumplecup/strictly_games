@@ -218,6 +218,56 @@ impl GameServer {
         
         Ok(CallToolResult::success(vec![Content::text(message)]))
     }
+    
+    /// Lists all available game sessions
+    #[instrument(skip(self))]
+    #[tool(description = "List all available game sessions to see which ones need players")]
+    pub async fn list_sessions(&self) -> Result<CallToolResult, McpError> {
+        info!("Listing all game sessions");
+        
+        let session_ids: Vec<String> = self.sessions.list_sessions();
+        
+        if session_ids.is_empty() {
+            info!("No active sessions found");
+            return Ok(CallToolResult::success(vec![Content::text("No active game sessions")]));
+        }
+        
+        let mut result = String::from("Available game sessions:\n\n");
+        
+        for session_id in &session_ids {
+            if let Some(session) = self.sessions.get_session(session_id) {
+                let has_x = session.player_x.is_some();
+                let has_o = session.player_o.is_some();
+                let player_count = if has_x { 1 } else { 0 } + if has_o { 1 } else { 0 };
+                let needs_players = player_count < 2;
+                let status = if needs_players {
+                    format!("⏳ Waiting for {} more player(s)", 2 - player_count)
+                } else {
+                    "✅ Ready to play".to_string()
+                };
+                
+                result.push_str(&format!(
+                    "Session: {}\n  Players: {}/{}\n  Status: {}\n",
+                    session_id,
+                    player_count,
+                    2,
+                    status
+                ));
+                
+                // Show player details
+                if let Some(px) = &session.player_x {
+                    result.push_str(&format!("    - {} (X)\n", px.name));
+                }
+                if let Some(po) = &session.player_o {
+                    result.push_str(&format!("    - {} (O)\n", po.name));
+                }
+                result.push('\n');
+            }
+        }
+        
+        info!(session_count = session_ids.len(), "Listed available sessions");
+        Ok(CallToolResult::success(vec![Content::text(result)]))
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
