@@ -3,7 +3,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tokio::time::{sleep, Duration};
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Game board state from server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,14 +30,14 @@ pub struct HttpGameClient {
     /// HTTP client.
     client: reqwest::Client,
     /// Current session ID.
-    session_id: String,
+    pub session_id: String,
     /// Current player ID.
-    player_id: String,
+    pub player_id: String,
 }
 
 impl HttpGameClient {
     /// Creates a new HTTP game client by registering with server.
-    #[instrument]
+    #[instrument(skip_all, fields(base_url = %base_url, session_id = %session_id, name = %name))]
     pub async fn register(
         base_url: String,
         session_id: String,
@@ -66,16 +66,29 @@ impl HttpGameClient {
             }
         });
 
+        debug!(request = ?request, "Sending registration request");
+
         let response = client
             .post(&base_url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
             .json(&request)
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                error!(error = %e, base_url = %base_url, "Failed to send registration request");
+                anyhow::anyhow!("HTTP request failed: {}", e)
+            })?;
 
-        let text = response.text().await?;
-        debug!(response = %text, "Registration response");
+        let status = response.status();
+        debug!(status = %status, "Received response");
+
+        let text = response.text().await.map_err(|e| {
+            error!(error = %e, "Failed to read response body");
+            anyhow::anyhow!("Failed to read response: {}", e)
+        })?;
+
+        debug!(response = %text, "Response body");
 
         // Parse SSE format: "data: {...}"
         let json_str = text
@@ -83,19 +96,42 @@ impl HttpGameClient {
             .unwrap_or(&text)
             .trim();
 
-        let json: serde_json::Value = serde_json::from_str(json_str)?;
+        let json: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
+            error!(error = %e, response = %text, "Failed to parse JSON response");
+            anyhow::anyhow!("Invalid JSON response: {}", e)
+        })?;
+
+        debug!(json = ?json, "Parsed JSON response");
+
+        // Check for JSON-RPC error
+        if let Some(err) = json.get("error") {
+            let error_msg = err["message"].as_str().unwrap_or("Unknown error");
+            let error_code = err["code"].as_i64().unwrap_or(0);
+            error!(
+                error_message = error_msg,
+                error_code = error_code,
+                "Server returned error"
+            );
+            return Err(anyhow::anyhow!("Server error {}: {}", error_code, error_msg));
+        }
 
         // Extract player_id from text content
         let content = json["result"]["content"][0]["text"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Missing text content in response"))?;
+            .ok_or_else(|| {
+                error!(response = ?json, "Missing text content in response");
+                anyhow::anyhow!("Missing text content in response")
+            })?;
 
         // Parse "Player ID: game1_alice" from response
         let player_id = content
             .lines()
             .find(|line| line.starts_with("Player ID:"))
             .and_then(|line| line.split(": ").nth(1))
-            .ok_or_else(|| anyhow::anyhow!("Failed to extract player ID from response"))?
+            .ok_or_else(|| {
+                error!(content = %content, "Failed to extract player ID from response");
+                anyhow::anyhow!("Failed to extract player ID from response")
+            })?
             .to_string();
 
         info!(

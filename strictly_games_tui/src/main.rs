@@ -20,7 +20,7 @@ use mode::GameMode;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{debug, info, instrument};
 use tracing_subscriber::EnvFilter;
 
 use app::App;
@@ -136,6 +136,7 @@ async fn main() -> Result<()> {
 }
 
 /// Thin client HTTP game loop - just display and send moves.
+#[instrument(skip_all, fields(session_id = %client.session_id, player_id = %client.player_id))]
 async fn run_http_game<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     client: HttpGameClient,
@@ -147,10 +148,18 @@ async fn run_http_game<B: ratatui::backend::Backend>(
     
     loop {
         // Poll server for current state
+        debug!("Polling server for board state");
         let state = match client.get_board().await {
-            Ok(s) => s,
+            Ok(s) => {
+                debug!(
+                    current_player = %s.current_player,
+                    status = %s.status,
+                    "Received board state"
+                );
+                s
+            }
             Err(e) => {
-                tracing::warn!(error = %e, "Failed to get board state");
+                tracing::warn!(error = %e, "Failed to get board state, retrying");
                 sleep(Duration::from_millis(500)).await;
                 continue;
             }
