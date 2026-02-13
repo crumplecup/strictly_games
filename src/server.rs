@@ -2,7 +2,6 @@
 
 use crate::games::tictactoe::GameStatus;
 use crate::session::{PlayerType, SessionManager};
-use elicitation::Elicitation;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
@@ -391,70 +390,140 @@ impl GameServer {
                         continue;
                     }
                     
-                    // It's our turn - use elicitation to get validated move
-                    info!(mark = ?mark, "Agent's turn, eliciting move with contracts");
+                    // It's our turn - use sampling with constrained options
+                    info!(mark = ?mark, "Agent's turn, presenting valid move options");
                     
-                    // Create ElicitServer wrapper for MCP peer
-                    let elicit_server = elicitation::ElicitServer::new(peer.clone());
+                    // Get list of valid (empty) positions
+                    let valid_positions: Vec<u8> = (0..9)
+                        .filter(|&pos| game_state.board().is_empty(pos as usize))
+                        .collect();
                     
-                    // Retry loop for move elicitation + validation
-                    let max_retries = 5;
-                    let mut attempt = 0;
-                    let validated_move = loop {
-                        attempt += 1;
-                        
-                        // Elicit move from agent using Elicitation framework
-                        let mv = <crate::games::tictactoe::Move as Elicitation>::elicit(&elicit_server)
-                            .await
-                            .map_err(|e| {
-                                error!(error = ?e, attempt, "Elicitation failed");
-                                let msg = format!("Failed to elicit move: {}", e);
-                                McpError::internal_error(msg, None)
-                            })?;
-                        
-                        info!(position = mv.position, attempt, "Agent proposed move via elicitation");
-                        
-                        // Validate move and get proof of legality
-                        match crate::games::tictactoe::validate_move(
-                            game_state,
-                            &mv,
-                            mark,
-                        ) {
-                            Ok(proof) => {
-                                info!(position = mv.position, attempt, "Move validated with proof");
-                                break (mv, proof);
+                    if valid_positions.is_empty() {
+                        error!("No valid positions available (board full)");
+                        return Err(McpError::internal_error("Board is full", None));
+                    }
+                    
+                    info!(valid_count = valid_positions.len(), positions = ?valid_positions, "Valid positions available");
+                    
+                    // Build prompt with only valid options
+                    let board_display = game_state.board().display();
+                    let options_list = valid_positions
+                        .iter()
+                        .map(|pos| format!("- {}", pos))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    
+                    let prompt = format!(
+                        "You are playing tic-tac-toe as {}.\n\nCurrent board:\n{}\n\nValid positions (empty squares only):\n{}\n\nRespond with ONLY a single digit from the valid positions list:",
+                        if mark == crate::games::tictactoe::Player::X { "X" } else { "O" },
+                        board_display,
+                        options_list
+                    );
+                    
+                    // Create sampling request
+                    let sampling_request = rmcp::model::CreateMessageRequestParams {
+                        messages: vec![rmcp::model::SamplingMessage {
+                            role: rmcp::model::Role::User,
+                            content: rmcp::model::SamplingContent::Single(
+                                rmcp::model::SamplingMessageContent::Text(
+                                    rmcp::model::RawTextContent {
+                                        text: prompt,
+                                        meta: None,
+                                    },
+                                ),
+                            ),
+                            meta: None,
+                        }],
+                        model_preferences: None,
+                        system_prompt: Some(
+                            "You are a tic-tac-toe player. Respond with ONLY a single digit representing your chosen position from the provided valid options.".to_string()
+                        ),
+                        include_context: None,
+                        temperature: None,
+                        max_tokens: 10,
+                        stop_sequences: None,
+                        metadata: None,
+                        task: None,
+                        tool_choice: None,
+                        tools: None,
+                        meta: None,
+                    };
+                    
+                    // Send sampling request
+                    let response = peer
+                        .create_message(sampling_request)
+                        .await
+                        .map_err(|e| {
+                            error!(error = ?e, "Failed to get response from agent");
+                            McpError::internal_error(format!("Sampling failed: {:?}", e), None)
+                        })?;
+                    
+                    // Parse move from response
+                    let move_text = match &response.message.content {
+                        rmcp::model::SamplingContent::Single(content) => match content {
+                            rmcp::model::SamplingMessageContent::Text(text) => &text.text,
+                            _ => {
+                                error!("Unexpected content type in sampling response");
+                                return Err(McpError::internal_error(
+                                    "Invalid response content type",
+                                    None,
+                                ));
                             }
-                            Err(e) => {
-                                warn!(
-                                    error = %e,
-                                    position = mv.position,
-                                    attempt,
-                                    max_retries,
-                                    "Move validation failed, will retry"
-                                );
-                                
-                                if attempt >= max_retries {
-                                    error!(
-                                        position = mv.position,
-                                        attempts = attempt,
-                                        "Max retries exceeded for move validation"
-                                    );
-                                    let msg = format!(
-                                        "Move validation failed after {} attempts. Last error: {}",
-                                        attempt, e
-                                    );
-                                    return Err(McpError::invalid_params(msg, None));
-                                }
-                                
-                                // Loop continues to retry elicitation
-                            }
+                        },
+                        rmcp::model::SamplingContent::Multiple(contents) => {
+                            // Take first text content
+                            contents
+                                .iter()
+                                .find_map(|c| match c {
+                                    rmcp::model::SamplingMessageContent::Text(text) => {
+                                        Some(&text.text)
+                                    }
+                                    _ => None,
+                                })
+                                .ok_or_else(|| {
+                                    McpError::internal_error("No text content in response", None)
+                                })?
                         }
                     };
                     
-                    let (mv, proof) = validated_move;
-                    info!(position = mv.position, "Executing validated move");
+                    let position: u8 = move_text.trim().parse().map_err(|e| {
+                        error!(error = ?e, response = %move_text, "Failed to parse move position");
+                        McpError::invalid_params(
+                            format!("Invalid move format: {}", move_text),
+                            None,
+                        )
+                    })?;
                     
-                    // Execute move with proof (compile-time guarantee it's legal)
+                    // Validate position is in our valid list
+                    if !valid_positions.contains(&position) {
+                        warn!(
+                            position,
+                            valid_positions = ?valid_positions,
+                            "Agent selected invalid position (not in valid list)"
+                        );
+                        return Err(McpError::invalid_params(
+                            format!("Position {} not in valid options: {:?}", position, valid_positions),
+                            None,
+                        ));
+                    }
+                    
+                    info!(position, "Agent selected valid position");
+                    
+                    // Create Move and validate with contracts
+                    let mv = crate::games::tictactoe::Move { position };
+                    let proof = crate::games::tictactoe::validate_move(game_state, &mv, mark)
+                        .map_err(|e| {
+                            // This should never happen since we pre-filtered
+                            error!(error = %e, position, "Validation failed for pre-validated position");
+                            McpError::internal_error(
+                                format!("Unexpected validation failure: {}", e),
+                                None,
+                            )
+                        })?;
+                    
+                    info!(position, "Move validated with proof, executing");
+                    
+                    // Execute move with proof
                     let _move_made = crate::games::tictactoe::execute_move(
                         &mut session.game,
                         &mv,
@@ -462,7 +531,7 @@ impl GameServer {
                         proof,
                     );
                     
-                    info!(position = mv.position, "Move executed successfully, continuing loop");
+                    info!(position, "Move executed successfully, continuing loop");
                     
                     // Update session and continue loop
                     self.sessions.update_session(session.clone());

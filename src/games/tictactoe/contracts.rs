@@ -193,7 +193,7 @@ mod tests {
 
         let result = validate_move(state, &mv, Player::X);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("out of bounds"));
+        assert!(result.err().unwrap().contains("out of bounds"));
     }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
 
         let result = validate_move(state, &mv, Player::O);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("occupied"));
+        assert!(result.err().unwrap().contains("occupied"));
     }
 
     #[test]
@@ -217,23 +217,22 @@ mod tests {
         // X goes first, so O shouldn't be able to move
         let result = validate_move(state, &mv, Player::O);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Not your turn"));
+        assert!(result.err().unwrap().contains("Not your turn"));
     }
 
     #[test]
     fn test_execute_move_with_proof() {
         let mut game = Game::new();
-        let state = game.state_mut();
         let mv = Move { position: 4 };
         let player = Player::X;
 
         // Get proof that move is legal
-        let proof = validate_move(state, &mv, player).expect("Move should be valid");
+        let proof = validate_move(game.state(), &mv, player).expect("Move should be valid");
 
         // Execute with proof
-        let _move_made = execute_move(state, &mv, player, proof);
+        let _move_made = execute_move(&mut game, &mv, player, proof);
 
         // Verify move was applied
-        assert!(!state.board().is_empty(4));
+        assert!(!game.state().board().is_empty(4));
     }
 }
