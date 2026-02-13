@@ -1,6 +1,6 @@
 //! Position enum with Select paradigm for tic-tac-toe moves.
 
-use super::types::{Board, Player, Square};
+use super::types::Board;
 use elicitation::{Prompt, Select};
 use serde::{Deserialize, Serialize};
 
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// This enum uses the Select paradigm - agents choose from
 /// a finite set of options. The game server filters which
 /// positions are valid (unoccupied) before elicitation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, elicitation::Elicit)]
 pub enum Position {
     /// Top-left (position 0)
     TopLeft,
@@ -95,46 +95,10 @@ impl Position {
     }
 }
 
-impl Prompt for Position {}
-
-impl Select for Position {
-    fn options() -> &'static [Self] {
-        &Self::ALL
-    }
-
-    fn labels() -> &'static [&'static str] {
-        &[
-            "Top-left (0)",
-            "Top-center (1)",
-            "Top-right (2)",
-            "Middle-left (3)",
-            "Center (4)",
-            "Middle-right (5)",
-            "Bottom-left (6)",
-            "Bottom-center (7)",
-            "Bottom-right (8)",
-        ]
-    }
-
-    fn from_label(label: &str) -> Option<Self> {
-        match label {
-            "Top-left (0)" => Some(Position::TopLeft),
-            "Top-center (1)" => Some(Position::TopCenter),
-            "Top-right (2)" => Some(Position::TopRight),
-            "Middle-left (3)" => Some(Position::MiddleLeft),
-            "Center (4)" => Some(Position::Center),
-            "Middle-right (5)" => Some(Position::MiddleRight),
-            "Bottom-left (6)" => Some(Position::BottomLeft),
-            "Bottom-center (7)" => Some(Position::BottomCenter),
-            "Bottom-right (8)" => Some(Position::BottomRight),
-            _ => None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::types::{Player, Square};
 
     #[test]
     fn test_position_to_index() {
