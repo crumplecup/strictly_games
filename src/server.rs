@@ -10,7 +10,7 @@ use rmcp::service::{Peer, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_router, tool_handler};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Request for registering a player.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -397,30 +397,62 @@ impl GameServer {
                     // Create ElicitServer wrapper for MCP peer
                     let elicit_server = elicitation::ElicitServer::new(peer.clone());
                     
-                    // Elicit move from agent using Elicitation framework
-                    // This automatically handles prompting, validation, and retries
-                    let mv = <crate::games::tictactoe::Move as Elicitation>::elicit(&elicit_server)
-                        .await
-                        .map_err(|e| {
-                            error!(error = ?e, "Elicitation failed");
-                            let msg = format!("Failed to elicit move: {}", e);
-                            McpError::internal_error(msg, None)
-                        })?;
+                    // Retry loop for move elicitation + validation
+                    let max_retries = 5;
+                    let mut attempt = 0;
+                    let validated_move = loop {
+                        attempt += 1;
+                        
+                        // Elicit move from agent using Elicitation framework
+                        let mv = <crate::games::tictactoe::Move as Elicitation>::elicit(&elicit_server)
+                            .await
+                            .map_err(|e| {
+                                error!(error = ?e, attempt, "Elicitation failed");
+                                let msg = format!("Failed to elicit move: {}", e);
+                                McpError::internal_error(msg, None)
+                            })?;
+                        
+                        info!(position = mv.position, attempt, "Agent proposed move via elicitation");
+                        
+                        // Validate move and get proof of legality
+                        match crate::games::tictactoe::validate_move(
+                            game_state,
+                            &mv,
+                            mark,
+                        ) {
+                            Ok(proof) => {
+                                info!(position = mv.position, attempt, "Move validated with proof");
+                                break (mv, proof);
+                            }
+                            Err(e) => {
+                                warn!(
+                                    error = %e,
+                                    position = mv.position,
+                                    attempt,
+                                    max_retries,
+                                    "Move validation failed, will retry"
+                                );
+                                
+                                if attempt >= max_retries {
+                                    error!(
+                                        position = mv.position,
+                                        attempts = attempt,
+                                        "Max retries exceeded for move validation"
+                                    );
+                                    let msg = format!(
+                                        "Move validation failed after {} attempts. Last error: {}",
+                                        attempt, e
+                                    );
+                                    return Err(McpError::invalid_params(msg, None));
+                                }
+                                
+                                // Loop continues to retry elicitation
+                            }
+                        }
+                    };
                     
-                    info!(position = mv.position, "Agent proposed move via elicitation");
-                    
-                    // Validate move and get proof of legality
-                    let proof = crate::games::tictactoe::validate_move(
-                        game_state,
-                        &mv,
-                        mark,
-                    ).map_err(|e| {
-                        error!(error = %e, position = mv.position, "Move validation failed");
-                        let msg = format!("Invalid move: {}", e);
-                        McpError::invalid_params(msg, None)
-                    })?;
-                    
-                    info!(position = mv.position, "Move validated with proof, executing");
+                    let (mv, proof) = validated_move;
+                    info!(position = mv.position, "Executing validated move");
                     
                     // Execute move with proof (compile-time guarantee it's legal)
                     let _move_made = crate::games::tictactoe::execute_move(
