@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// This enum uses the Select paradigm - agents choose from
 /// a finite set of options. The game server filters which
 /// positions are valid (unoccupied) before elicitation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, elicitation::Elicit)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, elicitation::Elicit, strum::EnumIter)]
 pub enum Position {
     /// Top-left (position 0)
     TopLeft,
@@ -32,6 +32,36 @@ pub enum Position {
 }
 
 impl Position {
+    /// Get label for this position (for display).
+    pub fn label(&self) -> &'static str {
+        match self {
+            Position::TopLeft => "Top-left",
+            Position::TopCenter => "Top-center",
+            Position::TopRight => "Top-right",
+            Position::MiddleLeft => "Middle-left",
+            Position::Center => "Center",
+            Position::MiddleRight => "Middle-right",
+            Position::BottomLeft => "Bottom-left",
+            Position::BottomCenter => "Bottom-center",
+            Position::BottomRight => "Bottom-right",
+        }
+    }
+
+    /// Parse from label or number (0-8).
+    pub fn from_label_or_number(s: &str) -> Option<Position> {
+        // Try as number first (position index 0-8)
+        if let Ok(num) = s.trim().parse::<usize>() {
+            return Self::from_index(num);
+        }
+
+        // Try as label (case-insensitive, partial match)
+        let s_lower = s.to_lowercase();
+        <Position as strum::IntoEnumIterator>::iter().find(|pos| {
+            let label = pos.label().to_lowercase();
+            label.contains(&s_lower) || s_lower.contains(&label)
+        })
+    }
+    
     /// Converts position to board index (0-8).
     pub fn to_index(self) -> usize {
         match self {

@@ -1,7 +1,9 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::GameStatus;
+use crate::games::tictactoe::{GameStatus, Player};
+use crate::games::tictactoe::types::Square;
 use crate::session::{PlayerType, SessionManager};
+use elicitation::ElicitCommunicator;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
@@ -390,77 +392,188 @@ impl GameServer {
                         continue;
                     }
                     
-                    // It's our turn - elicit Position using Select paradigm
+                    // It's our turn - elicit Position using Select paradigm with retry
                     info!(mark = ?mark, "Agent's turn, eliciting Position via Select");
                     
-                    // Get valid positions before elicitation
-                    let valid_positions = {
-                        let game_state = session.game.state();
-                        crate::games::tictactoe::Position::valid_moves(game_state.board())
-                    };
+                    const MAX_RETRIES: usize = 5;
+                    let mut position_selected = false;
                     
-                    if valid_positions.is_empty() {
-                        error!("No valid positions available (board full)");
-                        return Err(McpError::internal_error("Board is full", None));
+                    for attempt in 1..=MAX_RETRIES {
+                        // Get valid positions before elicitation
+                        let valid_positions = {
+                            let game_state = session.game.state();
+                            crate::games::tictactoe::Position::valid_moves(game_state.board())
+                        };
+                        
+                        if valid_positions.is_empty() {
+                            error!("No valid positions available (board full)");
+                            return Err(McpError::internal_error("Board is full", None));
+                        }
+                        
+                        info!(attempt, valid_count = valid_positions.len(), "Eliciting position (attempt {}/{})", attempt, MAX_RETRIES);
+                        
+                        // Build context-rich prompt with board state
+                        let board_display = {
+                            let game_state = session.game.state();
+                            let board = game_state.board();
+                            let mut display = String::from("Current board:\n");
+                            for row in 0..3 {
+                                display.push_str("  ");
+                                for col in 0..3 {
+                                    let idx = row * 3 + col;
+                                    let marker = match board.get(idx) {
+                                        Some(Square::Empty) => " ".to_string(),
+                                        Some(Square::Occupied(Player::X)) => "X".to_string(),
+                                        Some(Square::Occupied(Player::O)) => "O".to_string(),
+                                        None => "?".to_string(),
+                                    };
+                                    display.push_str(&format!("{:^3}", marker));
+                                    if col < 2 { display.push('|'); }
+                                }
+                                display.push('\n');
+                                if row < 2 { display.push_str("  -----------\n"); }
+                            }
+                            display
+                        };
+                        
+                        // Build list of ONLY valid positions with numbered choices
+                        let valid_options = valid_positions.iter()
+                            .enumerate()
+                            .map(|(i, pos)| format!("{}. {}", i + 1, pos.label()))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        
+                        let enhanced_prompt = format!(
+                            "{}\n\nYour mark: {}\n\nAvailable moves (choose by number):\n{}\n\nSelect a number 1-{}:",
+                            board_display,
+                            match mark {
+                                crate::games::tictactoe::Player::X => "X",
+                                crate::games::tictactoe::Player::O => "O",
+                            },
+                            valid_options,
+                            valid_positions.len()
+                        );
+                        
+                        // Create ElicitServer wrapper and send enhanced prompt
+                        let elicit_server = elicitation::ElicitServer::new(peer.clone());
+                        
+                        // Send prompt and parse response
+                        let response = match elicit_server.send_prompt(&enhanced_prompt).await {
+                            Ok(resp) => resp,
+                            Err(e) => {
+                                error!(error = ?e, attempt, "Prompt send failed");
+                                if attempt == MAX_RETRIES {
+                                    return Err(McpError::internal_error(format!("Failed to send prompt after {} attempts: {}", MAX_RETRIES, e), None));
+                                }
+                                warn!(attempt, "Retrying elicitation");
+                                continue;
+                            }
+                        };
+                        
+                        // Parse response - try as number (1-indexed into valid_positions), then as label
+                        let position = if let Ok(num) = response.trim().parse::<usize>() {
+                            if num > 0 && num <= valid_positions.len() {
+                                valid_positions[num - 1]
+                            } else {
+                                warn!(response = %response, attempt, "Invalid number selection");
+                                if attempt == MAX_RETRIES {
+                                    return Err(McpError::invalid_params(
+                                        format!("Invalid selection: {}", response),
+                                        None
+                                    ));
+                                }
+                                continue;
+                            }
+                        } else {
+                            // Try parsing as label/position description
+                            match crate::games::tictactoe::Position::from_label_or_number(&response) {
+                                Some(pos) if valid_positions.contains(&pos) => pos,
+                                Some(pos) => {
+                                    warn!(position = ?pos, attempt, "Parsed position but it's occupied");
+                                    if attempt == MAX_RETRIES {
+                                        return Err(McpError::invalid_params(
+                                            format!("Position {:?} is occupied", pos),
+                                            None
+                                        ));
+                                    }
+                                    continue;
+                                }
+                                None => {
+                                    warn!(response = %response, attempt, "Could not parse response");
+                                    if attempt == MAX_RETRIES {
+                                        return Err(McpError::invalid_params(
+                                            format!("Invalid response: {}", response),
+                                            None
+                                        ));
+                                    }
+                                    continue;
+                                }
+                            }
+                        };
+                        
+                        info!(position = ?position, index = position.to_index(), attempt, "Agent selected position");
+                        
+                        // Verify position is in valid list
+                        if !valid_positions.contains(&position) {
+                            warn!(
+                                position = ?position,
+                                attempt,
+                                "Agent selected occupied position, retrying"
+                            );
+                            if attempt == MAX_RETRIES {
+                                return Err(McpError::invalid_params(
+                                    format!("Position {:?} still occupied after {} attempts", position, MAX_RETRIES),
+                                    None,
+                                ));
+                            }
+                            continue;
+                        }
+                        
+                        // Convert Position to Move
+                        let mv = crate::games::tictactoe::Move {
+                            position: position.to_u8(),
+                        };
+                        
+                        // Validate with contracts and execute
+                        {
+                            let game_state = session.game.state();
+                            match crate::games::tictactoe::validate_move(game_state, &mv, mark) {
+                                Ok(proof) => {
+                                    info!(position = ?position, attempt, "Move validated with proof, executing");
+                                    
+                                    // Execute move with proof
+                                    let _move_made = crate::games::tictactoe::execute_move(
+                                        &mut session.game,
+                                        &mv,
+                                        mark,
+                                        proof,
+                                    );
+                                    
+                                    info!(position = ?position, "Move executed successfully");
+                                    position_selected = true;
+                                    break;
+                                }
+                                Err(e) => {
+                                    warn!(error = %e, position = ?position, attempt, "Contract validation failed, retrying");
+                                    if attempt == MAX_RETRIES {
+                                        return Err(McpError::internal_error(
+                                            format!("Validation failure after {} attempts: {}", MAX_RETRIES, e),
+                                            None,
+                                        ));
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
                     }
                     
-                    info!(valid_count = valid_positions.len(), "Valid positions for selection");
-                    
-                    // Create ElicitServer wrapper
-                    let elicit_server = elicitation::ElicitServer::new(peer.clone());
-                    
-                    // Elicit Position using Select paradigm
-                    // Note: Currently shows all 9 positions, validates against valid_positions after
-                    let position = <crate::games::tictactoe::Position as elicitation::Elicitation>::elicit(&elicit_server)
-                        .await
-                        .map_err(|e| {
-                            error!(error = ?e, "Position elicitation failed");
-                            McpError::internal_error(format!("Failed to elicit position: {}", e), None)
-                        })?;
-                    
-                    info!(position = ?position, index = position.to_index(), "Agent selected position");
-                    
-                    // Verify position is in valid list
-                    if !valid_positions.contains(&position) {
-                        warn!(
-                            position = ?position,
-                            "Agent selected occupied position, rejecting"
-                        );
-                        return Err(McpError::invalid_params(
-                            format!("Position {:?} is occupied", position),
+                    if !position_selected {
+                        error!("Failed to select valid position after {} attempts", MAX_RETRIES);
+                        return Err(McpError::internal_error(
+                            format!("Could not complete move after {} attempts", MAX_RETRIES),
                             None,
                         ));
                     }
-                    
-                    // Convert Position to Move
-                    let mv = crate::games::tictactoe::Move {
-                        position: position.to_u8(),
-                    };
-                    
-                    // Validate with contracts and execute
-                    {
-                        let game_state = session.game.state();
-                        let proof = crate::games::tictactoe::validate_move(game_state, &mv, mark)
-                            .map_err(|e| {
-                                error!(error = %e, position = ?position, "Validation failed");
-                                McpError::internal_error(
-                                    format!("Validation failure: {}", e),
-                                    None,
-                                )
-                            })?;
-                        
-                        info!(position = ?position, "Move validated with proof, executing");
-                        
-                        // Execute move with proof
-                        let _move_made = crate::games::tictactoe::execute_move(
-                            &mut session.game,
-                            &mv,
-                            mark,
-                            proof,
-                        );
-                    }
-                    
-                    info!(position = ?position, "Move executed successfully, continuing loop");
                     
                     // Update session
                     self.sessions.update_session(session.clone());
