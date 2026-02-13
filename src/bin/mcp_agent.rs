@@ -29,6 +29,10 @@ struct Args {
     /// Auto-trigger play_game tool for testing
     #[arg(long)]
     test_play: bool,
+
+    /// Session ID for test mode play_game (optional, auto-generates if not provided)
+    #[arg(long)]
+    test_session: Option<String>,
 }
 
 #[tokio::main]
@@ -89,7 +93,9 @@ async fn run() -> anyhow::Result<()> {
     // If --test-play flag is set, call play_game tool
     if args.test_play {
         info!("Test mode: calling play_game tool");
-        test_play_game(&peer, &config).await?;
+        let session_id = args.test_session
+            .unwrap_or_else(|| format!("auto_game_{}", std::process::id()));
+        test_play_game(&peer, &config, &session_id).await?;
     } else {
         // Keep running normally
         info!("Agent running. Press Ctrl+C to exit.");
@@ -104,16 +110,17 @@ async fn run() -> anyhow::Result<()> {
 async fn test_play_game(
     peer: &rmcp::Peer<rmcp::RoleClient>,
     config: &AgentConfig,
+    session_id: &str,
 ) -> anyhow::Result<()> {
     use serde_json::json;
 
-    info!("Calling play_game tool for testing");
+    info!(session_id, "Calling play_game tool");
 
     let result = peer
         .call_tool(rmcp::model::CallToolRequestParams {
             name: "play_game".into(),
             arguments: Some(json!({
-                "session_id": "test_game",
+                "session_id": session_id,
                 "player_name": config.name()
             }).as_object().unwrap().clone()),
             task: None,

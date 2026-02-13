@@ -2,6 +2,7 @@
 
 use crate::games::tictactoe::GameStatus;
 use crate::session::{PlayerType, SessionManager};
+use elicitation::Elicitation;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
@@ -365,10 +366,10 @@ impl GameServer {
                             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                             
                             // Refresh session state
-                            session = self.sessions.get_session(&req.session_id)
+                            let refreshed_session = self.sessions.get_session(&req.session_id)
                                 .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
                             
-                            let updated_state = session.game.state();
+                            let updated_state = refreshed_session.game.state();
                             
                             // Check if game ended while we were waiting
                             if !matches!(updated_state.status(), GameStatus::InProgress) {
@@ -390,92 +391,46 @@ impl GameServer {
                         continue;
                     }
                     
-                    // It's our turn - send sampling request to agent
-                    info!(mark = ?mark, "Agent's turn, sending sampling request");
+                    // It's our turn - use elicitation to get validated move
+                    info!(mark = ?mark, "Agent's turn, eliciting move with contracts");
                     
-                    // Create sampling request
-                    let board_display = game_state.board().display();
-                    let prompt = format!(
-                        "You are playing tic-tac-toe as {}.\n\nCurrent board:\n{}\n\nEnter the position (0-8) for your next move:",
-                        if mark == crate::games::tictactoe::Player::X { "X" } else { "O" },
-                        board_display
-                    );
+                    // Create ElicitServer wrapper for MCP peer
+                    let elicit_server = elicitation::ElicitServer::new(peer.clone());
                     
-                    let sampling_request = rmcp::model::CreateMessageRequestParams {
-                        messages: vec![
-                            rmcp::model::SamplingMessage {
-                                role: rmcp::model::Role::User,
-                                content: rmcp::model::SamplingContent::Single(
-                                    rmcp::model::SamplingMessageContent::Text(rmcp::model::RawTextContent {
-                                        text: prompt,
-                                        meta: None,
-                                    })
-                                ),
-                                meta: None,
-                            }
-                        ],
-                        model_preferences: None,
-                        system_prompt: Some("You are a tic-tac-toe player. Respond with ONLY a single digit 0-8 representing your chosen position.".to_string()),
-                        include_context: None,
-                        temperature: None,
-                        max_tokens: 10,
-                        stop_sequences: None,
-                        metadata: None,
-                        task: None,
-                        tool_choice: None,
-                        tools: None,
-                        meta: None,
-                    };
-                    
-                    // Send sampling request
-                    let response = peer.create_message(sampling_request)
+                    // Elicit move from agent using Elicitation framework
+                    // This automatically handles prompting, validation, and retries
+                    let mv = <crate::games::tictactoe::Move as Elicitation>::elicit(&elicit_server)
                         .await
                         .map_err(|e| {
-                            error!(error = ?e, "Failed to get response from agent");
-                            let msg = format!("Sampling failed: {:?}", e);
+                            error!(error = ?e, "Elicitation failed");
+                            let msg = format!("Failed to elicit move: {}", e);
                             McpError::internal_error(msg, None)
                         })?;
                     
-                    // Parse move from response
-                    let move_text = match &response.message.content {
-                        rmcp::model::SamplingContent::Single(content) => {
-                            match content {
-                                rmcp::model::SamplingMessageContent::Text(text) => &text.text,
-                                _ => {
-                                    error!("Unexpected content type in sampling response");
-                                    return Err(McpError::internal_error("Invalid response content type", None));
-                                }
-                            }
-                        }
-                        rmcp::model::SamplingContent::Multiple(contents) => {
-                            // Take first text content
-                            contents.iter()
-                                .find_map(|c| match c {
-                                    rmcp::model::SamplingMessageContent::Text(text) => Some(&text.text),
-                                    _ => None,
-                                })
-                                .ok_or_else(|| McpError::internal_error("No text content in response", None))?
-                        }
-                    };
+                    info!(position = mv.position, "Agent proposed move via elicitation");
                     
-                    let position: u8 = move_text.trim().parse()
-                        .map_err(|e| {
-                            error!(error = ?e, response = %move_text, "Failed to parse move position");
-                            let msg = format!("Invalid move format: {}", move_text);
-                            McpError::invalid_params(msg, None)
-                        })?;
+                    // Validate move and get proof of legality
+                    let proof = crate::games::tictactoe::validate_move(
+                        game_state,
+                        &mv,
+                        mark,
+                    ).map_err(|e| {
+                        error!(error = %e, position = mv.position, "Move validation failed");
+                        let msg = format!("Invalid move: {}", e);
+                        McpError::invalid_params(msg, None)
+                    })?;
                     
-                    info!(position, "Agent selected move via sampling");
+                    info!(position = mv.position, "Move validated with proof, executing");
                     
-                    // Apply the move
-                    session.game.make_move(position as usize)
-                        .map_err(|e| {
-                            error!(error = %e, position, "Invalid move attempted");
-                            let msg = format!("Invalid move: {}", e);
-                            McpError::invalid_params(msg, None)
-                        })?;
+                    // Execute move with proof (compile-time guarantee it's legal)
+                    let _move_made = crate::games::tictactoe::execute_move(
+                        &mut session.game,
+                        &mv,
+                        mark,
+                        proof,
+                    );
                     
-                    info!(position, "Move applied successfully, continuing loop");
+                    info!(position = mv.position, "Move executed successfully, continuing loop");
                     
                     // Update session and continue loop
                     self.sessions.update_session(session.clone());

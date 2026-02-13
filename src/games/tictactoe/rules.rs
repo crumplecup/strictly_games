@@ -21,6 +21,11 @@ impl Game {
         &self.state
     }
 
+    /// Returns mutable reference to game state.
+    pub fn state_mut(&mut self) -> &mut GameState {
+        &mut self.state
+    }
+
     /// Makes a move at the given position (0-8).
     pub fn make_move(&mut self, pos: usize) -> Result<(), String> {
         // Check if game is over
