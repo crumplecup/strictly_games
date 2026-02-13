@@ -6,6 +6,7 @@
 
 mod games;
 mod server;
+mod session;
 
 use rmcp::ServiceExt;
 use server::GameServer;

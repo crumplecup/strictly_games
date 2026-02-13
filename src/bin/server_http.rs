@@ -34,9 +34,9 @@ async fn main() -> Result<()> {
     // Create SHARED SessionManager for game state (Arc for multi-request sharing)
     let game_sessions = Arc::new(strictly_games::session::SessionManager::new());
     
-    // Configure for STATELESS mode (no session management required)
+    // Configure for STATEFUL mode (required for elicitation loops)
     let mut config = StreamableHttpServerConfig::default();
-    config.stateful_mode = false;  // Simpler protocol, no session IDs needed
+    config.stateful_mode = true;  // Keep connections alive for bidirectional communication
     debug!(?config, "HTTP service configuration");
     
     // Factory creates GameServer that shares session state

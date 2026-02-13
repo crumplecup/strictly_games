@@ -1,11 +1,36 @@
-2026-02-12T07:21:36.294411Z  INFO strictly_games_tui: Starting Strictly Games TUI
-2026-02-12T07:21:36.294497Z  INFO strictly_games_tui: Selected game mode mode=HumanVsAgent
-2026-02-12T07:21:36.295518Z  INFO strictly_games_tui: HTTP mode - thin client connecting to game server
-2026-02-12T07:21:36.295548Z  INFO strictly_games_tui: Connecting to HTTP game server server_url=http://localhost:3000 session_id=test
-2026-02-12T07:21:36.295694Z  INFO register{base_url=http://localhost:3000 session_id=test name=Human}: strictly_games_tui::http_client: Registering with HTTP game server base_url=http://localhost:3000 session_id=test name=Human
-2026-02-12T07:21:36.331023Z  INFO register{base_url=http://localhost:3000 session_id=test name=Human}: strictly_games_tui::http_client: Registered successfully with server session_id=test player_id=test_human
-2026-02-12T07:21:36.331150Z  INFO strictly_games_tui: Registered with server, starting HTTP game loop
-2026-02-12T07:21:36.331198Z  INFO run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Starting HTTP thin client game loop
-2026-02-12T07:22:16.309325Z  INFO run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Sending move to server position=4
-2026-02-12T07:22:16.309532Z  INFO run_http_game{session_id=test player_id=test_human}:make_move{position=4 session_id=test player_id=test_human}: strictly_games_tui::http_client: Sending move to server position=4
-2026-02-12T07:22:16.314904Z  INFO run_http_game{session_id=test player_id=test_human}:make_move{position=4 session_id=test player_id=test_human}: strictly_games_tui::http_client: Move completed successfully position=4
+2026-02-12T07:43:45.683744Z  INFO strictly_games_tui: Starting Strictly Games TUI
+2026-02-12T07:43:45.683808Z  INFO strictly_games_tui: Selected game mode mode=HumanVsAgent
+2026-02-12T07:43:45.684554Z  INFO strictly_games_tui: HTTP mode - thin client connecting to game server
+2026-02-12T07:43:45.684575Z  INFO strictly_games_tui: Connecting to HTTP game server server_url=http://localhost:3000 session_id=test
+2026-02-12T07:43:45.684684Z  INFO register{base_url=http://localhost:3000 session_id=test name=Human}: strictly_games_tui::http_client: Registering with HTTP game server base_url=http://localhost:3000 session_id=test name=Human
+2026-02-12T07:43:45.711538Z  INFO register{base_url=http://localhost:3000 session_id=test name=Human}: strictly_games_tui::http_client: Registered successfully with server session_id=test player_id=test_human
+2026-02-12T07:43:45.711639Z  INFO strictly_games_tui: Registered with server, starting HTTP game loop
+2026-02-12T07:43:45.711679Z  INFO run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Starting HTTP thin client game loop
+2026-02-12T07:44:16.779452Z  INFO run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Sending move to server position=4
+2026-02-12T07:44:16.779549Z  INFO run_http_game{session_id=test player_id=test_human}:make_move{position=4 session_id=test player_id=test_human}: strictly_games_tui::http_client: Sending move to server position=4
+2026-02-12T07:44:16.822872Z  INFO run_http_game{session_id=test player_id=test_human}:make_move{position=4 session_id=test player_id=test_human}: strictly_games_tui::http_client: Move completed successfully position=4
+2026-02-12T07:45:05.453187Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:05.956337Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:06.458866Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:06.962377Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:07.464801Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:07.968168Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:08.471432Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:08.973824Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:09.477322Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:09.979845Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:10.483326Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:10.985843Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:11.489344Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:11.991878Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:12.494519Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:12.996416Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:13.498895Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:14.002426Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:14.504936Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:15.008399Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:15.510959Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:16.014733Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:16.518186Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:17.021624Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)
+2026-02-12T07:45:17.524340Z  WARN run_http_game{session_id=test player_id=test_human}: strictly_games_tui: Failed to get board state, retrying error=error sending request for url (http://localhost:3000/)

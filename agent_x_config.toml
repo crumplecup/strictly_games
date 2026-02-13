@@ -1,0 +1,20 @@
+# Agent X configuration for MCP client
+
+# Agent name (used in game sessions)
+name = "Agent_X"
+
+# Server command (not used in HTTP mode, but required)
+server_command = ["echo", "HTTP mode"]
+
+# LLM provider: "openai" or "anthropic"
+llm_provider = "anthropic"
+
+# LLM model name
+llm_model = "claude-3-5-haiku-20241022"
+
+# Maximum tokens for responses
+llm_max_tokens = 150
+
+# API keys are read from environment variables:
+# - OPENAI_API_KEY for OpenAI
+# - ANTHROPIC_API_KEY for Anthropic

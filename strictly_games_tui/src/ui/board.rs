@@ -6,7 +6,9 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
-use strictly_games::games::tictactoe::{Board, Game, Player, Square};
+use strictly_games::games::tictactoe::{types, Game, Player};
+
+use types::{Board, Square};
 
 /// Renders the tic-tac-toe board.
 pub fn render_board(f: &mut Frame, area: Rect, game: &Game) {

@@ -1,0 +1,23 @@
+# Agent configuration for MCP client
+
+# Agent name (used in game sessions)
+name = "Agent_1"
+
+# Server command (as array of strings)
+server_command = ["cargo", "run", "--bin", "strictly_games"]
+
+# Optional working directory for server process
+# server_cwd = "/path/to/server"
+
+# LLM provider: "openai" or "anthropic"
+llm_provider = "anthropic"
+
+# LLM model name
+llm_model = "claude-3-5-haiku-20241022"
+
+# Maximum tokens for responses
+llm_max_tokens = 150
+
+# API keys are read from environment variables:
+# - OPENAI_API_KEY for OpenAI
+# - ANTHROPIC_API_KEY for Anthropic

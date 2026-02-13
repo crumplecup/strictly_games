@@ -233,6 +233,26 @@ impl SessionManager {
         info!(count = ids.len(), "Listed sessions");
         ids
     }
+
+    /// Atomically registers a player in a session (thread-safe).
+    /// Returns the assigned mark (X or O).
+    #[instrument(skip(self))]
+    pub fn register_player_atomic(
+        &self,
+        session_id: &str,
+        player_id: String,
+        name: String,
+        player_type: PlayerType,
+    ) -> Result<Mark, String> {
+        let mut sessions = self.sessions.lock().unwrap();
+        
+        let session = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| "Session not found".to_string())?;
+        
+        // Register player while holding the lock
+        session.register_player(player_id, name, player_type)
+    }
 }
 
 impl Default for SessionManager {

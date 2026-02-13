@@ -490,9 +490,9 @@ Reference: See `crates/botticelli_error` for complete implementation.
 
 ### Instrumentation
 
-All public functions have `#[instrument]`.
+**ALL functions** have `#[instrument]` - public, private, methods, free functions.
 
-Observability is critical for debugging, performance monitoring, and error tracking. Missing instrumentation is a defect.
+Observability is critical for debugging, performance monitoring, and error tracking. Missing instrumentation is a defect. If a private function has a bug, you need tracing to find it.
 
 ```rust
 #[instrument(skip(conn), fields(table_name, limit))]
@@ -519,7 +519,7 @@ pub fn list_content(
 
 ### Instrumentation Requirements
 
-All public functions:
+ALL functions (public, private, methods, free functions):
 
 1. Use `#[instrument]` for automatic span creation
 2. Skip large params: `skip(connection, data)`
@@ -549,7 +549,7 @@ info!(table = %table_name, "Creating");          // Display format
 
 ### Audit Checklist
 
-- ✅ Every public function has `#[instrument]`
+- ✅ **Every function** (public and private) has `#[instrument]`
 - ✅ Span fields include context (IDs, counts)
 - ✅ Large structures skipped
 - ✅ Key operations emit events
@@ -1103,7 +1103,7 @@ Before release:
 Top priorities:
 
 1. ✅ Fix all issues before commit
-2. ✅ All public functions instrumented
+2. ✅ **All functions instrumented** (public and private)
 3. ✅ Use derive_more for all errors
 4. ✅ Always use builders, never literals
 5. ✅ Tests in `tests/`, never inline

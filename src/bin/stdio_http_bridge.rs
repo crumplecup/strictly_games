@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
 
     let client = reqwest::Client::new();
     let stdin = io::stdin();
-    let mut stdout = io::stdout();
+    let stdout = io::stdout();
 
     // Create channel for waker notifications
     let (notification_tx, mut notification_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -91,7 +91,7 @@ async fn main() -> Result<()> {
         }
     });
     
-    let mut stdout = stdout_clone;
+    let stdout = stdout_clone;
 
     for line in stdin.lock().lines() {
         let line = line.context("Failed to read line from stdin")?;
@@ -215,12 +215,12 @@ async fn forward_to_http(client: &reqwest::Client, mut request: Value) -> Result
 }
 
 /// Waker task that monitors game state and notifies agent when it's their turn.
-#[instrument(skip(client, notification_tx))]
+#[instrument(skip(client, _notification_tx))]
 async fn waker_task(
     client: reqwest::Client,
     session_id: String,
     player_name: String,
-    notification_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    _notification_tx: tokio::sync::mpsc::UnboundedSender<String>,
 ) {
     use tokio::time::{sleep, Duration};
     
@@ -298,7 +298,7 @@ async fn waker_task(
         
         if is_our_turn && last_prompt_time.elapsed() > prompt_cooldown {
             // Send MCP notification to Copilot via channel
-            let notification = serde_json::json!({
+            let _notification = serde_json::json!({
                 "jsonrpc": "2.0",
                 "method": "notifications/message",
                 "params": {

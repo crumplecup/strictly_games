@@ -1,8 +1,7 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::{GameStatus, Move};
+use crate::games::tictactoe::GameStatus;
 use crate::session::{PlayerType, SessionManager};
-use elicitation::Elicitation;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
@@ -10,7 +9,6 @@ use rmcp::service::{Peer, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_router, tool_handler};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tracing::{debug, error, info, instrument};
 
 /// Request for registering a player.
@@ -289,8 +287,7 @@ impl GameServer {
         peer: Peer<RoleServer>,
         Parameters(req): Parameters<PlayGameRequest>,
     ) -> Result<CallToolResult, McpError> {
-        use crate::games::tictactoe::Move;
-        use elicitation::Elicitation;
+        
         
         info!(session_id = %req.session_id, player_name = %req.player_name, "Starting elicitation-based game");
         
@@ -302,15 +299,12 @@ impl GameServer {
             info!(session_id = %req.session_id, "Creating new session for game");
             self.sessions
                 .create_session(req.session_id.clone())
-                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                .map_err(|e: String| McpError::internal_error(e, None))?;
         }
         
-        // Get session and register player
-        let mut session = self.sessions.get_session(&req.session_id)
-            .ok_or_else(|| McpError::internal_error("Session not found after creation", None))?;
-        
-        let mark = session
-            .register_player(player_id.clone(), req.player_name.clone(), PlayerType::Agent)
+        // Register player atomically (thread-safe)
+        let mark = self.sessions
+            .register_player_atomic(&req.session_id, player_id.clone(), req.player_name.clone(), PlayerType::Agent)
             .map_err(|e| {
                 error!(error = %e, "Failed to register player");
                 let msg = format!("Failed to register: {}", e);
@@ -321,12 +315,16 @@ impl GameServer {
         
         // Game loop - continue until game is over
         loop {
+            // Get fresh session state at start of each iteration
+            let mut session = self.sessions.get_session(&req.session_id)
+                .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+            
             let game_state = session.game.state();
             
             // Check if game is over
             match game_state.status() {
                 GameStatus::Won(winner) => {
-                    let winner_name = if *winner == mark {
+                    let winner_name = if winner == &mark {
                         req.player_name.clone()
                     } else {
                         "opponent".to_string()
@@ -357,42 +355,127 @@ impl GameServer {
                 GameStatus::InProgress => {
                     // Check whose turn it is
                     if game_state.current_player() != mark {
-                        // Wait for opponent - shouldn't happen in agent-only games
-                        info!("Waiting for opponent's move");
-                        
-                        let message = format!(
-                            "⏳ Waiting for opponent's move...\n\nCurrent Board:\n{}\n\nYou are playing as {}",
-                            game_state.board().display(),
-                            if mark == crate::games::tictactoe::Player::X { "X" } else { "O" }
-                        );
-                        
+                        // Wait for opponent's move (agent vs agent mode)
+                        info!(mark = ?mark, "Not our turn, waiting for opponent");
                         self.sessions.update_session(session);
-                        return Ok(CallToolResult::success(vec![Content::text(message)]));
+                        
+                        // Poll for opponent's move
+                        let max_polls = 300; // 5 minutes (1 second per poll)
+                        for poll_count in 0..max_polls {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                            
+                            // Refresh session state
+                            session = self.sessions.get_session(&req.session_id)
+                                .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
+                            
+                            let updated_state = session.game.state();
+                            
+                            // Check if game ended while we were waiting
+                            if !matches!(updated_state.status(), GameStatus::InProgress) {
+                                break; // Exit to outer loop to handle game end
+                            }
+                            
+                            // Check if it's now our turn
+                            if updated_state.current_player() == mark {
+                                info!(poll_count, "Opponent moved, now our turn");
+                                break; // Exit poll loop, continue to our move
+                            }
+                            
+                            if poll_count % 10 == 0 {
+                                debug!(poll_count, "Still waiting for opponent");
+                            }
+                        }
+                        
+                        // Loop continues to check game status and make our move
+                        continue;
                     }
                     
-                    // It's our turn - elicit move from agent using sampling
-                    info!(mark = ?mark, "Agent's turn, eliciting move via sampling");
+                    // It's our turn - send sampling request to agent
+                    info!(mark = ?mark, "Agent's turn, sending sampling request");
                     
-                    // Use elicitation to interactively get the move
-                    let agent_move = Move::elicit_checked(peer.clone())
+                    // Create sampling request
+                    let board_display = game_state.board().display();
+                    let prompt = format!(
+                        "You are playing tic-tac-toe as {}.\n\nCurrent board:\n{}\n\nEnter the position (0-8) for your next move:",
+                        if mark == crate::games::tictactoe::Player::X { "X" } else { "O" },
+                        board_display
+                    );
+                    
+                    let sampling_request = rmcp::model::CreateMessageRequestParams {
+                        messages: vec![
+                            rmcp::model::SamplingMessage {
+                                role: rmcp::model::Role::User,
+                                content: rmcp::model::SamplingContent::Single(
+                                    rmcp::model::SamplingMessageContent::Text(rmcp::model::RawTextContent {
+                                        text: prompt,
+                                        meta: None,
+                                    })
+                                ),
+                                meta: None,
+                            }
+                        ],
+                        model_preferences: None,
+                        system_prompt: Some("You are a tic-tac-toe player. Respond with ONLY a single digit 0-8 representing your chosen position.".to_string()),
+                        include_context: None,
+                        temperature: None,
+                        max_tokens: 10,
+                        stop_sequences: None,
+                        metadata: None,
+                        task: None,
+                        tool_choice: None,
+                        tools: None,
+                        meta: None,
+                    };
+                    
+                    // Send sampling request
+                    let response = peer.create_message(sampling_request)
                         .await
                         .map_err(|e| {
-                            error!(error = ?e, "Failed to elicit move from agent");
-                            let msg = format!("Elicitation failed: {:?}", e);
+                            error!(error = ?e, "Failed to get response from agent");
+                            let msg = format!("Sampling failed: {:?}", e);
                             McpError::internal_error(msg, None)
                         })?;
                     
-                    info!(position = agent_move.position, "Agent selected move via elicitation");
+                    // Parse move from response
+                    let move_text = match &response.message.content {
+                        rmcp::model::SamplingContent::Single(content) => {
+                            match content {
+                                rmcp::model::SamplingMessageContent::Text(text) => &text.text,
+                                _ => {
+                                    error!("Unexpected content type in sampling response");
+                                    return Err(McpError::internal_error("Invalid response content type", None));
+                                }
+                            }
+                        }
+                        rmcp::model::SamplingContent::Multiple(contents) => {
+                            // Take first text content
+                            contents.iter()
+                                .find_map(|c| match c {
+                                    rmcp::model::SamplingMessageContent::Text(text) => Some(&text.text),
+                                    _ => None,
+                                })
+                                .ok_or_else(|| McpError::internal_error("No text content in response", None))?
+                        }
+                    };
+                    
+                    let position: u8 = move_text.trim().parse()
+                        .map_err(|e| {
+                            error!(error = ?e, response = %move_text, "Failed to parse move position");
+                            let msg = format!("Invalid move format: {}", move_text);
+                            McpError::invalid_params(msg, None)
+                        })?;
+                    
+                    info!(position, "Agent selected move via sampling");
                     
                     // Apply the move
-                    session.game.make_move(agent_move.position as usize)
+                    session.game.make_move(position as usize)
                         .map_err(|e| {
-                            error!(error = %e, position = agent_move.position, "Invalid move attempted");
+                            error!(error = %e, position, "Invalid move attempted");
                             let msg = format!("Invalid move: {}", e);
                             McpError::invalid_params(msg, None)
                         })?;
                     
-                    info!(position = agent_move.position, "Move applied successfully, continuing loop");
+                    info!(position, "Move applied successfully, continuing loop");
                     
                     // Update session and continue loop
                     self.sessions.update_session(session.clone());
