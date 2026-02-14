@@ -23,6 +23,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument};
 
 use app::App;
+use crate::games::tictactoe::{Game, Position};
 use orchestrator::{GameEvent, Orchestrator};
 use players::{HumanPlayer, SimpleAI};
 use http_client::HttpGameClient;
@@ -243,8 +244,9 @@ async fn run_http_game<B: ratatui::backend::Backend>(
                         if let Some(digit) = c.to_digit(10) {
                             let pos = digit as usize;
                             if pos >= 1 && pos <= 9 {
-                                let position = pos - 1;
-                                info!(position, "Sending move to server");
+                                let position = Position::from_index(pos - 1)
+                                    .expect("Position 1-9 must be valid");
+                                tracing::info!(position = ?position, "Sending move to server");
                                 
                                 if let Err(e) = client.make_move(position).await {
                                     tracing::warn!(error = %e, "Move failed");

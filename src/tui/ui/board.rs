@@ -6,14 +6,13 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
-use crate::games::tictactoe::{types, Game, Player};
+use crate::games::tictactoe::{types, AnyGame, Player as Mark, Position};
 
 use types::{Board, Square};
 
 /// Renders the tic-tac-toe board.
-pub fn render_board(f: &mut Frame, area: Rect, game: &Game) {
-    let state = game.state();
-    let board = state.board();
+pub fn render_board(f: &mut Frame, area: Rect, game: &AnyGame) {
+    let board = game.board();
     let board_area = center_rect(area, 40, 12);
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -53,17 +52,18 @@ fn render_row(f: &mut Frame, area: Rect, board: &Board, start: usize) {
 }
 
 fn render_square(f: &mut Frame, area: Rect, board: &Board, pos: usize) {
-    let square = board.get(pos).unwrap();
+    let position = Position::from_index(pos).unwrap();
+    let square = board.get(position);
     let (text, style) = match square {
         Square::Empty => (
             format!("{}", pos + 1),
             Style::default().fg(Color::DarkGray),
         ),
-        Square::Occupied(Player::X) => (
+        Square::Occupied(Mark::X) => (
             "X".to_string(),
             Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
         ),
-        Square::Occupied(Player::O) => (
+        Square::Occupied(Mark::O) => (
             "O".to_string(),
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),

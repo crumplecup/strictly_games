@@ -32,8 +32,8 @@ pub struct MakeMoveRequest {
     pub session_id: String,
     /// Player ID.
     pub player_id: String,
-    /// Position on board (0-8, where 0=top-left, 8=bottom-right).
-    pub position: usize,
+    /// Position on board.
+    pub position: crate::games::tictactoe::Position,
 }
 
 /// Request for playing a game with elicitation.
@@ -116,7 +116,7 @@ impl GameServer {
             mark,
             player_id,
             req.session_id,
-            session.game.state().board().display()
+            session.game.board().display()
         );
 
         info!(
@@ -142,18 +142,18 @@ impl GameServer {
             .ok_or_else(|| McpError::invalid_params("Session not found. Use register_player first.", None))?;
 
         // Reset the game board and clear players for fresh start
-        session.game = crate::games::tictactoe::Game::new();
+        session.game = crate::games::tictactoe::Game::new().into();
         session.player_x = None;
         session.player_o = None;
         self.sessions.update_session(session.clone());
         
-        let message = format!("New game started! Players can rejoin.\n{}", session.game.state().board().display());
+        let message = format!("New game started! Players can rejoin.\n{}", session.game.board().display());
         Ok(CallToolResult::success(vec![Content::text(message)]))
     }
 
     /// Makes a move at the given position.
-    #[instrument(skip(self, req), fields(session_id = %req.session_id, player_id = %req.player_id, position = req.position))]
-    #[tool(description = "Make a move at the specified position (0-8). Positions are numbered left-to-right, top-to-bottom.")]
+    #[instrument(skip(self, req), fields(session_id = %req.session_id, player_id = %req.player_id, position = ?req.position))]
+    #[tool(description = "Make a move at the specified position. Use Position enum (TopLeft, TopCenter, TopRight, MiddleLeft, Center, MiddleRight, BottomLeft, BottomCenter, BottomRight).")]
     pub async fn make_move(
         &self,
         Parameters(req): Parameters<MakeMoveRequest>,
@@ -161,7 +161,7 @@ impl GameServer {
         debug!(
             session_id = %req.session_id,
             player_id = %req.player_id,
-            position = req.position,
+            position = ?req.position,
             "Processing move"
         );
 
@@ -174,28 +174,17 @@ impl GameServer {
 
         self.sessions.update_session(session.clone());
 
-        let state = session.game.state();
-        let status_msg = match state.status() {
-            GameStatus::InProgress => {
-                format!("Move accepted. Player {:?} to move.", state.current_player())
-            }
-            GameStatus::Won(player) => {
-                format!("Player {:?} wins!", player)
-            }
-            GameStatus::Draw => {
-                "Game ended in a draw!".to_string()
-            }
-        };
+        let status_msg = session.game.status_string();
 
         info!(
             session_id = %req.session_id,
             player_id = %req.player_id,
-            position = req.position,
-            status = ?state.status(),
+            position = ?req.position,
+            status = %status_msg,
             "Move completed successfully"
         );
 
-        let message = format!("{}\n\n{}", status_msg, state.board().display());
+        let message = format!("{}\n\n{}", status_msg, session.game.board().display());
         Ok(CallToolResult::success(vec![Content::text(message)]))
     }
 
@@ -211,8 +200,6 @@ impl GameServer {
         let session = self.sessions.get_session(&req.session_id)
             .ok_or_else(|| McpError::invalid_params("Session not found", None))?;
 
-        let state = session.game.state();
-
         let player_x_name = session.player_x.as_ref()
             .map(|p| p.name.as_str())
             .unwrap_or("(waiting)");
@@ -220,15 +207,19 @@ impl GameServer {
             .map(|p| p.name.as_str())
             .unwrap_or("(waiting)");
 
+        let current_player_str = session.game.to_move()
+            .map(|p| format!("{:?}", p))
+            .unwrap_or_else(|| "Game Over".to_string());
+
         let message = format!(
-            "Session: {}\nPlayer X: {}\nPlayer O: {}\nCurrent player: {:?}\nStatus: {:?}\nMoves: {}\n\n{}",
+            "Session: {}\nPlayer X: {}\nPlayer O: {}\nCurrent player: {}\nStatus: {}\nMoves: {}\n\n{}",
             req.session_id,
             player_x_name,
             player_o_name,
-            state.current_player(),
-            state.status(),
-            state.history().len(),
-            state.board().display()
+            current_player_str,
+            session.game.status_string(),
+            session.game.history().len(),
+            session.game.board().display()
         );
         
         Ok(CallToolResult::success(vec![Content::text(message)]))
@@ -324,12 +315,10 @@ impl GameServer {
             let mut session = self.sessions.get_session(&req.session_id)
                 .ok_or_else(|| McpError::internal_error("Session not found", None))?;
             
-            let game_state = session.game.state();
-            
             // Check if game is over
-            match game_state.status() {
-                GameStatus::Won(winner) => {
-                    let winner_name = if winner == &mark {
+            if session.game.is_over() {
+                if let Some(winner) = session.game.winner() {
+                    let winner_name = if winner == mark {
                         req.player_name.clone()
                     } else {
                         "opponent".to_string()
@@ -338,250 +327,210 @@ impl GameServer {
                     let message = format!(
                         "🎉 Game Over! {} wins!\n\nFinal Board:\n{}\n\nMoves: {}",
                         winner_name,
-                        game_state.board().display(),
-                        game_state.history().len()
+                        session.game.board().display(),
+                        session.game.history().len()
                     );
                     
-                    info!(winner = ?winner, moves = game_state.history().len(), "Game ended with winner");
+                    tracing::info!(winner = ?winner, moves = session.game.history().len(), "Game ended with winner");
                     self.sessions.update_session(session);
                     return Ok(CallToolResult::success(vec![Content::text(message)]));
-                }
-                GameStatus::Draw => {
+                } else {
                     let message = format!(
                         "🤝 Game Over! It's a draw.\n\nFinal Board:\n{}\n\nMoves: {}",
-                        game_state.board().display(),
-                        game_state.history().len()
+                        session.game.board().display(),
+                        session.game.history().len()
                     );
                     
-                    info!(moves = game_state.history().len(), "Game ended in draw");
+                    tracing::info!(moves = session.game.history().len(), "Game ended in draw");
                     self.sessions.update_session(session);
                     return Ok(CallToolResult::success(vec![Content::text(message)]));
                 }
-                GameStatus::InProgress => {
-                    // Check whose turn it is
-                    if game_state.current_player() != mark {
-                        // Wait for opponent's move (agent vs agent mode)
-                        info!(mark = ?mark, "Not our turn, waiting for opponent");
-                        self.sessions.update_session(session);
-                        
-                        // Poll for opponent's move
-                        let max_polls = 300; // 5 minutes (1 second per poll)
-                        for poll_count in 0..max_polls {
-                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                            
-                            // Refresh session state
-                            let refreshed_session = self.sessions.get_session(&req.session_id)
-                                .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
-                            
-                            let updated_state = refreshed_session.game.state();
-                            
-                            // Check if game ended while we were waiting
-                            if !matches!(updated_state.status(), GameStatus::InProgress) {
-                                break; // Exit to outer loop to handle game end
-                            }
-                            
-                            // Check if it's now our turn
-                            if updated_state.current_player() == mark {
-                                info!(poll_count, "Opponent moved, now our turn");
-                                break; // Exit poll loop, continue to our move
-                            }
-                            
-                            if poll_count % 10 == 0 {
-                                debug!(poll_count, "Still waiting for opponent");
-                            }
-                        }
-                        
-                        // Loop continues to check game status and make our move
-                        continue;
+            }
+            
+            // Check if it's our turn
+            if !session.is_players_turn(&player_id) {
+                // Wait for opponent's move (agent vs agent mode)
+                tracing::info!(mark = ?mark, "Not our turn, waiting for opponent");
+                self.sessions.update_session(session);
+                
+                // Poll for opponent's move
+                let max_polls = 300; // 5 minutes (1 second per poll)
+                for poll_count in 0..max_polls {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    
+                    // Refresh session state
+                    let refreshed_session = self.sessions.get_session(&req.session_id)
+                        .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
+                    
+                    // Check if game ended while we were waiting
+                    if refreshed_session.game.is_over() {
+                        break; // Exit to outer loop to handle game end
                     }
                     
-                    // It's our turn - elicit Position using Select paradigm with retry
-                    info!(mark = ?mark, "Agent's turn, eliciting Position via Select");
+                    // Check if it's now our turn
+                    if refreshed_session.is_players_turn(&player_id) {
+                        tracing::info!(poll_count, "Opponent moved, now our turn");
+                        break; // Exit poll loop, continue to our move
+                    }
                     
-                    const MAX_RETRIES: usize = 5;
-                    let mut position_selected = false;
-                    
-                    for attempt in 1..=MAX_RETRIES {
-                        // Get valid positions before elicitation
-                        let valid_positions = {
-                            let game_state = session.game.state();
-                            crate::games::tictactoe::Position::valid_moves(game_state.board())
-                        };
-                        
-                        if valid_positions.is_empty() {
-                            error!("No valid positions available (board full)");
-                            return Err(McpError::internal_error("Board is full", None));
+                    if poll_count % 10 == 0 {
+                        tracing::debug!(poll_count, "Still waiting for opponent");
+                    }
+                }
+                
+                // Loop continues to check game status and make our move
+                continue;
+            }
+            
+            // It's our turn - elicit Position using Select paradigm with retry
+            tracing::info!(mark = ?mark, "Agent's turn, eliciting Position via Select");
+            
+            const MAX_RETRIES: usize = 5;
+            let mut position_selected = false;
+            
+            for attempt in 1..=MAX_RETRIES {
+                // Get valid positions before elicitation
+                let valid_positions = {
+                    let board = session.game.board();
+                    crate::games::tictactoe::Position::valid_moves(board)
+                };
+                
+                if valid_positions.is_empty() {
+                    tracing::error!("No valid positions available (board full)");
+                    return Err(McpError::internal_error("Board is full", None));
+                }
+                
+                tracing::info!(attempt, valid_count = valid_positions.len(), "Eliciting position (attempt {}/{})", attempt, MAX_RETRIES);
+                
+                // Build context-rich prompt with board state
+                let board_display = {
+                    let board = session.game.board();
+                    let mut display = String::from("Current board:\n");
+                    for row in 0..3 {
+                        display.push_str("  ");
+                        for col in 0..3 {
+                            let pos = crate::games::tictactoe::Position::from_index(row * 3 + col).unwrap();
+                            let marker = match board.get(pos) {
+                                Square::Empty => " ".to_string(),
+                                Square::Occupied(Player::X) => "X".to_string(),
+                                Square::Occupied(Player::O) => "O".to_string(),
+                            };
+                            display.push_str(&format!("{:^3}", marker));
+                            if col < 2 { display.push('|'); }
                         }
-                        
-                        info!(attempt, valid_count = valid_positions.len(), "Eliciting position (attempt {}/{})", attempt, MAX_RETRIES);
-                        
-                        // Build context-rich prompt with board state
-                        let board_display = {
-                            let game_state = session.game.state();
-                            let board = game_state.board();
-                            let mut display = String::from("Current board:\n");
-                            for row in 0..3 {
-                                display.push_str("  ");
-                                for col in 0..3 {
-                                    let idx = row * 3 + col;
-                                    let marker = match board.get(idx) {
-                                        Some(Square::Empty) => " ".to_string(),
-                                        Some(Square::Occupied(Player::X)) => "X".to_string(),
-                                        Some(Square::Occupied(Player::O)) => "O".to_string(),
-                                        None => "?".to_string(),
-                                    };
-                                    display.push_str(&format!("{:^3}", marker));
-                                    if col < 2 { display.push('|'); }
-                                }
-                                display.push('\n');
-                                if row < 2 { display.push_str("  -----------\n"); }
-                            }
-                            display
-                        };
-                        
-                        // Build list of ONLY valid positions with numbered choices
-                        let valid_options = valid_positions.iter()
-                            .enumerate()
-                            .map(|(i, pos)| format!("{}. {}", i + 1, pos.label()))
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        
-                        let enhanced_prompt = format!(
-                            "{}\n\nYour mark: {}\n\nAvailable moves (choose by number):\n{}\n\nSelect a number 1-{}:",
-                            board_display,
-                            match mark {
-                                crate::games::tictactoe::Player::X => "X",
-                                crate::games::tictactoe::Player::O => "O",
-                            },
-                            valid_options,
-                            valid_positions.len()
-                        );
-                        
-                        // Create ElicitServer wrapper and send enhanced prompt
-                        let elicit_server = elicitation::ElicitServer::new(peer.clone());
-                        
-                        // Send prompt and parse response
-                        let response = match elicit_server.send_prompt(&enhanced_prompt).await {
-                            Ok(resp) => resp,
-                            Err(e) => {
-                                error!(error = ?e, attempt, "Prompt send failed");
-                                if attempt == MAX_RETRIES {
-                                    return Err(McpError::internal_error(format!("Failed to send prompt after {} attempts: {}", MAX_RETRIES, e), None));
-                                }
-                                warn!(attempt, "Retrying elicitation");
-                                continue;
-                            }
-                        };
-                        
-                        // Parse response - try as number (1-indexed into valid_positions), then as label
-                        let position = if let Ok(num) = response.trim().parse::<usize>() {
-                            if num > 0 && num <= valid_positions.len() {
-                                valid_positions[num - 1]
-                            } else {
-                                warn!(response = %response, attempt, "Invalid number selection");
-                                if attempt == MAX_RETRIES {
-                                    return Err(McpError::invalid_params(
-                                        format!("Invalid selection: {}", response),
-                                        None
-                                    ));
-                                }
-                                continue;
-                            }
-                        } else {
-                            // Try parsing as label/position description
-                            match crate::games::tictactoe::Position::from_label_or_number(&response) {
-                                Some(pos) if valid_positions.contains(&pos) => pos,
-                                Some(pos) => {
-                                    warn!(position = ?pos, attempt, "Parsed position but it's occupied");
-                                    if attempt == MAX_RETRIES {
-                                        return Err(McpError::invalid_params(
-                                            format!("Position {:?} is occupied", pos),
-                                            None
-                                        ));
-                                    }
-                                    continue;
-                                }
-                                None => {
-                                    warn!(response = %response, attempt, "Could not parse response");
-                                    if attempt == MAX_RETRIES {
-                                        return Err(McpError::invalid_params(
-                                            format!("Invalid response: {}", response),
-                                            None
-                                        ));
-                                    }
-                                    continue;
-                                }
-                            }
-                        };
-                        
-                        info!(position = ?position, index = position.to_index(), attempt, "Agent selected position");
-                        
-                        // Verify position is in valid list
-                        if !valid_positions.contains(&position) {
-                            warn!(
-                                position = ?position,
-                                attempt,
-                                "Agent selected occupied position, retrying"
-                            );
+                        display.push('\n');
+                        if row < 2 { display.push_str("  -----------\n"); }
+                    }
+                    display
+                };
+                
+                // Build list of ONLY valid positions with numbered choices
+                let valid_options = valid_positions.iter()
+                    .enumerate()
+                    .map(|(i, pos)| format!("{}. {}", i + 1, pos.label()))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                
+                let enhanced_prompt = format!(
+                    "{}\n\nYour mark: {}\n\nAvailable moves (choose by number):\n{}\n\nSelect a number 1-{}:",
+                    board_display,
+                    match mark {
+                        crate::games::tictactoe::Player::X => "X",
+                        crate::games::tictactoe::Player::O => "O",
+                    },
+                    valid_options,
+                    valid_positions.len()
+                );
+                
+                // Create ElicitServer wrapper and send enhanced prompt
+                let elicit_server = elicitation::ElicitServer::new(peer.clone());
+                
+                // Send prompt and parse response
+                let response = match elicit_server.send_prompt(&enhanced_prompt).await {
+                    Ok(resp) => resp,
+                    Err(e) => {
+                        tracing::error!(error = ?e, attempt, "Prompt send failed");
+                        if attempt == MAX_RETRIES {
+                            return Err(McpError::internal_error(format!("Failed to send prompt after {} attempts: {}", MAX_RETRIES, e), None));
+                        }
+                        tracing::warn!(attempt, "Retrying elicitation");
+                        continue;
+                    }
+                };
+                
+                // Parse response - try as number (1-indexed into valid_positions), then as label
+                let position = if let Ok(num) = response.trim().parse::<usize>() {
+                    if num > 0 && num <= valid_positions.len() {
+                        valid_positions[num - 1]
+                    } else {
+                        tracing::warn!(response = %response, attempt, "Invalid number selection");
+                        if attempt == MAX_RETRIES {
+                            return Err(McpError::invalid_params(
+                                format!("Invalid selection: {}", response),
+                                None
+                            ));
+                        }
+                        continue;
+                    }
+                } else {
+                    // Try parsing as label/position description
+                    match crate::games::tictactoe::Position::from_label_or_number(&response) {
+                        Some(pos) if valid_positions.contains(&pos) => pos,
+                        Some(pos) => {
+                            tracing::warn!(position = ?pos, attempt, "Parsed position but it's occupied");
                             if attempt == MAX_RETRIES {
                                 return Err(McpError::invalid_params(
-                                    format!("Position {:?} still occupied after {} attempts", position, MAX_RETRIES),
-                                    None,
+                                    format!("Position {:?} is occupied", pos),
+                                    None
                                 ));
                             }
                             continue;
                         }
-                        
-                        // Convert Position to Move
-                        let mv = crate::games::tictactoe::Move {
-                            position: position.to_u8(),
-                        };
-                        
-                        // Validate with contracts and execute
-                        {
-                            let game_state = session.game.state();
-                            match crate::games::tictactoe::validate_move(game_state, &mv, mark) {
-                                Ok(proof) => {
-                                    info!(position = ?position, attempt, "Move validated with proof, executing");
-                                    
-                                    // Execute move with proof
-                                    let _move_made = crate::games::tictactoe::execute_move(
-                                        &mut session.game,
-                                        &mv,
-                                        mark,
-                                        proof,
-                                    );
-                                    
-                                    info!(position = ?position, "Move executed successfully");
-                                    position_selected = true;
-                                    break;
-                                }
-                                Err(e) => {
-                                    warn!(error = %e, position = ?position, attempt, "Contract validation failed, retrying");
-                                    if attempt == MAX_RETRIES {
-                                        return Err(McpError::internal_error(
-                                            format!("Validation failure after {} attempts: {}", MAX_RETRIES, e),
-                                            None,
-                                        ));
-                                    }
-                                    continue;
-                                }
+                        None => {
+                            tracing::warn!(response = %response, attempt, "Could not parse response");
+                            if attempt == MAX_RETRIES {
+                                return Err(McpError::invalid_params(
+                                    format!("Invalid response: {}", response),
+                                    None
+                                ));
                             }
+                            continue;
                         }
                     }
-                    
-                    if !position_selected {
-                        error!("Failed to select valid position after {} attempts", MAX_RETRIES);
-                        return Err(McpError::internal_error(
-                            format!("Could not complete move after {} attempts", MAX_RETRIES),
-                            None,
-                        ));
+                };
+                
+                tracing::info!(position = ?position, index = position.to_index(), attempt, "Agent selected position");
+                
+                // Make the move using session API (handles all validation + typestate transitions)
+                match session.make_move(&player_id, position) {
+                    Ok(()) => {
+                        tracing::info!(position = ?position, "Move executed successfully");
+                        position_selected = true;
+                        break;
                     }
-                    
-                    // Update session
-                    self.sessions.update_session(session.clone());
+                    Err(e) => {
+                        tracing::warn!(error = %e, position = ?position, attempt, "Move rejected, retrying");
+                        if attempt == MAX_RETRIES {
+                            return Err(McpError::internal_error(
+                                format!("Move failed after {} attempts: {}", MAX_RETRIES, e),
+                                None,
+                            ));
+                        }
+                        continue;
+                    }
                 }
             }
+            
+            if !position_selected {
+                tracing::error!("Failed to select valid position after {} attempts", MAX_RETRIES);
+                return Err(McpError::internal_error(
+                    format!("Could not complete move after {} attempts", MAX_RETRIES),
+                    None,
+                ));
+            }
+            
+            // Update session after successful move
+            self.sessions.update_session(session);
         }
     }
 }

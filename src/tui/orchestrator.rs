@@ -2,7 +2,7 @@
 
 use super::players::Player;
 use anyhow::Result;
-use crate::games::tictactoe::{Game, GameStatus};
+use crate::games::tictactoe::{AnyGame, Position, Player as Mark};
 use tokio::sync::mpsc;
 use tracing::{debug, info};
 
@@ -14,14 +14,14 @@ pub enum GameEvent {
     /// Agent is thinking.
     AgentThinking,
     /// Move was made.
-    MoveMade { player: String, position: usize },
+    MoveMade { player: String, position: Position },
     /// Game ended.
     GameOver { winner: Option<String> },
 }
 
 /// Orchestrates gameplay between two players.
 pub struct Orchestrator {
-    game: Game,
+    game: AnyGame,
     player_x: Box<dyn Player>,
     player_o: Box<dyn Player>,
     event_tx: mpsc::UnboundedSender<GameEvent>,
@@ -35,7 +35,7 @@ impl Orchestrator {
         event_tx: mpsc::UnboundedSender<GameEvent>,
     ) -> Self {
         Self {
-            game: Game::new(),
+            game: crate::games::tictactoe::Game::new().into(),
             player_x,
             player_o,
             event_tx,
@@ -47,12 +47,10 @@ impl Orchestrator {
         info!("Starting game orchestration");
         
         loop {
-            let state = self.game.state();
-            
             // Check if game is over
-            match state.status() {
-                GameStatus::Won(player) => {
-                    let winner_name = if *player == crate::games::tictactoe::Player::X {
+            if self.game.is_over() {
+                if let Some(winner) = self.game.winner() {
+                    let winner_name = if winner == Mark::X {
                         self.player_x.name()
                     } else {
                         self.player_o.name()
@@ -63,19 +61,16 @@ impl Orchestrator {
                     })?;
                     
                     return Ok(());
-                }
-                GameStatus::Draw => {
+                } else {
                     self.event_tx.send(GameEvent::GameOver { winner: None })?;
                     return Ok(());
-                }
-                GameStatus::InProgress => {
-                    // Continue playing
                 }
             }
             
             // Get current player
-            let current_player = state.current_player();
-            let is_x = current_player == crate::games::tictactoe::Player::X;
+            let current_player = self.game.to_move()
+                .expect("Game not over but no current player");
+            let is_x = current_player == Mark::X;
             
             // Get player name first (immutable borrow)
             let player_name = if is_x {
@@ -100,8 +95,10 @@ impl Orchestrator {
             debug!(player = %player_name, "Waiting for move");
             let position = player.get_move(&self.game).await?;
             
-            // Make the move
-            self.game.make_move(position).map_err(|e| anyhow::anyhow!(e))?;
+            // Make the move (AnyGame handles typestate transitions)
+            let old_game = std::mem::replace(&mut self.game, crate::games::tictactoe::Game::new().into());
+            self.game = old_game.place(position)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
             
             // Notify UI
             self.event_tx.send(GameEvent::MoveMade {
@@ -110,13 +107,13 @@ impl Orchestrator {
             })?;
             
             self.event_tx.send(GameEvent::StateChanged(
-                self.game.state().board().display(),
+                self.game.board().display(),
             ))?;
         }
     }
     
     /// Restarts the game.
     pub fn restart(&mut self) {
-        self.game = Game::new();
+        self.game = crate::games::tictactoe::Game::new().into();
     }
 }

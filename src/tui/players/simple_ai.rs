@@ -2,7 +2,7 @@
 
 use super::Player;
 use anyhow::Result;
-use crate::games::tictactoe::Game;
+use crate::games::tictactoe::{AnyGame, Position};
 use tracing::debug;
 
 /// Simple AI that picks first available square.
@@ -21,18 +21,18 @@ impl SimpleAI {
 
 #[async_trait::async_trait]
 impl Player for SimpleAI {
-    async fn get_move(&mut self, game: &Game) -> Result<usize> {
+    async fn get_move(&mut self, game: &AnyGame) -> Result<Position> {
         debug!(ai = %self.name, "AI making move");
         
         // Add small delay to simulate thinking
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         
-        let state = game.state();
+        let board = game.board();
         
         // Find first empty square
-        for pos in 0..9 {
-            if state.board().is_empty(pos) {
-                debug!(ai = %self.name, position = pos, "AI chose position");
+        for pos in Position::ALL {
+            if board.is_empty(pos) {
+                debug!(ai = %self.name, position = ?pos, "AI chose position");
                 return Ok(pos);
             }
         }

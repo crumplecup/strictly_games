@@ -1,6 +1,6 @@
 //! Game session management for HTTP multiplayer.
 
-use crate::games::tictactoe::{Game, Mark};
+use crate::games::tictactoe::{AnyGame, Game, InProgress, Mark, Position};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -40,8 +40,8 @@ pub struct Player {
 pub struct GameSession {
     /// Session ID.
     pub id: SessionId,
-    /// The game state.
-    pub game: Game,
+    /// The game state (in any phase).
+    pub game: AnyGame,
     /// Player X.
     pub player_x: Option<Player>,
     /// Player O.
@@ -55,7 +55,7 @@ impl GameSession {
         info!(session_id = %id, "Creating new game session");
         Self {
             id,
-            game: Game::new(),
+            game: Game::<InProgress>::new().into(),
             player_x: None,
             player_o: None,
         }
@@ -118,7 +118,10 @@ impl GameSession {
             }
         };
 
-        let current_mark = self.game.state().current_player();
+        let Some(current_mark) = self.game.to_move() else {
+            // Game is over
+            return false;
+        };
         let is_turn = player.mark == current_mark;
         
         debug!(
@@ -134,7 +137,7 @@ impl GameSession {
 
     /// Makes a move for the given player.
     #[instrument(skip(self), fields(session_id = %self.id))]
-    pub fn make_move(&mut self, player_id: &str, position: usize) -> Result<(), String> {
+    pub fn make_move(&mut self, player_id: &str, position: Position) -> Result<(), String> {
         // Validate player exists
         let player = self.get_player(player_id)
             .ok_or_else(|| {
@@ -144,28 +147,31 @@ impl GameSession {
 
         // Validate it's their turn
         if !self.is_players_turn(player_id) {
+            let expected = self.game.to_move()
+                .ok_or_else(|| "Game is over".to_string())?;
             warn!(
                 player_id,
-                expected_mark = ?self.game.state().current_player(),
+                expected_mark = ?expected,
                 player_mark = ?player.mark,
                 "Player tried to move out of turn"
             );
             return Err(format!(
                 "Not your turn. Waiting for player {:?}",
-                self.game.state().current_player()
+                expected
             ));
         }
 
-        // Make the move
-        self.game.make_move(position).map_err(|e| {
-            warn!(player_id, position, error = %e, "Invalid move");
+        // Make the move (consuming transition)
+        let old_game = std::mem::replace(&mut self.game, Game::<InProgress>::new().into());
+        self.game = old_game.place(position).map_err(|e| {
+            warn!(player_id, position = ?position, error = %e, "Invalid move");
             format!("Invalid move: {}", e)
         })?;
 
         info!(
             player_id,
-            position,
-            status = ?self.game.state().status(),
+            position = ?position,
+            status = %self.game.status_string(),
             "Move completed successfully"
         );
 

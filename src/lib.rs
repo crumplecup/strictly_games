@@ -8,6 +8,7 @@
 //! - **Agent**: AI players using LLM APIs (OpenAI, Anthropic)
 //! - **Games**: Type-safe game implementations (currently tic-tac-toe)
 //! - **Session**: Multi-player session management
+//! - **Typestates**: Compile-time state machine enforcement
 //! 
 //! # Example
 //! 
@@ -53,9 +54,11 @@ pub use server::{GameServer, GetBoardRequest, MakeMoveRequest, PlayGameRequest, 
 // Crate-level exports - Session management
 pub use session::{GameSession, Player, PlayerType, SessionManager};
 
-// Crate-level exports - Game types (tic-tac-toe)
+// Crate-level exports - Game types (tic-tac-toe with typestates)
 pub use games::tictactoe::{
-    execute_move, validate_move, // Contract functions
-    Board, Game, GameState, GameStatus, Move, Position, Square,
+    // Typestate API
+    AnyGame, Draw, Game, GameTransition, InProgress, PlaceError, Won,
+    // Domain types
+    Board, Position, Square,
     Player as TicTacToePlayer,
 };

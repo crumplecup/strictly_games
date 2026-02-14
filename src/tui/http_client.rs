@@ -210,8 +210,8 @@ impl HttpGameClient {
 
     /// Makes a move at the given position.
     #[instrument(skip(self), fields(session_id = %self.session_id, player_id = %self.player_id))]
-    pub async fn make_move(&self, position: usize) -> Result<()> {
-        info!(position, "Sending move to server");
+    pub async fn make_move(&self, position: crate::games::tictactoe::Position) -> Result<()> {
+        info!(position = ?position, "Sending move to server");
 
         let request = serde_json::json!({
             "jsonrpc": "2.0",
@@ -259,7 +259,7 @@ impl HttpGameClient {
             return Err(anyhow::anyhow!("Move failed: {}", error_msg));
         }
 
-        info!(position, "Move completed successfully");
+        info!(position = ?position, "Move completed successfully");
         Ok(())
     }
 

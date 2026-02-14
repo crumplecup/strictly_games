@@ -1,26 +1,25 @@
-//! Player trait and implementations.
+use anyhow::Result;
+use async_trait::async_trait;
+use crate::games::tictactoe::{AnyGame, Position};
 
-mod human;
-mod simple_ai;
-mod http;
-mod http_human;
+pub mod agent;
+pub mod human;
+pub mod simple_ai;
+pub mod http;
+pub mod http_human;
 
+pub use agent::AgentPlayer;
 pub use human::HumanPlayer;
 pub use simple_ai::SimpleAI;
 pub use http::HttpOpponent;
 pub use http_human::HttpHumanPlayer;
 
-use anyhow::Result;
-use crate::games::tictactoe::Game;
-
-/// Trait for players that can make moves.
-#[async_trait::async_trait]
+/// Trait for players (human or AI).
+#[async_trait]
 pub trait Player: Send {
-    /// Gets a move from this player.
-    /// 
-    /// Returns the position (0-8) for the next move.
-    async fn get_move(&mut self, game: &Game) -> Result<usize>;
-    
-    /// Returns the player's display name.
+    /// Player's name for display.
     fn name(&self) -> &str;
+    
+    /// Gets the next move from this player.
+    async fn get_move(&mut self, game: &AnyGame) -> Result<Position>;
 }

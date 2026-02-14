@@ -30,17 +30,12 @@ impl Game {
         &mut self.state
     }
 
-    /// Makes a move at the given position (0-8).
+    /// Makes a move at the given position.
     #[instrument]
-    pub fn make_move(&mut self, pos: usize) -> Result<(), String> {
+    pub fn make_move(&mut self, pos: super::Position) -> Result<(), String> {
         // Check if game is over
         if self.state.status() != &GameStatus::InProgress {
             return Err("Game is already over".to_string());
-        }
-
-        // Check position bounds
-        if pos >= 9 {
-            return Err("Position out of bounds (must be 0-8)".to_string());
         }
 
         // Check if square is empty
@@ -69,22 +64,37 @@ impl Game {
 
     /// Checks if there's a winner.
     fn check_winner(&self) -> Option<Player> {
+        use super::Position;
         let board = self.state.board();
         
         // Winning combinations
-        const LINES: [[usize; 3]; 8] = [
-            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
-            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
-            [0, 4, 8], [2, 4, 6],             // Diagonals
+        const LINES: [[Position; 3]; 8] = [
+            // Rows
+            [Position::TopLeft, Position::TopCenter, Position::TopRight],
+            [Position::MiddleLeft, Position::Center, Position::MiddleRight],
+            [Position::BottomLeft, Position::BottomCenter, Position::BottomRight],
+            // Columns
+            [Position::TopLeft, Position::MiddleLeft, Position::BottomLeft],
+            [Position::TopCenter, Position::Center, Position::BottomCenter],
+            [Position::TopRight, Position::MiddleRight, Position::BottomRight],
+            // Diagonals
+            [Position::TopLeft, Position::Center, Position::BottomRight],
+            [Position::TopRight, Position::Center, Position::BottomLeft],
         ];
 
         for line in &LINES {
-            let squares: Vec<_> = line.iter().filter_map(|&i| board.get(i)).collect();
-            if squares.len() == 3
-                && let [Square::Occupied(p1), Square::Occupied(p2), Square::Occupied(p3)] = squares.as_slice()
-                    && p1 == p2 && p2 == p3 {
-                        return Some(*p1);
-                    }
+            let [a, b, c] = *line;
+            let occ = board.get(a);
+
+            if occ != Square::Empty
+                && occ == board.get(b)
+                && occ == board.get(c)
+            {
+                return match occ {
+                    Square::Occupied(p) => Some(p),
+                    Square::Empty => None,
+                };
+            }
         }
 
         None

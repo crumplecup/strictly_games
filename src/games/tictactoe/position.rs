@@ -2,6 +2,7 @@
 
 use super::types::Board;
 use elicitation::{Prompt, Select};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -10,7 +11,7 @@ use tracing::instrument;
 /// This enum uses the Select paradigm - agents choose from
 /// a finite set of options. The game server filters which
 /// positions are valid (unoccupied) before elicitation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, elicitation::Elicit, strum::EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, elicitation::Elicit, strum::EnumIter)]
 pub enum Position {
     /// Top-left (position 0)
     TopLeft,
@@ -127,7 +128,13 @@ impl Position {
         Self::ALL
             .iter()
             .copied()
-            .filter(|pos| board.is_empty(pos.to_index()))
+            .filter(|pos| board.is_empty(*pos))
             .collect()
+    }
+}
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.label())
     }
 }

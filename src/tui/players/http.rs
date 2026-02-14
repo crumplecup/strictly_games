@@ -2,9 +2,9 @@
 
 use super::Player;
 use crate::tui::http_client::{BoardState, HttpGameClient};
+use crate::games::tictactoe::{AnyGame, Position};
 use anyhow::Result;
 use crossterm::event::KeyCode;
-use crate::games::tictactoe::Game;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, instrument, warn};
@@ -40,7 +40,7 @@ impl HttpOpponent {
 #[async_trait::async_trait]
 impl Player for HttpOpponent {
     #[instrument(skip(self, _game))]
-    async fn get_move(&mut self, _game: &Game) -> Result<usize> {
+    async fn get_move(&mut self, _game: &AnyGame) -> Result<Position> {
         info!("Waiting for opponent's move from server");
 
         // Poll server until it's their turn (we detect when current_player changes)
@@ -63,7 +63,7 @@ impl Player for HttpOpponent {
                     if state_changed {
                         info!(current_player = %state.current_player, "Turn changed, opponent moved");
                         // Return dummy value - orchestrator will update from actual game state
-                        return Ok(0);
+                        return Ok(Position::TopLeft);
                     }
 
                     // Check if game is over
@@ -85,16 +85,17 @@ impl Player for HttpOpponent {
                     if let Some(digit) = c.to_digit(10) {
                         let pos = digit as usize;
                         if pos >= 1 && pos <= 9 {
-                            let position = pos - 1;
-                            info!(position, "Human player wants to make move");
+                            let position = Position::from_index(pos - 1)
+                                .ok_or_else(|| anyhow::anyhow!("Invalid position"))?;
+                            info!(position = ?position, "Human player wants to make move");
                             
                             // Send move to server
                             if let Err(e) = self.client.make_move(position).await {
-                                warn!(error = %e, position, "Failed to send move to server");
+                                warn!(error = %e, position = ?position, "Failed to send move to server");
                                 return Err(e);
                             }
                             
-                            info!(position, "Move sent to server successfully");
+                            info!(position = ?position, "Move sent to server successfully");
                             // Poll immediately to get updated state
                             continue;
                         }
