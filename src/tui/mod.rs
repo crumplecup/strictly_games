@@ -28,6 +28,7 @@ use players::{HumanPlayer, SimpleAI};
 use http_client::HttpGameClient;
 
 /// Run the TUI client
+#[instrument(skip_all, fields(server_url = %server_url))]
 pub async fn run_tui(server_url: String) -> Result<()> {
     // Setup logging to file to avoid interfering with TUI
     let log_file = std::fs::File::create("strictly_games_tui.log")?;
@@ -261,6 +262,7 @@ async fn run_http_game<B: ratatui::backend::Backend>(
     }
 }
 
+#[instrument(skip(board))]
 fn format_http_board(board: &[Option<String>]) -> String {
     let mut result = String::new();
     for (i, cell) in board.iter().enumerate() {

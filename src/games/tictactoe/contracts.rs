@@ -5,6 +5,7 @@
 
 use super::types::{Board, GameState, GameStatus, Move, Player};
 use elicitation::contracts::{And, Established, Prop};
+use tracing::instrument;
 
 /// Proposition: The specified square is empty.
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +46,7 @@ impl Prop for MoveMade {}
 /// # Returns
 ///
 /// Returns a proof of `MoveInBounds` if the position is 0-8.
+#[instrument(skip(mv), fields(position = mv.position))]
 pub fn validate_bounds(mv: &Move) -> Result<Established<MoveInBounds>, String> {
     if mv.position <= 8 {
         Ok(Established::assert())
@@ -58,6 +60,7 @@ pub fn validate_bounds(mv: &Move) -> Result<Established<MoveInBounds>, String> {
 /// # Returns
 ///
 /// Returns a proof of `SquareIsEmpty` if the square at the move position is empty.
+#[instrument(skip(board, mv), fields(position = mv.position))]
 pub fn validate_square_empty(
     board: &Board,
     mv: &Move,
@@ -77,6 +80,7 @@ pub fn validate_square_empty(
 /// # Returns
 ///
 /// Returns a proof of `GameNotOver` if the game status is `InProgress`.
+#[instrument(skip(state), fields(status = ?state.status()))]
 pub fn validate_game_in_progress(
     state: &GameState,
 ) -> Result<Established<GameNotOver>, String> {
@@ -92,6 +96,7 @@ pub fn validate_game_in_progress(
 /// # Returns
 ///
 /// Returns a proof of `PlayersTurn` if the current player matches.
+#[instrument(skip(state), fields(player = ?player, current = ?state.current_player()))]
 pub fn validate_players_turn(
     state: &GameState,
     player: Player,
@@ -121,6 +126,7 @@ pub fn validate_players_turn(
 ///
 /// Returns `Ok(proof)` if all conditions pass, where `proof` is `Established<LegalMove>`.
 /// Returns `Err(msg)` with a descriptive error if any condition fails.
+#[instrument(skip(state, mv), fields(player = ?player, position = mv.position))]
 pub fn validate_move(
     state: &GameState,
     mv: &Move,
@@ -157,6 +163,7 @@ pub fn validate_move(
 /// # Returns
 ///
 /// Returns a proof that a move was made.
+#[instrument(skip(game, mv, _proof), fields(player = ?_player, position = mv.position))]
 pub fn execute_move(
     game: &mut super::Game,
     mv: &Move,

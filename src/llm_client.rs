@@ -237,9 +237,9 @@ impl LlmClient {
 #[derive(Debug, Clone, Display, Error)]
 #[display("LLM error: {} at {}:{}", message, file, line)]
 pub struct LlmError {
-    message: String,
-    line: u32,
-    file: &'static str,
+    pub message: String,
+    pub line: u32,
+    pub file: &'static str,
 }
 
 impl LlmError {

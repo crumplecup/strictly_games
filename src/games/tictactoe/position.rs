@@ -3,6 +3,7 @@
 use super::types::Board;
 use elicitation::{Prompt, Select};
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 
 /// A position on the tic-tac-toe board (0-8).
 ///
@@ -33,6 +34,7 @@ pub enum Position {
 
 impl Position {
     /// Get label for this position (for display).
+    #[instrument]
     pub fn label(&self) -> &'static str {
         match self {
             Position::TopLeft => "Top-left",
@@ -48,6 +50,7 @@ impl Position {
     }
 
     /// Parse from label or number (0-8).
+    #[instrument]
     pub fn from_label_or_number(s: &str) -> Option<Position> {
         // Try as number first (position index 0-8)
         if let Ok(num) = s.trim().parse::<usize>() {
@@ -63,6 +66,7 @@ impl Position {
     }
     
     /// Converts position to board index (0-8).
+    #[instrument]
     pub fn to_index(self) -> usize {
         match self {
             Position::TopLeft => 0,
@@ -78,11 +82,13 @@ impl Position {
     }
 
     /// Converts position to u8 (0-8).
+    #[instrument]
     pub fn to_u8(self) -> u8 {
         self.to_index() as u8
     }
 
     /// Creates position from board index.
+    #[instrument]
     pub fn from_index(index: usize) -> Option<Self> {
         match index {
             0 => Some(Position::TopLeft),
@@ -116,6 +122,7 @@ impl Position {
     /// This is the key method for dynamic selection: we have a static
     /// enum with all positions, but filter which ones to present based
     /// on runtime board state.
+    #[instrument(skip(board))]
     pub fn valid_moves(board: &Board) -> Vec<Position> {
         Self::ALL
             .iter()

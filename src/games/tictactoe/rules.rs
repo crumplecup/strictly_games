@@ -1,6 +1,7 @@
 //! Game logic and rules for tic-tac-toe.
 
 use super::types::{GameState, GameStatus, Player, Square};
+use tracing::instrument;
 
 /// Tic-tac-toe game engine.
 #[derive(Debug, Clone)]
@@ -10,6 +11,7 @@ pub struct Game {
 
 impl Game {
     /// Creates a new game.
+    #[instrument]
     pub fn new() -> Self {
         Self {
             state: GameState::new(),
@@ -17,16 +19,19 @@ impl Game {
     }
 
     /// Returns the current game state.
+    #[instrument]
     pub fn state(&self) -> &GameState {
         &self.state
     }
 
     /// Returns mutable reference to game state.
+    #[instrument]
     pub fn state_mut(&mut self) -> &mut GameState {
         &mut self.state
     }
 
     /// Makes a move at the given position (0-8).
+    #[instrument]
     pub fn make_move(&mut self, pos: usize) -> Result<(), String> {
         // Check if game is over
         if self.state.status() != &GameStatus::InProgress {

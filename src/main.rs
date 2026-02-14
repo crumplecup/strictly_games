@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
 }
 
 /// Run the MCP game server (stdio mode)
+#[instrument]
 async fn run_mcp_server() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -60,6 +61,7 @@ async fn run_mcp_server() -> Result<()> {
 }
 
 /// Run the HTTP game server
+#[instrument(skip_all, fields(host = %host, port))]
 async fn run_http_server(host: String, port: u16) -> Result<()> {
     use axum::{body::Body, http::Request, Router};
     use rmcp::transport::streamable_http_server::{
@@ -141,6 +143,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
 }
 
 /// Run the TUI client
+#[instrument(skip_all, fields(server_url = %server_url))]
 async fn run_tui(server_url: String) -> Result<()> {
     tui::run_tui(server_url).await
 }

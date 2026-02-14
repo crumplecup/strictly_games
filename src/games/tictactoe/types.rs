@@ -3,6 +3,7 @@
 use elicitation::{Elicit, Prompt, Select};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 
 /// Player in the game.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
@@ -15,6 +16,7 @@ pub enum Player {
 
 impl Player {
     /// Returns the opponent player.
+    #[instrument]
     pub fn opponent(self) -> Self {
         match self {
             Player::X => Player::O,
@@ -41,6 +43,7 @@ pub struct Board {
 
 impl Board {
     /// Creates a new empty board.
+    #[instrument]
     pub fn new() -> Self {
         Self {
             squares: [Square::Empty; 9],
@@ -48,11 +51,13 @@ impl Board {
     }
 
     /// Gets the square at the given position (0-8).
+    #[instrument]
     pub fn get(&self, pos: usize) -> Option<Square> {
         self.squares.get(pos).copied()
     }
 
     /// Sets the square at the given position.
+    #[instrument]
     pub fn set(&mut self, pos: usize, square: Square) -> Result<(), &'static str> {
         if pos >= 9 {
             return Err("Position out of bounds");
@@ -62,16 +67,19 @@ impl Board {
     }
 
     /// Checks if a square is empty.
+    #[instrument]
     pub fn is_empty(&self, pos: usize) -> bool {
         matches!(self.get(pos), Some(Square::Empty))
     }
 
     /// Returns all squares as a slice.
+    #[instrument]
     pub fn squares(&self) -> &[Square; 9] {
         &self.squares
     }
 
     /// Formats the board as a human-readable string.
+    #[instrument]
     pub fn display(&self) -> String {
         let mut result = String::new();
         for row in 0..3 {
@@ -127,6 +135,7 @@ pub struct GameState {
 
 impl GameState {
     /// Creates a new game.
+    #[instrument]
     pub fn new() -> Self {
         Self {
             board: Board::new(),
@@ -137,21 +146,25 @@ impl GameState {
     }
 
     /// Returns the board.
+    #[instrument]
     pub fn board(&self) -> &Board {
         &self.board
     }
 
     /// Returns the current player.
+    #[instrument]
     pub fn current_player(&self) -> Player {
         self.current_player
     }
 
     /// Returns the game status.
+    #[instrument]
     pub fn status(&self) -> &GameStatus {
         &self.status
     }
 
     /// Returns the move history.
+    #[instrument]
     pub fn history(&self) -> &[usize] {
         &self.history
     }

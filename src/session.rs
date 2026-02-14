@@ -96,6 +96,7 @@ impl GameSession {
     }
 
     /// Gets the player with the given ID.
+    #[instrument(skip(self), fields(session_id = %self.id, player_id))]
     pub fn get_player(&self, player_id: &str) -> Option<&Player> {
         if self.player_x.as_ref().map(|p| p.id.as_str()) == Some(player_id) {
             self.player_x.as_ref()
@@ -180,6 +181,7 @@ pub struct SessionManager {
 
 impl SessionManager {
     /// Creates a new session manager.
+    #[instrument]
     pub fn new() -> Self {
         info!("Creating session manager");
         Self {
