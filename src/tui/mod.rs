@@ -129,25 +129,58 @@ async fn run_http_game<B: ratatui::backend::Backend>(
             }
         };
         
-        // Draw current board state
+        // Draw current board state with centered layout
         terminal.draw(|f| {
-            use ratatui::prelude::*;
-            use ratatui::widgets::{Block, Borders, Paragraph};
+            use ratatui::{
+                layout::{Alignment, Constraint, Direction, Layout},
+                style::{Color, Modifier, Style},
+                widgets::{Block, Borders, Paragraph},
+            };
             
+            // Split screen into sections: title, board, status, help
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),  // Title
+                    Constraint::Min(0),     // Board (centered)
+                    Constraint::Length(3),  // Status
+                    Constraint::Length(3),  // Help
+                ])
+                .split(f.area());
+            
+            // Title
+            let title = Paragraph::new("Strictly Games - Tic Tac Toe (HTTP)")
+                .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                .alignment(Alignment::Center)
+                .block(Block::default().borders(Borders::ALL));
+            f.render_widget(title, chunks[0]);
+            
+            // Board (centered)
             let board_text = format_http_board(&state.board);
+            let board = Paragraph::new(board_text)
+                .alignment(Alignment::Center)
+                .block(Block::default().borders(Borders::ALL).title("Board"));
+            f.render_widget(board, chunks[1]);
+            
+            // Status
             let game_over = state.status != "InProgress";
-            let status = if game_over {
+            let status_text = if game_over {
                 format!("Game Over! Winner: {}", state.winner.as_deref().unwrap_or("Draw"))
             } else {
                 format!("Current player: {}", state.current_player)
             };
+            let status = Paragraph::new(status_text)
+                .style(Style::default().fg(Color::Yellow))
+                .alignment(Alignment::Center)
+                .block(Block::default().borders(Borders::ALL).title("Status"));
+            f.render_widget(status, chunks[2]);
             
-            let text = format!("{}\n\n{}\n\nPress 1-9 to move, 'q' to quit", status, board_text);
-            
-            let paragraph = Paragraph::new(text)
-                .block(Block::default().title("Tic-Tac-Toe (HTTP)").borders(Borders::ALL));
-            
-            f.render_widget(paragraph, f.size());
+            // Help
+            let help = Paragraph::new("Press 1-9 for moves | Q: Quit")
+                .style(Style::default().fg(Color::DarkGray))
+                .alignment(Alignment::Center)
+                .block(Block::default().borders(Borders::ALL));
+            f.render_widget(help, chunks[3]);
         })?;
         
         // Check if game over
