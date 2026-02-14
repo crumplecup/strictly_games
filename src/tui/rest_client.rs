@@ -61,6 +61,7 @@ impl RestGameClient {
         let response = client
             .post(&format!("{}/message", base_url))
             .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
             .json(&init_req)
             .send()
             .await?;
@@ -69,8 +70,25 @@ impl RestGameClient {
             .headers()
             .get("mcp-session-id")
             .and_then(|h| h.to_str().ok())
-            .context("No MCP session ID")?
+            .context("No MCP session ID in response headers")?
             .to_string();
+        
+        debug!(mcp_session_id = %mcp_session_id, "MCP session initialized");
+        
+        // Send initialized notification
+        let init_notif = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+        
+        client
+            .post(&format!("{}/message", base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &mcp_session_id)
+            .json(&init_notif)
+            .send()
+            .await?;
         
         // Register player
         let register_req = serde_json::json!({
@@ -89,6 +107,7 @@ impl RestGameClient {
         let _response = client
             .post(&format!("{}/message", base_url))
             .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
             .header("mcp-session-id", &mcp_session_id)
             .json(&register_req)
             .send()
