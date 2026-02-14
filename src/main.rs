@@ -61,18 +61,14 @@ async fn run_mcp_server() -> Result<()> {
 
 /// Run the HTTP game server
 async fn run_http_server(host: String, port: u16) -> Result<()> {
-    use axum::{
-        extract::{Json, Path, State},
-        routing::{get, post},
-        Router,
-    };
+    use axum::{body::Body, http::Request, Router};
     use rmcp::transport::streamable_http_server::{
         session::local::LocalSessionManager,
         tower::{StreamableHttpServerConfig, StreamableHttpService},
     };
-    use serde::{Deserialize, Serialize};
     use std::sync::Arc;
     use tower::ServiceBuilder;
+    use tracing::{debug, warn};
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -81,35 +77,59 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
         )
         .init();
 
-    info!(host = %host, port = port, "Starting HTTP game server");
+    info!("Starting Strictly Games MCP server on HTTP");
+    info!(port, "Server will listen on http://localhost:{}", port);
 
     let session_manager = Arc::new(LocalSessionManager::default());
     
-    // Create SHARED SessionManager for game state
+    // Create SHARED SessionManager for game state (Arc for multi-request sharing)
     let game_sessions = Arc::new(session::SessionManager::new());
     
     // Configure for STATEFUL mode (required for elicitation loops)
     let mut config = StreamableHttpServerConfig::default();
-    config.stateful_mode = true;
+    config.stateful_mode = true;  // Keep connections alive for bidirectional communication
+    debug!(?config, "HTTP service configuration");
     
     // Factory creates GameServer that shares session state
     let http_service = StreamableHttpService::new(
         move || {
-            tracing::debug!("Creating new GameServer instance with shared sessions");
+            debug!("Creating new GameServer instance with shared sessions");
             Ok(GameServer::with_sessions((*game_sessions).clone()))
         },
         session_manager,
         config,
     );
-
-    // Wrap in tower service builder
-    let service = ServiceBuilder::new().service(http_service);
-
-    let app = Router::new().route_service("/mcp/v1/*path", axum::routing::any_service(service));
-
-    let addr = format!("{}:{}", host, port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    info!("HTTP server listening on http://{}", addr);
+    
+    // Wrap service with request logging
+    let app = Router::new()
+        .fallback_service(ServiceBuilder::new()
+            .map_request(|req: Request<Body>| {
+                info!(
+                    method = %req.method(),
+                    uri = %req.uri(),
+                    headers = ?req.headers(),
+                    "Incoming HTTP request"
+                );
+                req
+            })
+            .service(tower::service_fn(move |req: Request<Body>| {
+                let mut service = http_service.clone();
+                async move {
+                    let uri = req.uri().clone();
+                    let result = tower::Service::call(&mut service, req).await;
+                    match &result {
+                        Ok(resp) => info!(status = ?resp.status(), uri = %uri, "Response sent"),
+                        Err(e) => warn!(error = ?e, uri = %uri, "Request failed"),
+                    }
+                    result
+                }
+            })));
+    
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
+    info!("✅ Server ready at http://localhost:{}/", port);
+    info!("📡 Accepting SSE connections");
+    info!("🎮 Tools: start_game, get_board, make_move");
+    info!("🔍 Trace logging enabled - all requests will be logged");
     
     axum::serve(listener, app).await?;
 
