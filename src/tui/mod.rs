@@ -118,10 +118,6 @@ async fn run_typesafe_game<B: ratatui::backend::Backend>(
     
     info!("Starting type-safe game loop");
     
-    // Start a new game
-    client.start_game().await?;
-    info!("Game initialized");
-    
     let mut cursor = Position::Center;
     
     loop {
