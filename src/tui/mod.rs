@@ -11,6 +11,7 @@ mod players;
 mod http_client;
 mod rest_client;  // Type-safe REST client
 mod standalone;
+mod input;  // Cursor movement
 
 use anyhow::Result;
 use crossterm::{
@@ -117,6 +118,10 @@ async fn run_typesafe_game<B: ratatui::backend::Backend>(
     
     info!("Starting type-safe game loop");
     
+    // Start a new game
+    client.start_game().await?;
+    info!("Game initialized");
+    
     let mut cursor = Position::Center;
     
     loop {
@@ -148,9 +153,9 @@ async fn run_typesafe_game<B: ratatui::backend::Backend>(
                 .block(Block::default().borders(Borders::ALL));
             f.render_widget(title, chunks[0]);
             
-            // Board  
-            let board_text = game.board().display();
-            let board = Paragraph::new(board_text)
+            // Board (with cursor highlighting!)
+            let board_lines = render_board_with_cursor(game.board(), cursor);
+            let board = Paragraph::new(board_lines)
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL).title("Board"));
             f.render_widget(board, chunks[1]);
@@ -212,9 +217,10 @@ async fn run_typesafe_game<B: ratatui::backend::Backend>(
                         if let Err(e) = client.make_move(cursor).await {
                             error!(error = %e, "Move failed");
                         }
+                        sleep(Duration::from_millis(200)).await; // Let server process
                     }
                     KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
-                        // TODO: Implement cursor movement
+                        cursor = input::move_cursor(cursor, key.code);
                     }
                     _ => {}
                 }
@@ -225,12 +231,48 @@ async fn run_typesafe_game<B: ratatui::backend::Backend>(
     }
 }
 
-/// Old HTTP game loop (deprecated - uses string parsing).
-#[instrument(skip_all)]
-async fn run_http_game<B: ratatui::backend::Backend>(
-    _terminal: &mut Terminal<B>,
-    _client: http_client::HttpGameClient,
-) -> Result<()> {
-    info!("Old HTTP client deprecated, use REST");
-    Ok(())
+/// Renders board with cursor highlighting.
+fn render_board_with_cursor(board: &crate::games::tictactoe::Board, cursor: Position) -> String {
+    use crate::games::tictactoe::{Player, Square};
+    
+    let positions = [
+        [Position::TopLeft, Position::TopCenter, Position::TopRight],
+        [Position::MiddleLeft, Position::Center, Position::MiddleRight],
+        [Position::BottomLeft, Position::BottomCenter, Position::BottomRight],
+    ];
+    
+    let mut lines = Vec::new();
+    
+    for (row_idx, row) in positions.iter().enumerate() {
+        let mut line_spans = Vec::new();
+        
+        for (col_idx, &pos) in row.iter().enumerate() {
+            let square = board.get(pos);
+            let symbol = match square {
+                Square::Empty => " ",
+                Square::Occupied(Player::X) => "X",
+                Square::Occupied(Player::O) => "O",
+            };
+            
+            let cell = if pos == cursor {
+                format!("[{}]", symbol) // Highlight cursor
+            } else {
+                format!(" {} ", symbol)
+            };
+            
+            line_spans.push(cell);
+            
+            if col_idx < 2 {
+                line_spans.push("|".to_string());
+            }
+        }
+        
+        lines.push(line_spans.join(""));
+        
+        if row_idx < 2 {
+            lines.push("-----------".to_string());
+        }
+    }
+    
+    lines.join("\n")
 }

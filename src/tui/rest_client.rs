@@ -122,6 +122,9 @@ impl RestGameClient {
     pub async fn make_move(&self, position: Position) -> Result<()> {
         info!("Making move");
         
+        // Serialize Position properly using serde
+        let position_value = serde_json::to_value(&position)?;
+        
         // Use MCP tool for making moves (triggers elicitation)
         let request = serde_json::json!({
             "jsonrpc": "2.0",
@@ -132,7 +135,7 @@ impl RestGameClient {
                 "arguments": {
                     "session_id": self.session_id,
                     "player_id": self.player_id,
-                    "position": format!("{:?}", position) // Serialize enum
+                    "position": position_value
                 }
             }
         });
@@ -146,6 +149,37 @@ impl RestGameClient {
         
         if !response.status().is_success() {
             anyhow::bail!("Move failed: {}", response.status());
+        }
+        
+        Ok(())
+    }
+    
+    /// Starts a new game via MCP tool.
+    #[instrument(skip(self))]
+    pub async fn start_game(&self) -> Result<()> {
+        info!("Starting new game");
+        
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "start_game",
+                "arguments": {
+                    "session_id": self.session_id
+                }
+            }
+        });
+        
+        let response = self.client
+            .post(&format!("{}/message", self.base_url))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            anyhow::bail!("Start game failed: {}", response.status());
         }
         
         Ok(())
