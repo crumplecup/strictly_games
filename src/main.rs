@@ -92,19 +92,33 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     config.stateful_mode = true;  // Keep connections alive for bidirectional communication
     debug!(?config, "HTTP service configuration");
     
+    // Clone sessions for different uses
+    let rest_sessions = game_sessions.clone();
+    let mcp_game_sessions = game_sessions.clone();
+    
     // Factory creates GameServer that shares session state
     let http_service = StreamableHttpService::new(
         move || {
             debug!("Creating new GameServer instance with shared sessions");
-            Ok(GameServer::with_sessions((*game_sessions).clone()))
+            Ok(GameServer::with_sessions((*mcp_game_sessions).clone()))
         },
-        session_manager,
+        session_manager.clone(),
         config,
     );
     
-    // Wrap service with request logging and add health endpoint
+    // Build app with REST API and MCP fallback
     let app = Router::new()
         .route("/health", axum::routing::get(|| async { "OK" }))
+        .route("/api/sessions/:session_id/game", axum::routing::get({
+            move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
+                use axum::Json;
+                if let Some(session) = rest_sessions.get_session(&session_id) {
+                    Json(session.game.clone())
+                } else {
+                    Json(crate::games::tictactoe::Game::new().into())
+                }
+            }
+        }))
         .fallback_service(ServiceBuilder::new()
             .map_request(|req: Request<Body>| {
                 info!(
