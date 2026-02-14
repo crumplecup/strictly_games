@@ -11,7 +11,7 @@ pub use http::HttpOpponent;
 pub use http_human::HttpHumanPlayer;
 
 use anyhow::Result;
-use strictly_games::games::tictactoe::Game;
+use crate::games::tictactoe::Game;
 
 /// Trait for players that can make moves.
 #[async_trait::async_trait]

@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use rmcp::model::{Content, CreateMessageRequestParams, Role, SamplingMessage};
 use rmcp::service::{Peer, RoleServer};
 use std::sync::Arc;
-use strictly_games::games::tictactoe::Game;
+use crate::games::tictactoe::Game;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 

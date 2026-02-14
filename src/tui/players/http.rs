@@ -1,10 +1,10 @@
 //! HTTP-based opponent that polls server for game state.
 
 use super::Player;
-use crate::http_client::{BoardState, HttpGameClient};
+use crate::tui::http_client::{BoardState, HttpGameClient};
 use anyhow::Result;
 use crossterm::event::KeyCode;
-use strictly_games::games::tictactoe::Game;
+use crate::games::tictactoe::Game;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, info, instrument, warn};

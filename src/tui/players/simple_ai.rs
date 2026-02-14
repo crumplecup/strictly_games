@@ -2,7 +2,7 @@
 
 use super::Player;
 use anyhow::Result;
-use strictly_games::games::tictactoe::Game;
+use crate::games::tictactoe::Game;
 use tracing::debug;
 
 /// Simple AI that picks first available square.

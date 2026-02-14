@@ -2,7 +2,7 @@
 
 mod board;
 
-use crate::app::App;
+use super::app::App;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},

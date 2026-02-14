@@ -1,8 +1,8 @@
 //! Game orchestration between players.
 
-use crate::players::Player;
+use super::players::Player;
 use anyhow::Result;
-use strictly_games::games::tictactoe::{Game, GameStatus};
+use crate::games::tictactoe::{Game, GameStatus};
 use tokio::sync::mpsc;
 use tracing::{debug, info};
 
@@ -52,7 +52,7 @@ impl Orchestrator {
             // Check if game is over
             match state.status() {
                 GameStatus::Won(player) => {
-                    let winner_name = if *player == strictly_games::games::tictactoe::Player::X {
+                    let winner_name = if *player == crate::games::tictactoe::Player::X {
                         self.player_x.name()
                     } else {
                         self.player_o.name()
@@ -75,7 +75,7 @@ impl Orchestrator {
             
             // Get current player
             let current_player = state.current_player();
-            let is_x = current_player == strictly_games::games::tictactoe::Player::X;
+            let is_x = current_player == crate::games::tictactoe::Player::X;
             
             // Get player name first (immutable borrow)
             let player_name = if is_x {

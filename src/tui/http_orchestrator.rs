@@ -1,7 +1,7 @@
 //! HTTP-based game orchestration that polls server for state.
 
-use crate::http_client::HttpGameClient;
-use crate::orchestrator::GameEvent;
+use crate::tui::http_client::HttpGameClient;
+use super::orchestrator::GameEvent;
 use anyhow::Result;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::Paragraph,
     Frame,
 };
-use strictly_games::games::tictactoe::{types, Game, Player};
+use crate::games::tictactoe::{types, Game, Player};
 
 use types::{Board, Square};
 

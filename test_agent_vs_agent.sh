@@ -14,7 +14,7 @@ echo ""
 # Check if server is running
 if ! curl -s "$SERVER_URL" > /dev/null 2>&1; then
     echo "❌ Server not running at $SERVER_URL"
-    echo "Start server with: cargo run --bin server_http"
+    echo "Start server with: cargo run -- http"
     exit 1
 fi
 
@@ -23,7 +23,7 @@ echo ""
 
 # Start both agents in background
 echo "🤖 Starting Agent X (Player X)..."
-RUST_LOG=info cargo run --bin mcp_agent -- \
+RUST_LOG=info cargo run -- agent \
     --config agent_x_config.toml \
     --server-url "$SERVER_URL" \
     --test-play \
@@ -31,7 +31,7 @@ RUST_LOG=info cargo run --bin mcp_agent -- \
 AGENT_X_PID=$!
 
 echo "🤖 Starting Agent O (Player O)..."
-RUST_LOG=info cargo run --bin mcp_agent -- \
+RUST_LOG=info cargo run -- agent \
     --config agent_o_config.toml \
     --server-url "$SERVER_URL" \
     --test-play \

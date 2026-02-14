@@ -7,7 +7,7 @@ echo ""
 
 # Start HTTP server
 echo "1. Starting HTTP server on port 3000..."
-cargo run --bin server_http &
+cargo run -- http &
 SERVER_PID=$!
 echo "   Server PID: $SERVER_PID"
 sleep 3
@@ -15,7 +15,7 @@ sleep 3
 # Start MCP agent
 echo ""
 echo "2. Starting MCP agent (connects to HTTP server)..."
-RUST_LOG=info cargo run --bin mcp_agent -- --server-url http://localhost:3000 --test-play &
+RUST_LOG=info cargo run -- agent --server-url http://localhost:3000 --test-play &
 AGENT_PID=$!
 echo "   Agent PID: $AGENT_PID"
 sleep 5

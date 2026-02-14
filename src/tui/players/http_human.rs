@@ -1,10 +1,10 @@
 //! HTTP-based human player that sends moves to server.
 
 use super::Player;
-use crate::http_client::HttpGameClient;
+use crate::tui::http_client::HttpGameClient;
 use anyhow::Result;
 use crossterm::event::KeyCode;
-use strictly_games::games::tictactoe::Game;
+use crate::games::tictactoe::Game;
 use tokio::sync::mpsc;
 use tracing::{info, instrument, warn};
 

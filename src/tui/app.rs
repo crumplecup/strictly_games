@@ -1,9 +1,9 @@
 //! Application state and logic.
 
-use strictly_games::games::tictactoe::Game;
+use crate::games::tictactoe::Game;
 use tracing::debug;
 
-use crate::orchestrator::GameEvent;
+use super::orchestrator::GameEvent;
 
 /// Main application state.
 pub struct App {

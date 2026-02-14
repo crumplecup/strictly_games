@@ -3,7 +3,7 @@
 use super::Player;
 use anyhow::Result;
 use crossterm::event::KeyCode;
-use strictly_games::games::tictactoe::Game;
+use crate::games::tictactoe::Game;
 use tokio::sync::mpsc;
 
 /// Human player using keyboard input.
