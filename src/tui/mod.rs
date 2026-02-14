@@ -83,6 +83,7 @@ pub async fn run_tui(server_url: String) -> Result<()> {
     // Run HTTP thin client loop
     let res = run_http_game(&mut terminal, client, &mut event_rx).await;
     
+    // Restore terminal
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
@@ -94,6 +95,8 @@ pub async fn run_tui(server_url: String) -> Result<()> {
     if let Err(err) = res {
         error!(error = ?err, "Game loop error");
         eprintln!("Error: {:?}", err);
+    } else {
+        println!("Game completed successfully. Thanks for playing!");
     }
     
     Ok(())
@@ -103,7 +106,7 @@ pub async fn run_tui(server_url: String) -> Result<()> {
 #[instrument(skip_all, fields(session_id = %client.session_id, player_id = %client.player_id))]
 async fn run_http_game<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
-    client: HttpGameClient,
+    mut client: HttpGameClient,
     _event_rx: &mut mpsc::UnboundedReceiver<GameEvent>,
 ) -> Result<()> {
     use tokio::time::{sleep, Duration};
@@ -176,18 +179,55 @@ async fn run_http_game<B: ratatui::backend::Backend>(
             f.render_widget(status, chunks[2]);
             
             // Help
-            let help = Paragraph::new("Press 1-9 for moves | Q: Quit")
+            let help_text = if game_over {
+                "Game Over! Press R to Restart | Q to Quit"
+            } else {
+                "Press 1-9 for moves | Q: Quit"
+            };
+            let help = Paragraph::new(help_text)
                 .style(Style::default().fg(Color::DarkGray))
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL));
             f.render_widget(help, chunks[3]);
         })?;
         
-        // Check if game over
-        if state.status != "InProgress" {
-            info!("Game over detected");
-            sleep(Duration::from_secs(3)).await;
-            return Ok(());
+        // Check if game over - wait for user input instead of auto-exiting
+        let game_over = state.status != "InProgress";
+        if game_over {
+            info!("Game over detected, status: {}", state.status);
+            
+            // Wait for user input (R to restart, Q to quit)
+            loop {
+                if event::poll(Duration::from_millis(100))? {
+                    if let Event::Key(key) = event::read()? {
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Char('Q') => {
+                                info!("User quit after game over");
+                                return Ok(());
+                            }
+                            KeyCode::Char('r') | KeyCode::Char('R') => {
+                                info!("User requested restart");
+                                // Start a new game
+                                if let Err(e) = client.start_game().await {
+                                    tracing::warn!(error = %e, "Failed to start new game");
+                                } else {
+                                    info!("New game started, re-registering player");
+                                    // Re-register to get a fresh player_id
+                                    if let Err(e) = client.reregister().await {
+                                        tracing::warn!(error = %e, "Failed to re-register");
+                                    } else {
+                                        info!("Re-registered successfully, ready to play");
+                                        break; // Exit game over loop, continue main loop
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+            continue; // Skip to next iteration to show fresh board
         }
         
         // Check for keyboard input (non-blocking)

@@ -194,10 +194,25 @@ async fn run_agent(
     
     // If --test-play flag is set, call play_game tool
     if test_play {
-        info!("Test mode: calling play_game tool");
+        info!("Test mode: calling play_game tool in continuous loop");
         let session_id = test_session
             .unwrap_or_else(|| format!("auto_game_{}", std::process::id()));
-        test_play_game(&peer, &config, &session_id).await?;
+        
+        // Continuously play games until Ctrl+C
+        loop {
+            info!("Starting new game session");
+            match test_play_game(&peer, &config, &session_id).await {
+                Ok(_) => {
+                    info!("Game completed, waiting for next game to start");
+                    // Small delay before checking for next game
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "play_game failed, retrying");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                }
+            }
+        }
     } else {
         // Keep running normally
         info!("Agent running. Press Ctrl+C to exit.");

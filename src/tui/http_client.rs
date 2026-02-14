@@ -263,6 +263,129 @@ impl HttpGameClient {
         Ok(())
     }
 
+    /// Starts a new game in the session.
+    #[instrument(skip(self), fields(session_id = %self.session_id))]
+    pub async fn start_game(&self) -> Result<()> {
+        info!("Starting new game");
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "start_game",
+                "arguments": {
+                    "session_id": self.session_id
+                }
+            }
+        });
+
+        let response = self
+            .client
+            .post(&format!("{}/message", self.base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
+            .json(&request)
+            .send()
+            .await?;
+
+        let text = response.text().await?;
+        debug!(response = %text, "Start game response");
+
+        // Parse SSE format
+        let json_str = text
+            .lines()
+            .filter(|line| line.starts_with("data: {"))
+            .last()
+            .and_then(|line| line.strip_prefix("data: "))
+            .ok_or_else(|| {
+                error!(response = %text, "No valid JSON data line in SSE response");
+                anyhow::anyhow!("No data in SSE response")
+            })?;
+
+        let json: serde_json::Value = serde_json::from_str(json_str)?;
+
+        if let Some(error) = json.get("error") {
+            let error_msg = error["message"].as_str().unwrap_or("Unknown error");
+            warn!(error = error_msg, "Start game failed");
+            return Err(anyhow::anyhow!("Start game failed: {}", error_msg));
+        }
+
+        info!("New game started successfully");
+        Ok(())
+    }
+
+    /// Re-registers the player after a game restart.
+    #[instrument(skip(self), fields(session_id = %self.session_id))]
+    pub async fn reregister(&mut self) -> Result<()> {
+        info!("Re-registering player after restart");
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "register_player",
+                "arguments": {
+                    "session_id": self.session_id,
+                    "name": "Human",
+                    "type": "human"
+                }
+            }
+        });
+
+        let response = self
+            .client
+            .post(&format!("{}/message", self.base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
+            .json(&request)
+            .send()
+            .await?;
+
+        let text = response.text().await?;
+        debug!(response = %text, "Re-register response");
+
+        // Parse SSE format
+        let json_str = text
+            .lines()
+            .filter(|line| line.starts_with("data: {"))
+            .last()
+            .and_then(|line| line.strip_prefix("data: "))
+            .ok_or_else(|| {
+                error!(response = %text, "No valid JSON data line in SSE response");
+                anyhow::anyhow!("No data in SSE response")
+            })?;
+
+        let json: serde_json::Value = serde_json::from_str(json_str)?;
+
+        if let Some(error) = json.get("error") {
+            let error_msg = error["message"].as_str().unwrap_or("Unknown error");
+            warn!(error = error_msg, "Re-registration failed");
+            return Err(anyhow::anyhow!("Re-registration failed: {}", error_msg));
+        }
+
+        // Extract new player_id from response
+        let content = json["result"]["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing text content in response"))?;
+
+        let player_id = content
+            .lines()
+            .find(|line| line.starts_with("Player ID:"))
+            .and_then(|line| line.split(": ").nth(1))
+            .ok_or_else(|| anyhow::anyhow!("Failed to extract player ID from response"))?
+            .to_string();
+
+        // Update our player_id
+        self.player_id = player_id.clone();
+        info!(player_id = %player_id, "Re-registered successfully");
+
+        Ok(())
+    }
+
     /// Gets the current board state.
     #[instrument(skip(self), fields(session_id = %self.session_id))]
     pub async fn get_board(&self) -> Result<BoardState> {
@@ -345,6 +468,13 @@ impl HttpGameClient {
                 current_player = line.split(": ").nth(1).unwrap_or("").to_string();
             } else if line.starts_with("Status:") {
                 status = line.split(": ").nth(1).unwrap_or("").to_string();
+                // Extract winner from status if format is "Won(X)" or "Won(O)"
+                if status.starts_with("Won(") && status.ends_with(')') {
+                    winner = status
+                        .strip_prefix("Won(")
+                        .and_then(|s| s.strip_suffix(')'))
+                        .map(|s| s.to_string());
+                }
             } else if line.starts_with("Winner:") {
                 winner = Some(line.split(": ").nth(1).unwrap_or("").to_string());
             }

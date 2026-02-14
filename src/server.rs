@@ -141,10 +141,13 @@ impl GameServer {
         let mut session = self.sessions.get_session(&req.session_id)
             .ok_or_else(|| McpError::invalid_params("Session not found. Use register_player first.", None))?;
 
+        // Reset the game board and clear players for fresh start
         session.game = crate::games::tictactoe::Game::new();
+        session.player_x = None;
+        session.player_o = None;
         self.sessions.update_session(session.clone());
         
-        let message = format!("New game started!\n{}", session.game.state().board().display());
+        let message = format!("New game started! Players can rejoin.\n{}", session.game.state().board().display());
         Ok(CallToolResult::success(vec![Content::text(message)]))
     }
 
