@@ -1,0 +1,206 @@
+//! Terminal user interface for tic-tac-toe.
+
+mod ui;
+mod input;
+mod simple_ai;
+
+use anyhow::Result;
+use crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io;
+use tracing::{error, info};
+
+use crate::games::tictactoe::{Game, GameTransition, InProgress, Position};
+
+/// Runs the TUI game.
+pub async fn run() -> Result<()> {
+    // Setup tracing
+    let log_file = std::fs::File::create("strictly_games_tui.log")?;
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_writer(std::sync::Arc::new(log_file))
+        .with_ansi(false)
+        .try_init();
+
+    info!("Starting Strictly Games TUI");
+
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Run game loop
+    let result = game_loop(&mut terminal);
+
+    // Cleanup
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    result
+}
+
+fn game_loop<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) -> Result<()> {
+    use crate::games::tictactoe::AnyGame;
+    
+    let mut game = AnyGame::from(Game::<InProgress>::new());
+    let mut cursor = Position::Center;
+    let mut status = "Your turn! Use arrows to move, Enter to place X, 'q' to quit".to_string();
+    let mut player_is_x = true;
+
+    loop {
+        // Draw
+        terminal.draw(|f| ui::draw(f, game.board(), cursor, &status))?;
+
+        // Handle input
+        if let Event::Key(key) = event::read()? {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    info!("User quit");
+                    break;
+                }
+
+                KeyCode::Char('r') | KeyCode::Char('R') => {
+                    info!("Restarting game");
+                    game = Game::<InProgress>::new().into();
+                    cursor = Position::Center;
+                    player_is_x = true;
+                    status = "Game restarted! Your turn.".to_string();
+                }
+
+                KeyCode::Enter if player_is_x => {
+                    // Human move - use std::mem::replace for consuming API
+                    let dummy = Game::<InProgress>::new().into();
+                    let old_game = std::mem::replace(&mut game, dummy);
+                    
+                    match old_game.clone().place(cursor) {
+                        Ok(new_game) => {
+                            game = handle_any_transition(terminal, new_game, &mut cursor, &mut player_is_x, &mut status)?;
+                        }
+                        Err(e) => {
+                            error!(error = %e, position = ?cursor, "Invalid move");
+                            status = format!("Invalid move: {}", e);
+                            game = old_game; // Restore on error
+                        }
+                    }
+                }
+
+                // Cursor movement
+                KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
+                    cursor = input::move_cursor(cursor, key.code);
+                }
+
+                _ => {}
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_any_transition<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    mut game: crate::games::tictactoe::AnyGame,
+    cursor: &mut Position,
+    player_is_x: &mut bool,
+    status: &mut String,
+) -> Result<crate::games::tictactoe::AnyGame> {
+    use crate::games::tictactoe::AnyGame;
+    
+    if game.is_over() {
+        if let Some(winner) = game.winner() {
+            use crate::games::tictactoe::Player;
+            let msg = if winner == Player::X {
+                "You win! Press 'r' to restart or 'q' to quit."
+            } else {
+                "AI wins! Press 'r' to restart or 'q' to quit."
+            };
+            terminal.draw(|f| ui::draw(f, game.board(), *cursor, msg))?;
+            info!("Game over: winner = {:?}", winner);
+        } else {
+            terminal.draw(|f| ui::draw(f, game.board(), *cursor, "It's a draw! Press 'r' to restart or 'q' to quit."))?;
+            info!("Game ended in draw");
+        }
+        return wait_for_restart_any(terminal, cursor, player_is_x, status);
+    }
+    
+    // Game continues - AI's turn
+    *player_is_x = false;
+    *status = "AI is thinking...".to_string();
+    
+    // Redraw to show AI thinking
+    terminal.draw(|f| ui::draw(f, game.board(), *cursor, status))?;
+    
+    // AI move
+    if let Some(ai_pos) = simple_ai::pick_move(game.board()) {
+        // Use std::mem::replace for consuming place()
+        let dummy = Game::<InProgress>::new().into();
+        let old_game = std::mem::replace(&mut game, dummy);
+        
+        match old_game.clone().place(ai_pos) {
+            Ok(new_game) => {
+                if new_game.is_over() {
+                    if let Some(winner) = new_game.winner() {
+                        use crate::games::tictactoe::Player;
+                        let msg = if winner == Player::O {
+                            "AI wins! Press 'r' to restart or 'q' to quit."
+                        } else {
+                            "You win! Press 'r' to restart or 'q' to quit."
+                        };
+                        terminal.draw(|f| ui::draw(f, new_game.board(), *cursor, msg))?;
+                        info!("AI won");
+                    } else {
+                        terminal.draw(|f| ui::draw(f, new_game.board(), *cursor, "It's a draw! Press 'r' to restart or 'q' to quit."))?;
+                        info!("Draw after AI move");
+                    }
+                    wait_for_restart_any(terminal, cursor, player_is_x, status)
+                } else {
+                    *player_is_x = true;
+                    *status = format!("AI played {}. Your turn!", ai_pos.label());
+                    Ok(new_game)
+                }
+            }
+            Err(e) => {
+                *status = format!("AI error: {}", e);
+                Ok(old_game) // Restore game on error
+            }
+        }
+    } else {
+        *status = "No AI move available".to_string();
+        Ok(game)
+    }
+}
+
+fn wait_for_restart_any<B: ratatui::backend::Backend>(
+    _terminal: &mut Terminal<B>,
+    cursor: &mut Position,
+    player_is_x: &mut bool,
+    status: &mut String,
+) -> Result<crate::games::tictactoe::AnyGame> {
+    loop {
+        if let Event::Key(k) = event::read()? {
+            match k.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    std::process::exit(0);
+                }
+                KeyCode::Char('r') | KeyCode::Char('R') => {
+                    *cursor = Position::Center;
+                    *player_is_x = true;
+                    *status = "Game restarted! Your turn.".to_string();
+                    return Ok(Game::<InProgress>::new().into());
+                }
+                _ => {}
+            }
+        }
+    }
+}

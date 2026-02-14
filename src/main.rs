@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Server => run_mcp_server().await,
         Command::Http { port, host } => run_http_server(host, port).await,
-        Command::Tui { server_url } => run_tui(server_url).await,
+        Command::Tui { server_url, port, agent_config } => run_tui(server_url, port, agent_config).await,
         Command::Agent {
             config,
             server_url,
@@ -102,8 +102,9 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
         config,
     );
     
-    // Wrap service with request logging
+    // Wrap service with request logging and add health endpoint
     let app = Router::new()
+        .route("/health", axum::routing::get(|| async { "OK" }))
         .fallback_service(ServiceBuilder::new()
             .map_request(|req: Request<Body>| {
                 info!(
@@ -143,9 +144,9 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
 }
 
 /// Run the TUI client
-#[instrument(skip_all, fields(server_url = %server_url))]
-async fn run_tui(server_url: String) -> Result<()> {
-    tui::run_tui(server_url).await
+#[instrument(skip_all, fields(server_url = ?server_url, port))]
+async fn run_tui(server_url: Option<String>, port: u16, agent_config: std::path::PathBuf) -> Result<()> {
+    tui::run(server_url, port, agent_config).await
 }
 
 /// Run the MCP agent

@@ -150,6 +150,47 @@ For VS Code, add to `.vscode/settings.json` in your workspace:
 }
 ```
 
+## Terminal UI (TUI)
+
+The TUI provides an interactive terminal interface to play against an AI agent.
+
+### Standalone Mode (Recommended)
+
+The easiest way to try the system - spawns server and AI agent automatically:
+
+```bash
+cargo run tui
+```
+
+Controls:
+- **Arrow keys**: Move cursor
+- **Enter**: Place move
+- **q**: Quit
+- **r**: Restart game
+
+The TUI automatically:
+1. Spawns HTTP game server on port 3000
+2. Spawns AI agent connected to the server
+3. Connects as human player
+4. Cleans up subprocesses on exit
+
+### Remote Mode
+
+Connect to an existing server:
+
+```bash
+# Terminal 1: Start server
+cargo run http --port 3000
+
+# Terminal 2: Start AI agent
+cargo run agent --server-url http://localhost:3000 --test-play
+
+# Terminal 3: Start TUI
+cargo run tui --server-url http://localhost:3000
+```
+
+This demonstrates the distributed architecture: TUI, server, and agent all running independently.
+
 ## Playing Tic-Tac-Toe
 
 Once connected, ask Claude or Copilot to play:

@@ -9,7 +9,6 @@ mod orchestrator;
 mod http_orchestrator;
 mod players;
 mod http_client;
-mod standalone;
 
 use anyhow::Result;
 use crossterm::{
@@ -19,7 +18,7 @@ use crossterm::{
 };
 use mode::GameMode;
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::{io, path::PathBuf};
+use std::io;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, instrument};
 
@@ -30,8 +29,8 @@ use players::{HumanPlayer, SimpleAI};
 use http_client::HttpGameClient;
 
 /// Run the TUI client
-#[instrument(skip_all, fields(server_url = ?server_url, port, agent_config = %agent_config.display()))]
-pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -> Result<()> {
+#[instrument(skip_all, fields(server_url = %server_url))]
+pub async fn run_tui(server_url: String) -> Result<()> {
     // Setup logging to file to avoid interfering with TUI
     let log_file = std::fs::File::create("strictly_games_tui.log")?;
     let _ = tracing_subscriber::fmt()
@@ -44,28 +43,23 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
         .try_init(); // Don't panic if already initialized
 
     info!("Starting Strictly Games TUI");
+
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Create channels for communication
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     
     let session_id = "tui_session".to_string();
     
-    // Determine mode: standalone or remote
-    let (actual_server_url, _guards) = if let Some(url) = server_url {
-        // Remote mode: connect to existing server
-        info!(server_url = %url, "Connecting to remote server");
-        (url, None)
-    } else {
-        // Standalone mode: spawn server and agent
-        info!(port, "Starting standalone mode");
-        let guards = standalone::spawn_standalone(port, agent_config).await?;
-        let url = format!("http://localhost:{}", port);
-        info!(server_url = %url, "Standalone mode initialized");
-        (url, Some(guards))
-    };
-    
-    info!(server_url = %actual_server_url, session_id = %session_id, "Connecting to game server");
+    info!(server_url = %server_url, session_id = %session_id, "Connecting to HTTP game server");
     
     // Register as human player
     let client = match HttpGameClient::register(
-        actual_server_url,
+        server_url,
         session_id,
         "Human".to_string(),
     ).await {
@@ -75,19 +69,16 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
         }
         Err(e) => {
             error!(error = %e, "Failed to register with server");
+            disable_raw_mode()?;
+            execute!(
+                terminal.backend_mut(),
+                LeaveAlternateScreen,
+                DisableMouseCapture
+            )?;
+            terminal.show_cursor()?;
             return Err(e);
         }
     };
-    
-    // Setup terminal after server connection succeeds
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    // Create channels for communication
-    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
     
     info!("Registered with server, starting HTTP game loop");
     
