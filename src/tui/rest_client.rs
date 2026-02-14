@@ -145,6 +145,7 @@ impl RestGameClient {
         
         // Serialize Position properly using serde
         let position_value = serde_json::to_value(&position)?;
+        debug!(position_json = %position_value, "Serialized position");
         
         // Use MCP tool for making moves (triggers elicitation)
         let request = serde_json::json!({
@@ -161,6 +162,8 @@ impl RestGameClient {
             }
         });
         
+        debug!(request = %request, "Sending MCP tool call");
+        
         let response = self.client
             .post(&format!("{}/message", self.base_url))
             .header("Content-Type", "application/json")
@@ -170,8 +173,12 @@ impl RestGameClient {
             .send()
             .await?;
         
-        if !response.status().is_success() {
-            anyhow::bail!("Move failed: {}", response.status());
+        let status = response.status();
+        let body = response.text().await?;
+        debug!(status = %status, body = %body, "Got MCP response");
+        
+        if !status.is_success() {
+            anyhow::bail!("Move failed: {} - {}", status, body);
         }
         
         Ok(())
