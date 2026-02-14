@@ -1,5 +1,1 @@
-2026-02-14T18:10:12.379117Z  INFO strictly_games::tui: Starting Strictly Games TUI
-2026-02-14T18:10:12.380108Z  INFO strictly_games::tui: Connecting to HTTP game server server_url=http://localhost:3000 session_id=tui_session
-2026-02-14T18:10:12.380236Z  INFO register{base_url=http://localhost:3000 session_id=tui_session name=Human}: strictly_games::tui::http_client: Registering with HTTP game server base_url=http://localhost:3000 session_id=tui_session name=Human
-2026-02-14T18:10:12.463709Z  INFO register{base_url=http://localhost:3000 session_id=tui_session name=Human}: strictly_games::tui::http_client: Sending MCP initialize request
-2026-02-14T18:10:12.466450Z ERROR strictly_games::tui: Failed to register with server error=error sending request for url (http://localhost:3000/message)
+2026-02-14T18:16:39.258770Z  INFO strictly_games::tui: Starting Strictly Games TUI

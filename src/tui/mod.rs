@@ -30,18 +30,15 @@ use http_client::HttpGameClient;
 /// Run the TUI client
 pub async fn run_tui(server_url: String) -> Result<()> {
     // Setup logging to file to avoid interfering with TUI
-    eprintln!("TUI: Creating log file...");
     let log_file = std::fs::File::create("strictly_games_tui.log")?;
-    eprintln!("TUI: Log file created, initializing tracing...");
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
         )
         .with_writer(std::sync::Arc::new(log_file))
         .with_ansi(false)
-        .init();
-    eprintln!("TUI: Tracing initialized");
+        .try_init(); // Don't panic if already initialized
 
     info!("Starting Strictly Games TUI");
 

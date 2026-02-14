@@ -71,7 +71,7 @@ impl HttpGameClient {
         let init_response = client
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Accept", "text/event-stream")
+            .header("Accept", "application/json, text/event-stream")
             .json(&init_req)
             .send()
             .await?;
@@ -80,9 +80,13 @@ impl HttpGameClient {
             .headers()
             .get("mcp-session-id")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| anyhow::anyhow!("Missing mcp-session-id header"))?
+            .ok_or_else(|| {
+                error!("Missing mcp-session-id header in initialize response");
+                anyhow::anyhow!("Missing mcp-session-id header")
+            })?
             .to_string();
             
+        debug!(mcp_session_id = %mcp_session_id, "Extracted MCP session ID from header");
         info!(mcp_session_id = %mcp_session_id, "MCP session initialized");
         
         // Step 2: Send initialized notification
@@ -94,7 +98,7 @@ impl HttpGameClient {
         client
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Accept", "text/event-stream")
+            .header("Accept", "application/json, text/event-stream")
             .header("mcp-session-id", &mcp_session_id)
             .json(&init_notif)
             .send()
@@ -236,8 +240,17 @@ impl HttpGameClient {
         let text = response.text().await?;
         debug!(response = %text, "Move response");
 
-        // Check for errors in response
-        let json_str = text.strip_prefix("data: ").unwrap_or(&text).trim();
+        // Parse SSE format: look for lines starting with "data: {" (JSON content)
+        let json_str = text
+            .lines()
+            .filter(|line| line.starts_with("data: {"))
+            .last()
+            .and_then(|line| line.strip_prefix("data: "))
+            .ok_or_else(|| {
+                error!(response = %text, "No valid JSON data line in SSE response");
+                anyhow::anyhow!("No data in SSE response")
+            })?;
+
         let json: serde_json::Value = serde_json::from_str(json_str)?;
 
         if let Some(error) = json.get("error") {
@@ -279,7 +292,17 @@ impl HttpGameClient {
 
         let text = response.text().await?;
 
-        let json_str = text.strip_prefix("data: ").unwrap_or(&text).trim();
+        // Parse SSE format: look for lines starting with "data: {" (JSON content)
+        let json_str = text
+            .lines()
+            .filter(|line| line.starts_with("data: {"))
+            .last()
+            .and_then(|line| line.strip_prefix("data: "))
+            .ok_or_else(|| {
+                error!(response = %text, "No valid JSON data line in SSE response");
+                anyhow::anyhow!("No data in SSE response")
+            })?;
+
         let json: serde_json::Value = serde_json::from_str(json_str)?;
 
         let content = json["result"]["content"][0]["text"]
