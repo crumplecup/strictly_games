@@ -20,7 +20,7 @@ use mode::GameMode;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 use tokio::sync::mpsc;
-use tracing::{debug, info, instrument};
+use tracing::{debug, error, info, instrument};
 
 use app::App;
 use orchestrator::{GameEvent, Orchestrator};
@@ -30,7 +30,9 @@ use http_client::HttpGameClient;
 /// Run the TUI client
 pub async fn run_tui(server_url: String) -> Result<()> {
     // Setup logging to file to avoid interfering with TUI
+    eprintln!("TUI: Creating log file...");
     let log_file = std::fs::File::create("strictly_games_tui.log")?;
+    eprintln!("TUI: Log file created, initializing tracing...");
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -39,6 +41,7 @@ pub async fn run_tui(server_url: String) -> Result<()> {
         .with_writer(std::sync::Arc::new(log_file))
         .with_ansi(false)
         .init();
+    eprintln!("TUI: Tracing initialized");
 
     info!("Starting Strictly Games TUI");
 
@@ -56,11 +59,27 @@ pub async fn run_tui(server_url: String) -> Result<()> {
     info!(server_url = %server_url, session_id = %session_id, "Connecting to HTTP game server");
     
     // Register as human player
-    let client = HttpGameClient::register(
+    let client = match HttpGameClient::register(
         server_url,
         session_id,
         "Human".to_string(),
-    ).await?;
+    ).await {
+        Ok(c) => {
+            info!("Successfully registered with server");
+            c
+        }
+        Err(e) => {
+            error!(error = %e, "Failed to register with server");
+            disable_raw_mode()?;
+            execute!(
+                terminal.backend_mut(),
+                LeaveAlternateScreen,
+                DisableMouseCapture
+            )?;
+            terminal.show_cursor()?;
+            return Err(e);
+        }
+    };
     
     info!("Registered with server, starting HTTP game loop");
     
@@ -76,6 +95,7 @@ pub async fn run_tui(server_url: String) -> Result<()> {
     terminal.show_cursor()?;
     
     if let Err(err) = res {
+        error!(error = ?err, "Game loop error");
         eprintln!("Error: {:?}", err);
     }
     

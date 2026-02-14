@@ -29,6 +29,8 @@ pub struct HttpGameClient {
     base_url: String,
     /// HTTP client.
     client: reqwest::Client,
+    /// MCP session ID from server.
+    mcp_session_id: String,
     /// Current session ID.
     pub session_id: String,
     /// Current player ID.
@@ -51,10 +53,57 @@ impl HttpGameClient {
         );
 
         let client = reqwest::Client::new();
-
-        let request = serde_json::json!({
+        let url = format!("{}/message", base_url);
+        
+        //Step 1: MCP initialize
+        info!("Sending MCP initialize request");
+        let init_req = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "TUI", "version": "1.0"}
+            }
+        });
+        
+        let init_response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .json(&init_req)
+            .send()
+            .await?;
+            
+        let mcp_session_id = init_response
+            .headers()
+            .get("mcp-session-id")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| anyhow::anyhow!("Missing mcp-session-id header"))?
+            .to_string();
+            
+        info!(mcp_session_id = %mcp_session_id, "MCP session initialized");
+        
+        // Step 2: Send initialized notification
+        let init_notif = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+        
+        client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .header("mcp-session-id", &mcp_session_id)
+            .json(&init_notif)
+            .send()
+            .await?;
+
+        // Step 3: Register player
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 2,
             "method": "tools/call",
             "params": {
                 "name": "register_player",
@@ -69,9 +118,10 @@ impl HttpGameClient {
         debug!(request = ?request, "Sending registration request");
 
         let response = client
-            .post(&base_url)
+            .post(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &mcp_session_id)
             .json(&request)
             .send()
             .await
@@ -90,14 +140,19 @@ impl HttpGameClient {
 
         debug!(response = %text, "Response body");
 
-        // Parse SSE format: "data: {...}"
+        // Parse SSE format: look for lines starting with "data: {" (JSON content)
         let json_str = text
-            .strip_prefix("data: ")
-            .unwrap_or(&text)
-            .trim();
+            .lines()
+            .filter(|line| line.starts_with("data: {"))
+            .last()
+            .and_then(|line| line.strip_prefix("data: "))
+            .ok_or_else(|| {
+                error!(response = %text, "No valid JSON data line in SSE response");
+                anyhow::anyhow!("No data in SSE response")
+            })?;
 
         let json: serde_json::Value = serde_json::from_str(json_str).map_err(|e| {
-            error!(error = %e, response = %text, "Failed to parse JSON response");
+            error!(error = %e, response = %text, json_str = %json_str, "Failed to parse JSON response");
             anyhow::anyhow!("Invalid JSON response: {}", e)
         })?;
 
@@ -143,6 +198,7 @@ impl HttpGameClient {
         Ok(Self {
             base_url,
             client,
+            mcp_session_id,
             session_id,
             player_id,
         })
@@ -169,9 +225,10 @@ impl HttpGameClient {
 
         let response = self
             .client
-            .post(&self.base_url)
+            .post(&format!("{}/message", self.base_url))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
             .json(&request)
             .send()
             .await?;
@@ -212,9 +269,10 @@ impl HttpGameClient {
 
         let response = self
             .client
-            .post(&self.base_url)
+            .post(&format!("{}/message", self.base_url))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
             .json(&request)
             .send()
             .await?;
