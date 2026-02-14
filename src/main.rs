@@ -131,7 +131,11 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     info!("🎮 Tools: start_game, get_board, make_move");
     info!("🔍 Trace logging enabled - all requests will be logged");
     
-    axum::serve(listener, app).await?;
+    info!("🔄 About to call axum::serve() - this should block forever");
+    let result = axum::serve(listener, app).await;
+    info!("❌ axum::serve() returned! This should never happen!");
+    info!(?result, "Server exited with result");
+    result?;
 
     Ok(())
 }

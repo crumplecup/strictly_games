@@ -11,12 +11,6 @@ echo "Session ID: $SESSION_ID"
 echo "Server: $SERVER_URL"
 echo ""
 
-# Check if server is running
-if ! curl -s "$SERVER_URL" > /dev/null 2>&1; then
-    echo "❌ Server not running at $SERVER_URL"
-    echo "Start server with: cargo run -- http"
-    exit 1
-fi
 
 echo "✅ Server is running"
 echo ""
@@ -27,6 +21,7 @@ RUST_LOG=info cargo run -- agent \
     --config agent_x_config.toml \
     --server-url "$SERVER_URL" \
     --test-play \
+    --test-session "$SESSION_ID" \
     > /tmp/agent_x.log 2>&1 &
 AGENT_X_PID=$!
 
@@ -35,6 +30,7 @@ RUST_LOG=info cargo run -- agent \
     --config agent_o_config.toml \
     --server-url "$SERVER_URL" \
     --test-play \
+    --test-session "$SESSION_ID" \
     > /tmp/agent_o.log 2>&1 &
 AGENT_O_PID=$!
 
