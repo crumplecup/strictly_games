@@ -11,6 +11,7 @@ pub struct RestGameClient {
     client: reqwest::Client,
     pub session_id: String,
     pub player_id: String,
+    mcp_session_id: String,  // For MCP tool calls
 }
 
 impl RestGameClient {
@@ -26,13 +27,14 @@ impl RestGameClient {
         let client = reqwest::Client::new();
         
         // Register via MCP (keep this for player setup)
-        let player_id = Self::mcp_register(&client, &base_url, &session_id, &name).await?;
+        let (player_id, mcp_session_id) = Self::mcp_register(&client, &base_url, &session_id, &name).await?;
         
         Ok(Self {
             base_url,
             client,
             session_id,
             player_id,
+            mcp_session_id,
         })
     }
     
@@ -42,7 +44,7 @@ impl RestGameClient {
         base_url: &str,
         session_id: &str,
         name: &str,
-    ) -> Result<String> {
+    ) -> Result<(String, String)> {
         // Initialize MCP session
         let init_req = serde_json::json!({
             "jsonrpc": "2.0",
@@ -116,7 +118,7 @@ impl RestGameClient {
         let player_id = format!("{}_{}", session_id, name.to_lowercase());
         info!(player_id = %player_id, "Registered successfully");
         
-        Ok(player_id)
+        Ok((player_id, mcp_session_id))
     }
     
     /// Gets the current game state (type-safe!).
@@ -162,6 +164,8 @@ impl RestGameClient {
         let response = self.client
             .post(&format!("{}/message", self.base_url))
             .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
             .json(&request)
             .send()
             .await?;
@@ -193,6 +197,8 @@ impl RestGameClient {
         let response = self.client
             .post(&format!("{}/message", self.base_url))
             .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
             .json(&request)
             .send()
             .await?;
