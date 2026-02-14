@@ -55,6 +55,7 @@ pub use session::{GameSession, Player, PlayerType, SessionManager};
 
 // Crate-level exports - Game types (tic-tac-toe)
 pub use games::tictactoe::{
+    execute_move, validate_move, // Contract functions
     Board, Game, GameState, GameStatus, Move, Position, Square,
     Player as TicTacToePlayer,
 };
