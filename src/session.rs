@@ -70,6 +70,12 @@ impl GameSession {
         name: String,
         player_type: PlayerType,
     ) -> Result<Mark, String> {
+        // Check if player is already registered (idempotent)
+        if let Some(player) = self.get_player(&id) {
+            info!(player_id = %id, mark = ?player.mark, "Player already registered, returning existing mark");
+            return Ok(player.mark);
+        }
+        
         // Assign to first available slot
         if self.player_x.is_none() {
             info!(player_id = %id, mark = "X", "Registering player as X");
@@ -260,6 +266,41 @@ impl SessionManager {
         
         // Register player while holding the lock
         session.register_player(player_id, name, player_type)
+    }
+    
+    /// Atomically updates game state without overwriting player registrations.
+    #[instrument(skip(self, game))]
+    pub fn update_game_atomic(
+        &self,
+        session_id: &str,
+        game: AnyGame,
+    ) -> Result<(), String> {
+        let mut sessions = self.sessions.lock().unwrap();
+        
+        let session = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| "Session not found".to_string())?;
+        
+        session.game = game;
+        debug!("Game state updated atomically");
+        Ok(())
+    }
+    
+    /// Restarts game in session (keeps players registered).
+    #[instrument(skip(self))]
+    pub fn restart_game(
+        &self,
+        session_id: &str,
+    ) -> Result<(), String> {
+        let mut sessions = self.sessions.lock().unwrap();
+        
+        let session = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| "Session not found".to_string())?;
+        
+        session.game = crate::games::tictactoe::Game::new().into();
+        info!("Game restarted with same players");
+        Ok(())
     }
 }
 
