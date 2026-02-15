@@ -351,7 +351,7 @@ impl GameServer {
             if !session.is_players_turn(&player_id) {
                 // Wait for opponent's move (agent vs agent mode)
                 tracing::info!(mark = ?mark, "Not our turn, waiting for opponent");
-                self.sessions.update_session(session);
+                // Don't update - we haven't modified anything
                 
                 // Poll for opponent's move
                 let max_polls = 300; // 5 minutes (1 second per poll)
@@ -424,22 +424,20 @@ impl GameServer {
                     display
                 };
                 
-                // Build list of ONLY valid positions with numbered choices
+                // Build list of valid positions
                 let valid_options = valid_positions.iter()
-                    .enumerate()
-                    .map(|(i, pos)| format!("{}. {}", i + 1, pos.label()))
+                    .map(|pos| format!("- {}", pos.label()))
                     .collect::<Vec<_>>()
                     .join("\n");
                 
                 let enhanced_prompt = format!(
-                    "{}\n\nYour mark: {}\n\nAvailable moves (choose by number):\n{}\n\nSelect a number 1-{}:",
+                    "{}\n\nYour mark: {}\n\nAvailable moves:\n{}\n\nRespond with the position name (e.g., 'Center', 'Top-left'):",
                     board_display,
                     match mark {
                         crate::games::tictactoe::Player::X => "X",
                         crate::games::tictactoe::Player::O => "O",
                     },
-                    valid_options,
-                    valid_positions.len()
+                    valid_options
                 );
                 
                 // Create ElicitServer wrapper and send enhanced prompt
@@ -458,44 +456,28 @@ impl GameServer {
                     }
                 };
                 
-                // Parse response - try as number (1-indexed into valid_positions), then as label
-                let position = if let Ok(num) = response.trim().parse::<usize>() {
-                    if num > 0 && num <= valid_positions.len() {
-                        valid_positions[num - 1]
-                    } else {
-                        tracing::warn!(response = %response, attempt, "Invalid number selection");
+                // Parse response - try as label first (preferred), then number as fallback
+                let position = match crate::games::tictactoe::Position::from_label_or_number(&response) {
+                    Some(pos) if valid_positions.contains(&pos) => pos,
+                    Some(pos) => {
+                        tracing::warn!(position = ?pos, response = %response, attempt, "Parsed position but it's not available");
                         if attempt == MAX_RETRIES {
                             return Err(McpError::invalid_params(
-                                format!("Invalid selection: {}", response),
+                                format!("Position {:?} is not available", pos),
                                 None
                             ));
                         }
                         continue;
                     }
-                } else {
-                    // Try parsing as label/position description
-                    match crate::games::tictactoe::Position::from_label_or_number(&response) {
-                        Some(pos) if valid_positions.contains(&pos) => pos,
-                        Some(pos) => {
-                            tracing::warn!(position = ?pos, attempt, "Parsed position but it's occupied");
-                            if attempt == MAX_RETRIES {
-                                return Err(McpError::invalid_params(
-                                    format!("Position {:?} is occupied", pos),
-                                    None
-                                ));
-                            }
-                            continue;
+                    None => {
+                        tracing::warn!(response = %response, attempt, "Could not parse response as position");
+                        if attempt == MAX_RETRIES {
+                            return Err(McpError::invalid_params(
+                                format!("Invalid response: {}", response),
+                                None
+                            ));
                         }
-                        None => {
-                            tracing::warn!(response = %response, attempt, "Could not parse response");
-                            if attempt == MAX_RETRIES {
-                                return Err(McpError::invalid_params(
-                                    format!("Invalid response: {}", response),
-                                    None
-                                ));
-                            }
-                            continue;
-                        }
+                        continue;
                     }
                 };
                 
@@ -529,8 +511,9 @@ impl GameServer {
                 ));
             }
             
-            // Update session after successful move
-            self.sessions.update_session(session);
+            // Update game state atomically (preserves player registrations)
+            self.sessions.update_game_atomic(&req.session_id, session.game)
+                .map_err(|e| McpError::internal_error(e, None))?;
         }
     }
 }
