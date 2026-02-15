@@ -1,6 +1,6 @@
 //! Game session management for HTTP multiplayer.
 
-use crate::games::tictactoe::{AnyGame, Game, Setup, Mark, Position};
+use crate::games::tictactoe::{AnyGame, GameSetup, Mark, Position};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -55,7 +55,7 @@ impl GameSession {
         info!(session_id = %id, "Creating new game session");
         Self {
             id,
-            game: Game::<Setup>::new().start(crate::games::tictactoe::Player::X).into(),
+            game: GameSetup::new().start(crate::games::tictactoe::Player::X).into(),
             player_x: None,
             player_o: None,
         }
@@ -172,7 +172,7 @@ impl GameSession {
         debug!(action = %action, "Applying Move action");
 
         // Make the move (consuming transition via wrapper)
-        let old_game = std::mem::replace(&mut self.game, Game::<Setup>::new().start(crate::games::tictactoe::Player::X).into());
+        let old_game = std::mem::replace(&mut self.game, GameSetup::new().start(crate::games::tictactoe::Player::X).into());
         self.game = old_game.make_move_action(action).map_err(|e| {
             warn!(player_id, action = %action, error = %e, "Invalid move");
             format!("Invalid move: {}", e)
@@ -302,7 +302,7 @@ impl SessionManager {
             .get_mut(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
         
-        session.game = Game::<Setup>::new().start(crate::games::tictactoe::Player::X).into();
+        session.game = GameSetup::new().start(crate::games::tictactoe::Player::X).into();
         info!("Game restarted with same players");
         Ok(())
     }

@@ -1,7 +1,7 @@
 //! Serializable game wrapper for typestate phases.
 
-use super::typestate::{Game as NewGame, GameResult};
-use super::phases::{InProgress as NewInProgress, Setup as NewSetup, Finished as NewFinished, Outcome};
+use super::typestate::{GameSetup, GameInProgress, GameFinished, GameResult};
+use super::phases::Outcome;
 use super::action::Move;
 use super::position::Position;
 use super::types::{Board, Player};
@@ -59,16 +59,16 @@ pub enum AnyGame {
 //  New typestate conversions (typestate.rs)
 // ─────────────────────────────────────────────────────────────
 
-impl From<NewGame<NewSetup>> for AnyGame {
-    fn from(game: NewGame<NewSetup>) -> Self {
+impl From<GameSetup> for AnyGame {
+    fn from(game: GameSetup) -> Self {
         AnyGame::Setup {
             board: game.board().clone(),
         }
     }
 }
 
-impl From<NewGame<NewInProgress>> for AnyGame {
-    fn from(game: NewGame<NewInProgress>) -> Self {
+impl From<GameInProgress> for AnyGame {
+    fn from(game: GameInProgress) -> Self {
         AnyGame::InProgress {
             board: game.board().clone(),
             to_move: game.to_move(),
@@ -77,8 +77,8 @@ impl From<NewGame<NewInProgress>> for AnyGame {
     }
 }
 
-impl From<NewGame<NewFinished>> for AnyGame {
-    fn from(game: NewGame<NewFinished>) -> Self {
+impl From<GameFinished> for AnyGame {
+    fn from(game: GameFinished) -> Self {
         AnyGame::Finished {
             board: game.board().clone(),
             outcome: *game.outcome(),
@@ -184,7 +184,7 @@ impl AnyGame {
                 debug!(move_count = moves.len(), "Replaying moves with contract validation");
                 
                 // Replay all moves to reconstruct game state with contract validation
-                match NewGame::<NewInProgress>::replay(&moves) {
+                match GameInProgress::replay(&moves) {
                     Ok(result) => {
                         debug!("Move validated via NEW typestate with contracts");
                         Ok(result.into())

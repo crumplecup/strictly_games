@@ -56,8 +56,11 @@ pub use session::{GameSession, Player, PlayerType, SessionManager};
 
 // Crate-level exports - Game types (tic-tac-toe with typestates)
 pub use games::tictactoe::{
-    // New typestate API
-    Game, GameResult, Move, MoveError,
+    // New typestate API (phase-specific structs)
+    GameSetup, GameInProgress, GameFinished, GameResult,
+    // Action types
+    Move, MoveError,
+    // Legacy phase markers (deprecated)
     Setup, InProgress, Finished, Outcome,
     // Domain types
     AnyGame, Board, Position, Square,

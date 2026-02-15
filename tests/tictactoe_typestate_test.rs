@@ -1,13 +1,13 @@
 //! Tests for typestate game architecture.
 
-use strictly_games::{Game, GameResult, Move, MoveError, Position, Setup, InProgress, Finished, Outcome};
+use strictly_games::{GameSetup, GameInProgress, GameResult, Move, MoveError, Position, Outcome};
 // Player from tictactoe is re-exported as TicTacToePlayer
 use strictly_games::TicTacToePlayer as Player;
 
 #[test]
 fn test_typestate_lifecycle() {
     // Setup phase
-    let game = Game::<Setup>::new();
+    let game = GameSetup::new();
     
     // Start game
     let game = game.start(Player::X);
@@ -27,7 +27,7 @@ fn test_typestate_lifecycle() {
 
 #[test]
 fn test_contracts_prevent_invalid_moves() {
-    let game = Game::<Setup>::new().start(Player::X);
+    let game = GameSetup::new().start(Player::X);
     
     // Valid move
     let action = Move::new(Player::X, Position::Center);
@@ -47,7 +47,7 @@ fn test_contracts_prevent_invalid_moves() {
 
 #[test]
 fn test_wrong_player_rejected() {
-    let game = Game::<Setup>::new().start(Player::X);
+    let game = GameSetup::new().start(Player::X);
     
     // Try to play as O when it's X's turn
     let action = Move::new(Player::O, Position::Center);
@@ -65,7 +65,7 @@ fn test_replay_from_history() {
         Move::new(Player::X, Position::BottomLeft),
     ];
     
-    let result = Game::<InProgress>::replay(&moves).expect("Valid replay");
+    let result = GameInProgress::replay(&moves).expect("Valid replay");
     
     match result {
         GameResult::InProgress(game) => {
@@ -86,7 +86,7 @@ fn test_win_detection() {
         Move::new(Player::X, Position::TopRight),  // X wins top row
     ];
     
-    let result = Game::<InProgress>::replay(&moves).expect("Valid replay");
+    let result = GameInProgress::replay(&moves).expect("Valid replay");
     
     match result {
         GameResult::Finished(game) => {
@@ -110,7 +110,7 @@ fn test_draw_detection() {
         Move::new(Player::X, Position::BottomRight),  // Draw
     ];
     
-    let result = Game::<InProgress>::replay(&moves).expect("Valid replay");
+    let result = GameInProgress::replay(&moves).expect("Valid replay");
     
     match result {
         GameResult::Finished(game) => {
@@ -122,7 +122,7 @@ fn test_draw_detection() {
 
 #[test]
 fn test_restart() {
-    let game = Game::<Setup>::new()
+    let game = GameSetup::new()
         .start(Player::X);
     
     let action = Move::new(Player::X, Position::Center);
@@ -137,7 +137,7 @@ fn test_restart() {
         Move::new(Player::X, Position::TopRight),
     ];
     
-    let result = Game::<InProgress>::replay(&moves).unwrap();
+    let result = GameInProgress::replay(&moves).unwrap();
     
     if let GameResult::Finished(game) = result {
         let new_game = game.restart();

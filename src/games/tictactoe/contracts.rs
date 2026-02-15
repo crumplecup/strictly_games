@@ -4,8 +4,7 @@
 //! They serve as both validation and documentation of game rules.
 
 use super::action::{Move, MoveError};
-use super::phases::InProgress;
-use super::typestate::Game;
+use super::typestate::GameInProgress;
 use super::{Board, Player};
 use tracing::{instrument, warn};
 
@@ -41,7 +40,7 @@ pub struct HistoryComplete;
 
 impl HistoryComplete {
     #[instrument(skip(game))]
-    pub fn holds(game: &Game<InProgress>) -> bool {
+    pub fn holds(game: &GameInProgress) -> bool {
         let filled = game.board().squares().iter().filter(|s| !matches!(s, super::Square::Empty)).count();
         let history_len = game.history().len();
         
@@ -62,7 +61,7 @@ pub struct SquareIsEmpty;
 
 impl SquareIsEmpty {
     #[instrument(skip(game))]
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+    pub fn check(mov: &Move, game: &GameInProgress) -> Result<(), MoveError> {
         if !game.board().is_empty(mov.position) {
             Err(MoveError::SquareOccupied(mov.position))
         } else {
@@ -76,7 +75,7 @@ pub struct PlayersTurn;
 
 impl PlayersTurn {
     #[instrument(skip(game))]
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+    pub fn check(mov: &Move, game: &GameInProgress) -> Result<(), MoveError> {
         if mov.player != game.to_move() {
             Err(MoveError::WrongPlayer(mov.player))
         } else {
@@ -91,7 +90,7 @@ pub struct LegalMove;
 impl LegalMove {
     /// Validates all preconditions for a move.
     #[instrument(skip(game))]
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+    pub fn check(mov: &Move, game: &GameInProgress) -> Result<(), MoveError> {
         SquareIsEmpty::check(mov, game)?;
         PlayersTurn::check(mov, game)?;
         Ok(())
@@ -104,7 +103,7 @@ impl LegalMove {
 
 /// Asserts that all game invariants hold (panic on violation in debug builds).
 #[instrument(skip(game))]
-pub fn assert_invariants(game: &Game<InProgress>) {
+pub fn assert_invariants(game: &GameInProgress) {
     debug_assert!(BoardConsistent::holds(game.board()), "Board consistency violated");
     debug_assert!(HistoryComplete::holds(game), "History completeness violated");
 }

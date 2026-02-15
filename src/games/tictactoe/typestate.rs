@@ -1,51 +1,34 @@
-//! Typestate-based game state machine for tic-tac-toe.
+//! Phase-specific typestate structs for tic-tac-toe.
 //!
-//! The game progresses through distinct phases, each represented by a type parameter:
-//! - `Game<Setup>` - Initial state, no players assigned
-//! - `Game<InProgress>` - Active game, moves can be made
-//! - `Game<Finished>` - Game over, outcome determined
-//!
-//! Transitions between phases consume the game and return the next phase,
-//! making illegal operations impossible at compile time.
+//! Each phase is its own distinct type with phase-specific fields.
+//! This encodes invariants at compile time - a `Finished` game
+//! ALWAYS has an outcome, not `Option<Outcome>`.
 
 use super::action::{Move, MoveError};
 use super::contracts::{assert_invariants, LegalMove};
-use super::phases::{Finished, InProgress, Outcome, Setup};
+use super::phases::Outcome;
 use super::{Board, Player, Position, Square};
-use std::marker::PhantomData;
 use tracing::instrument;
-
-/// Game state with typestate phase encoding.
-///
-/// The type parameter `Phase` encodes the current game phase:
-/// - `Game<Setup>` - can be started
-/// - `Game<InProgress>` - can accept moves
-/// - `Game<Finished>` - can be inspected for outcome
-///
-/// Invalid operations are prevented at compile time.
-#[derive(Debug, Clone)]
-pub struct Game<Phase> {
-    board: Board,
-    history: Vec<Move>,
-    to_move: Player,
-    outcome: Option<Outcome>,
-    _phase: PhantomData<Phase>,
-}
 
 // ─────────────────────────────────────────────────────────────
 //  Setup Phase
 // ─────────────────────────────────────────────────────────────
 
-impl Game<Setup> {
+/// Game in setup phase - ready to start.
+///
+/// The board is always empty.
+/// No history, no outcome.
+#[derive(Debug, Clone)]
+pub struct GameSetup {
+    board: Board,
+}
+
+impl GameSetup {
     /// Creates a new game in setup phase.
     #[instrument]
     pub fn new() -> Self {
         Self {
             board: Board::new(),
-            history: Vec::new(),
-            to_move: Player::X,
-            outcome: None,
-            _phase: PhantomData,
         }
     }
     
@@ -54,20 +37,18 @@ impl Game<Setup> {
         &self.board
     }
     
-    /// Starts the game with the first player to move (consumes setup, returns in-progress).
+    /// Starts the game with the first player (consumes setup, returns in-progress).
     #[instrument(skip(self))]
-    pub fn start(self, first_player: Player) -> Game<InProgress> {
-        Game {
+    pub fn start(self, first_player: Player) -> GameInProgress {
+        GameInProgress {
             board: self.board,
-            history: self.history,
+            history: Vec::new(),
             to_move: first_player,
-            outcome: None,
-            _phase: PhantomData,
         }
     }
 }
 
-impl Default for Game<Setup> {
+impl Default for GameSetup {
     fn default() -> Self {
         Self::new()
     }
@@ -77,52 +58,51 @@ impl Default for Game<Setup> {
 //  InProgress Phase
 // ─────────────────────────────────────────────────────────────
 
-impl Game<InProgress> {
-    /// Makes a move, consuming the game and transitioning to the next state.
+/// Game in progress - can accept moves.
+///
+/// Invariants enforced by type:
+/// - to_move alternates
+/// - No outcome yet (outcome is in GameFinished)
+#[derive(Debug, Clone)]
+pub struct GameInProgress {
+    board: Board,
+    history: Vec<Move>,
+    to_move: Player,
+}
+
+impl GameInProgress {
+    /// Makes a move, consuming self and transitioning to next state.
     ///
-    /// This method validates the move using contracts, applies it, and returns
-    /// either a new `InProgress` state or a `Finished` state with outcome.
-    ///
-    /// # Errors
-    ///
-    /// Returns `MoveError` if:
-    /// - The square is already occupied
-    /// - It's not the player's turn
+    /// Returns either a new InProgress or a Finished state.
     #[instrument(skip(self))]
     pub fn make_move(mut self, action: Move) -> Result<GameResult, MoveError> {
-        // Contract-based validation
+        // Contract validation
         LegalMove::check(&action, &self)?;
         
-        // Apply the move (pure operation)
+        // Apply move
         self.board.set(action.position, Square::Occupied(action.player));
         self.history.push(action);
         
         // Check for winner
         if let Some(winner) = self.board.winner() {
-            return Ok(GameResult::Finished(Game {
+            return Ok(GameResult::Finished(GameFinished {
                 board: self.board,
                 history: self.history,
-                to_move: self.to_move,
-                outcome: Some(Outcome::Winner(winner)),
-                _phase: PhantomData,
+                outcome: Outcome::Winner(winner),
             }));
         }
         
         // Check for draw
         if self.board.is_full() {
-            return Ok(GameResult::Finished(Game {
+            return Ok(GameResult::Finished(GameFinished {
                 board: self.board,
                 history: self.history,
-                to_move: self.to_move,
-                outcome: Some(Outcome::Draw),
-                _phase: PhantomData,
+                outcome: Outcome::Draw,
             }));
         }
         
-        // Game continues with next player
+        // Continue game
         self.to_move = self.to_move.opponent();
-        
-        // Assert invariants hold (debug only)
         assert_invariants(&self);
         
         Ok(GameResult::InProgress(self))
@@ -138,76 +118,21 @@ impl Game<InProgress> {
         &self.board
     }
     
-    /// Returns the move history.
+    /// Returns move history.
     pub fn history(&self) -> &[Move] {
         &self.history
     }
     
-    /// Returns the valid positions where the current player can move.
+    /// Returns valid positions.
     #[instrument(skip(self))]
     pub fn valid_moves(&self) -> Vec<Position> {
         Position::valid_moves(&self.board)
     }
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Finished Phase
-// ─────────────────────────────────────────────────────────────
-
-impl Game<Finished> {
-    /// Returns the outcome of the finished game.
-    pub fn outcome(&self) -> &Outcome {
-        self.outcome.as_ref().expect("Finished game must have outcome")
-    }
     
-    /// Returns the board.
-    pub fn board(&self) -> &Board {
-        &self.board
-    }
-    
-    /// Returns the move history.
-    pub fn history(&self) -> &[Move] {
-        &self.history
-    }
-    
-    /// Restarts the game (consumes finished, returns setup).
-    #[instrument(skip(self))]
-    pub fn restart(self) -> Game<Setup> {
-        Game::new()
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Result Type for Move Transitions
-// ─────────────────────────────────────────────────────────────
-
-/// Result of making a move: either the game continues or finishes.
-#[derive(Debug)]
-pub enum GameResult {
-    /// Game continues in progress.
-    InProgress(Game<InProgress>),
-    /// Game has finished with an outcome.
-    Finished(Game<Finished>),
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Replay Capability
-// ─────────────────────────────────────────────────────────────
-
-impl Game<InProgress> {
-    /// Replays a sequence of moves from the initial state.
-    ///
-    /// This is useful for:
-    /// - Reconstructing game state from history
-    /// - Testing move sequences
-    /// - Debugging game flow
-    ///
-    /// # Errors
-    ///
-    /// Returns the first `MoveError` encountered during replay.
+    /// Replays moves from initial state.
     #[instrument]
     pub fn replay(moves: &[Move]) -> Result<GameResult, MoveError> {
-        let mut game = Game::<Setup>::new().start(Player::X);
+        let mut game = GameSetup::new().start(Player::X);
         
         for action in moves {
             match game.make_move(*action)? {
@@ -218,4 +143,57 @@ impl Game<InProgress> {
         
         Ok(GameResult::InProgress(game))
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Finished Phase
+// ─────────────────────────────────────────────────────────────
+
+/// Game finished - outcome determined.
+///
+/// The outcome is ALWAYS present (not Option).
+/// This struct encodes the invariant at the type level.
+#[derive(Debug, Clone)]
+pub struct GameFinished {
+    board: Board,
+    history: Vec<Move>,
+    outcome: Outcome,  // ✅ NOT Option
+}
+
+impl GameFinished {
+    /// Returns the outcome.
+    ///
+    /// Never returns Option - outcome is guaranteed.
+    pub fn outcome(&self) -> &Outcome {
+        &self.outcome
+    }
+    
+    /// Returns the board.
+    pub fn board(&self) -> &Board {
+        &self.board
+    }
+    
+    /// Returns move history.
+    pub fn history(&self) -> &[Move] {
+        &self.history
+    }
+    
+    /// Restarts the game (consumes finished, returns setup).
+    #[instrument(skip(self))]
+    pub fn restart(self) -> GameSetup {
+        GameSetup::new()
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Result Type
+// ─────────────────────────────────────────────────────────────
+
+/// Result of making a move.
+#[derive(Debug)]
+pub enum GameResult {
+    /// Game continues.
+    InProgress(GameInProgress),
+    /// Game finished.
+    Finished(GameFinished),
 }

@@ -56,10 +56,13 @@ pub mod wrapper;
 pub use action::{Move, MoveError};
 pub use phases::{Finished, InProgress, Outcome, Setup};
 pub use position::Position;
-pub use typestate::{Game, GameResult};
+pub use typestate::{GameSetup, GameInProgress, GameFinished, GameResult};
 pub use types::{Board, Player, Square};
 pub use wrapper::AnyGame;
 
 /// Alias for clarity in session management.
 pub type Mark = Player;
+
+/// Compatibility alias for Game<Setup>
+pub type Game = GameSetup;
 
