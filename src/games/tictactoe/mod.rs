@@ -46,6 +46,9 @@ pub mod types;
 // Game rules (pure functions)
 pub mod rules;
 
+// Invariants (first-class logical properties)
+pub mod invariants;
+
 // Typestate architecture
 pub mod phases;
 pub mod action;

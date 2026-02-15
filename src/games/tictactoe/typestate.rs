@@ -6,6 +6,7 @@
 
 use super::action::{Move, MoveError};
 use super::contracts::{assert_invariants, LegalMove};
+use super::invariants::{AlternatingTurnInvariant, HistoryConsistentInvariant, Invariant, MonotonicBoardInvariant};
 use super::phases::Outcome;
 use super::{Board, Player, Position, Square};
 use tracing::instrument;
@@ -65,9 +66,9 @@ impl Default for GameSetup {
 /// - No outcome yet (outcome is in GameFinished)
 #[derive(Debug, Clone)]
 pub struct GameInProgress {
-    board: Board,
-    history: Vec<Move>,
-    to_move: Player,
+    pub(super) board: Board,
+    pub(super) history: Vec<Move>,
+    pub(super) to_move: Player,
 }
 
 impl GameInProgress {
@@ -103,6 +104,24 @@ impl GameInProgress {
         
         // Continue game
         self.to_move = self.to_move.opponent();
+        
+        // Assert invariants in debug builds
+        debug_assert!(
+            MonotonicBoardInvariant::holds(&self),
+            "{}",
+            MonotonicBoardInvariant::description()
+        );
+        debug_assert!(
+            AlternatingTurnInvariant::holds(&self),
+            "{}",
+            AlternatingTurnInvariant::description()
+        );
+        debug_assert!(
+            HistoryConsistentInvariant::holds(&self),
+            "{}",
+            HistoryConsistentInvariant::description()
+        );
+        
         assert_invariants(&self);
         
         Ok(GameResult::InProgress(self))
