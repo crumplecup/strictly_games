@@ -11,7 +11,6 @@ mod games;
 mod llm_client;
 mod server;
 mod session;
-mod tui;
 
 use anyhow::Result;
 use clap::Parser;
@@ -31,7 +30,10 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Server => run_mcp_server().await,
         Command::Http { port, host } => run_http_server(host, port).await,
-        Command::Tui { server_url, port, agent_config } => run_tui(server_url, port, agent_config).await,
+        Command::Tui { .. } => {
+            error!("TUI is not implemented yet");
+            Err(anyhow::anyhow!("TUI is not implemented yet"))
+        },
         Command::Agent {
             config,
             server_url,
@@ -175,12 +177,6 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     result?;
 
     Ok(())
-}
-
-/// Run the TUI client
-#[instrument(skip_all, fields(server_url = ?server_url, port))]
-async fn run_tui(server_url: Option<String>, port: u16, agent_config: std::path::PathBuf) -> Result<()> {
-    tui::run(server_url, port, agent_config).await
 }
 
 /// Run the MCP agent

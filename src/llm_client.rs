@@ -51,23 +51,6 @@ impl LlmConfig {
         self.provider
     }
 
-    /// Gets the API key.
-    #[instrument(skip(self))]
-    pub fn api_key(&self) -> &str {
-        &self.api_key
-    }
-
-    /// Gets the model name.
-    #[instrument(skip(self))]
-    pub fn model(&self) -> &str {
-        &self.model
-    }
-
-    /// Gets the max tokens.
-    #[instrument(skip(self))]
-    pub fn max_tokens(&self) -> u32 {
-        self.max_tokens
-    }
 }
 
 /// LLM client that abstracts over multiple providers.

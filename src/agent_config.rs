@@ -65,26 +65,6 @@ impl AgentConfig {
         }
     }
 
-    /// Creates agent configuration with LLM settings.
-    #[instrument(skip(name, server_command, server_cwd, llm_provider, llm_model), fields(agent_name = %name, provider = ?llm_provider, model = %llm_model))]
-    pub fn with_llm(
-        name: String,
-        server_command: Vec<String>,
-        server_cwd: Option<String>,
-        llm_provider: LlmProvider,
-        llm_model: String,
-        llm_max_tokens: u32,
-    ) -> Self {
-        Self {
-            name,
-            server_command,
-            server_cwd,
-            llm_provider,
-            llm_model,
-            llm_max_tokens,
-        }
-    }
-
     /// Loads configuration from TOML file.
     #[instrument(skip(path), fields(path = %path.as_ref().display()))]
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {

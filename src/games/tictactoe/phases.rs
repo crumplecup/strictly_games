@@ -27,18 +27,6 @@ pub enum Outcome {
 }
 
 impl Outcome {
-    /// Returns the winner if there is one.
-    pub fn winner(&self) -> Option<super::Player> {
-        match self {
-            Outcome::Winner(player) => Some(*player),
-            Outcome::Draw => None,
-        }
-    }
-    
-    /// Returns true if the game was a draw.
-    pub fn is_draw(&self) -> bool {
-        matches!(self, Outcome::Draw)
-    }
 }
 
 impl std::fmt::Display for Outcome {
