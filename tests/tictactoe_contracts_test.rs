@@ -1,6 +1,7 @@
-//! Tests for tic-tac-toe typestate state machine.
+//! Tests for tic-tac-toe typestate state machine (OLD API).
+//! TODO: Migrate to new typestate architecture
 
-use strictly_games::{Game, InProgress, Position, TicTacToePlayer as Player};
+use strictly_games::{OldGame as Game, OldInProgress as InProgress, OldGameTransition as GameTransition, Position, TicTacToePlayer as Player};
 
 #[test]
 fn test_place_legal_move() {
@@ -13,7 +14,7 @@ fn test_place_legal_move() {
 fn test_place_occupied_square() {
     let game = Game::<InProgress>::new();
     let game = match game.place(Position::Center).unwrap() {
-        strictly_games::GameTransition::InProgress(g) => g,
+        GameTransition::InProgress(g) => g,
         _ => panic!("First move shouldn't end game"),
     };
 
@@ -28,7 +29,7 @@ fn test_alternating_players() {
     assert_eq!(game.to_move(), Player::X);
 
     let game = match game.place(Position::Center).unwrap() {
-        strictly_games::GameTransition::InProgress(g) => g,
+        GameTransition::InProgress(g) => g,
         _ => panic!("Game shouldn't end after first move"),
     };
 
@@ -41,13 +42,13 @@ fn test_game_transition_to_won() {
     
     // X plays top row
     let game = match game.place(Position::TopLeft).unwrap() {
-        strictly_games::GameTransition::InProgress(g) => g,
+        GameTransition::InProgress(g) => g,
         _ => panic!("Shouldn't win yet"),
     };
     
     // O plays somewhere else
     let game = match game.place(Position::Center).unwrap() {
-        strictly_games::GameTransition::InProgress(g) => g,
+        GameTransition::InProgress(g) => g,
         _ => panic!("Shouldn't win yet"),
     };
     

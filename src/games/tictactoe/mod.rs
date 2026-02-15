@@ -1,45 +1,78 @@
 //! Tic-tac-toe game implementation.
 //!
-//! This implementation demonstrates the elicitation framework's type-safety principles:
+//! This implementation demonstrates the elicitation framework's architectural principles:
 //!
 //! ## Typestate State Machine
 //!
-//! The game phase is encoded in the type:
-//! - `Game<InProgress>` - can call `.place()`
-//! - `Game<Won>` - can call `.winner()`, no `.place()` method exists
-//! - `Game<Draw>` - terminal state, no `.place()` method exists
+//! The game phase is encoded in the type parameter:
+//! - `Game<Setup>` - initial state, can be started
+//! - `Game<InProgress>` - active game, can accept moves
+//! - `Game<Finished>` - terminal state, outcome determined
 //!
-//! ## Type-Level Contracts
-//!
-//! The type signature IS the contract:
+//! Transitions consume the game:
 //! ```ignore
-//! impl Game<InProgress> {
-//!     pub fn place(self, pos: Position) -> Result<GameTransition, PlaceError>
-//!     //          ^^^^  ← Consumes InProgress (proves game can continue)
-//!     //                    ^^^^^^^^  ← Only valid positions exist
-//!     //                                  ^^^^^^^^^^^^^^  ← Explicit transitions
-//! }
+//! let game = Game::<Setup>::new();
+//! let game = game.start(Player::X);  // consumes Setup, returns InProgress
+//! let result = game.make_move(action);  // consumes InProgress, returns InProgress or Finished
 //! ```
 //!
-//! Invalid operations are prevented at compile time:
-//! - Can't construct invalid positions (Position enum)
-//! - Can't call `place()` on terminal states (no method)
-//! - Can't skip state transitions (consuming API)
+//! ## First-Class Actions
+//!
+//! Moves are domain events with independent validation:
+//! ```ignore
+//! let action = Move::new(Player::X, Position::Center);
+//! LegalMove::check(&action, &game)?;  // Validate via contracts
+//! let result = game.make_move(action)?;  // Apply action
+//! ```
+//!
+//! ## Contract-Driven Validation
+//!
+//! Rules are declarative contracts, not imperative checks:
+//! - `SquareIsEmpty` - precondition for placing a mark
+//! - `PlayersTurn` - precondition for move legality
+//! - `BoardConsistent` - invariant on board state
+//!
+//! ## Clean Boundaries
+//!
+//! Domain contains pure state, no presentation logic:
+//! - Game types know nothing about rendering
+//! - UI concerns handled separately
+//! - Domain is reusable across contexts
 
+// Core domain types
 pub mod position;
 pub mod types;
-pub mod game;
+
+// Typestate architecture
+pub mod phases;
+pub mod action;
+pub mod contracts;
+pub mod typestate;
+
+// Old typestate (to be deprecated)
+mod game;
+
+// Wrapper for session management
 pub mod wrapper;
+
+// Legacy compatibility during migration
 mod rules;
 
-// Typestate API - primary interface
-pub use game::{Draw, Game, GameTransition, InProgress, PlaceError, Won};
+// Primary API - new typestate architecture
+pub use action::{Move, MoveError};
+pub use phases::{Finished, InProgress, Outcome, Setup};
 pub use position::Position;
-pub use types::{Board, GameState, GameStatus, Player, Square};
+pub use typestate::{Game, GameResult};
+pub use types::{Board, Player, Square};
 pub use wrapper::AnyGame;
 
-// Legacy compatibility during migration (for TUI)
+// Re-export old types temporarily during migration
+pub use game::{Draw as OldDraw, Game as OldGame, GameTransition as OldGameTransition, InProgress as OldInProgress, PlaceError as OldPlaceError, Won as OldWon};
+pub use types::{GameState, GameStatus};
+
+// Legacy compatibility (for TUI)
 pub use rules::Game as LegacyGame;
 
 /// Alias for clarity in session management.
 pub type Mark = Player;
+
