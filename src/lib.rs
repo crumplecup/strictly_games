@@ -62,6 +62,8 @@ pub use tui::run as run_tui;
 pub use games::tictactoe::{
     // New typestate API (phase-specific structs)
     GameSetup, GameInProgress, GameFinished, GameResult,
+    // Compatibility alias
+    Game,
     // Action types
     Move, MoveError,
     // Legacy phase markers (deprecated)

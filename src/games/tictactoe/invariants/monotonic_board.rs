@@ -1,6 +1,6 @@
 //! Monotonic board invariant: squares never change once set.
 
-use super::super::{Board, GameInProgress, Move, Player, Position, Square};
+use super::super::{Board, GameInProgress, Square};
 use super::Invariant;
 
 /// Invariant: Board squares are monotonic (never overwritten).

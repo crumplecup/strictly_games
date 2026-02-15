@@ -7,5 +7,5 @@
 pub mod draw;
 pub mod win;
 
-pub use draw::{is_draw, is_full};
+pub use draw::is_full;
 pub use win::check_winner;

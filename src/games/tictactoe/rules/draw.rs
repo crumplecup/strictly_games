@@ -11,18 +11,15 @@ pub fn is_full(board: &Board) -> bool {
     board.squares().iter().all(|s| *s != Square::Empty)
 }
 
-/// Checks if the game is a draw.
-///
-/// A draw occurs when the board is full and there is no winner.
-#[instrument]
-pub fn is_draw(board: &Board) -> bool {
-    is_full(board) && super::win::check_winner(board).is_none()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use super::super::super::{Player, Position};
+    use super::super::win::check_winner;
+
+    fn is_draw(board: &Board) -> bool {
+        is_full(board) && check_winner(board).is_none()
+    }
 
     #[test]
     fn test_empty_board_not_full() {

@@ -5,8 +5,7 @@
 //! ALWAYS has an outcome, not `Option<Outcome>`.
 
 use super::action::{Move, MoveError};
-use super::contracts::{assert_invariants, LegalMove, MoveContract, Contract};
-use super::invariants::{AlternatingTurnInvariant, HistoryConsistentInvariant, Invariant, MonotonicBoardInvariant};
+use super::contracts::{assert_invariants, MoveContract, Contract};
 use super::phases::Outcome;
 use super::{Board, Player, Position, Square};
 use tracing::instrument;
@@ -157,19 +156,6 @@ impl GameInProgress {
         }
         
         Ok(GameResult::InProgress(game))
-    }
-
-    /// Creates a game from parts (for Kani arbitrary states).
-    ///
-    /// **WARNING**: Bypasses normal construction - allows invalid states.
-    /// Only for formal verification.
-    #[cfg(kani)]
-    pub fn from_parts(board: Board, history: Vec<Move>, to_move: Player) -> Self {
-        Self {
-            board,
-            history,
-            to_move,
-        }
     }
 }
 

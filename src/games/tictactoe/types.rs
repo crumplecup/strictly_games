@@ -73,12 +73,6 @@ impl Board {
         &self.squares
     }
 
-    /// Creates a board from a given array of squares (for Kani).
-    #[cfg(kani)]
-    pub fn from_squares(squares: [Square; 9]) -> Self {
-        Self { squares }
-    }
-
     /// Formats the board as a human-readable string.
     #[instrument]
     pub fn display(&self) -> String {
