@@ -1,32 +1,375 @@
 # Strictly Games
 
-> **Type-safe operational semantics for LLM agents**
+> **The Elicitation Framework Showcase: Type-Safe Games for LLM Agents**
 
-Strictly Games is an MCP (Model Context Protocol) server that provides verified game environments where agents can play. The name captures our approach: **strictly typed** operational semantics that create **strict boundaries** for agent behavior.
+Strictly Games demonstrates the [Elicitation Framework](https://github.com/crumplecup/elicitation) in action—showing how to build **type-safe operational semantics** that make invalid agent behavior **unrepresentable** at the type level.
 
-## Vision
+## Why This Matters
 
-We're not building better prompts—we're building **type-safe operational semantics for agents**.
+Traditional approach:
+```
+Prompt: "Only make legal moves in tic-tac-toe"
+Reality: Agent tries position 10 (doesn't exist) or places X on occupied square
+Fix: Better prompts, few-shot examples, RLHF
+```
 
-Traditional approaches rely on instructions like "don't make invalid moves." Strictly Games makes invalid moves **unrepresentable** at the type level. Agents interact through a well-defined protocol where:
+Elicitation approach:
+```rust
+// Positions are an enum - position 10 doesn't exist
+pub enum Position { TopLeft, TopCenter, ... }
 
-- **Invalid states don't exist** - The type system enforces game rules
-- **Operations require proofs** - Moves carry evidence of legality
-- **Verification is compositional** - Complex games built from verified primitives
+// Moves validated by contracts before application
+SquareIsEmpty::check(&action, &game)?;
+PlayersTurn::check(&action, &game)?;
 
-This is a **walled garden** approach: agents operate in environments with rigorous constraints, demonstrating that formal methods can guide AI systems through type-safe interfaces rather than prompt engineering.
+// Invalid moves don't compile, can't be represented
+```
 
-## Current Games
+**We're not building better prompts. We're building type systems that make correctness inevitable.**
 
-### Tic-Tac-Toe
+## The Elicitation Architecture
 
-A 3×3 game demonstrating the core concepts:
-- Type-safe board representation
-- Move validation at the API boundary
-- Win/draw detection
-- Full game state tracking
+This codebase showcases four key patterns from the Elicitation Framework:
 
-Future games: Blackjack, Checkers, Chess, Go
+### 1. **Typestate State Machines**
+
+Game phases are encoded in type parameters, making illegal state transitions impossible:
+
+```rust
+// Phase encoded as type parameter
+let game: Game<Setup> = Game::new();
+
+// start() consumes Setup, returns InProgress
+let game: Game<InProgress> = game.start(Player::X);
+
+// make_move() consumes InProgress, returns InProgress or Finished
+let result: MoveResult = game.make_move(action)?;
+```
+
+Invalid transitions don't exist: you can't call `make_move()` on `Game<Setup>` or `restart()` on `Game<InProgress>`.
+
+### 2. **First-Class Actions**
+
+Domain events (moves) are validated independently before application:
+
+```rust
+// Actions are domain types with validation
+let action = Move::new(Player::X, Position::Center);
+
+// Contract-based validation (declarative, composable)
+LegalMove::check(&action, &game)?;
+
+// Apply validated action
+let result = game.make_move(action)?;
+```
+
+Actions carry their own semantics—they're not just data, they're **proof-carrying code**.
+
+### 3. **Contract-Driven Validation**
+
+Rules are declarative contracts, not imperative checks:
+
+```rust
+/// Precondition: Square must be empty
+pub struct SquareIsEmpty;
+
+impl SquareIsEmpty {
+    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+        if !game.board().is_empty(mov.position) {
+            Err(MoveError::SquareOccupied(mov.position))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+// Compose contracts
+pub struct LegalMove;
+
+impl LegalMove {
+    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+        SquareIsEmpty::check(mov, game)?;
+        PlayersTurn::check(mov, game)?;
+        Ok(())
+    }
+}
+```
+
+Contracts are:
+- **Declarative** - State what must be true, not how to check it
+- **Composable** - Complex rules built from simple ones
+- **Verifiable** - Can be formally proven with Kani/Creusot
+- **Reusable** - Same contracts work across game variants
+
+### 4. **Clean Boundaries**
+
+Domain logic is pure—no presentation, no I/O, no framework coupling:
+
+```rust
+// Domain types know nothing about:
+// - How they're rendered (terminal? GUI? web?)
+// - How moves arrive (MCP? HTTP? keyboard?)
+// - Where state is stored (memory? database?)
+
+// This makes them:
+// - Testable in isolation
+// - Reusable across contexts
+// - Formally verifiable
+// - Framework-agnostic
+```
+
+The game logic is **pure transformation**—from one valid state to another, with contracts enforcing legality.
+
+## Tutorial: Implementing Type-Safe Games
+
+Let's walk through the tic-tac-toe implementation to see these patterns in action.
+
+### Step 1: Define Domain Types
+
+Start with the irreducible domain concepts:
+
+```rust
+// Players are an enum - only two exist
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
+pub enum Player { X, O }
+
+// Positions are bounded - only 9 valid squares
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
+pub enum Position {
+    TopLeft, TopCenter, TopRight,
+    MiddleLeft, Center, MiddleRight,
+    BottomLeft, BottomCenter, BottomRight,
+}
+
+// Square state encodes occupancy
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Square {
+    Empty,
+    Occupied(Player),
+}
+```
+
+**Key insight:** Invalid positions (like 10 or -1) **don't exist**—they're not representable in the type.
+
+### Step 2: Build Composite Types
+
+Compose primitives into higher-level structures:
+
+```rust
+// Board is array of squares
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Board {
+    squares: [Square; 9],
+}
+
+impl Board {
+    /// Check if position is empty
+    pub fn is_empty(&self, pos: Position) -> bool {
+        matches!(self.squares[pos as usize], Square::Empty)
+    }
+    
+    /// Place a mark
+    pub fn place(&mut self, pos: Position, player: Player) {
+        self.squares[pos as usize] = Square::Occupied(player);
+    }
+}
+```
+
+### Step 3: Define Phase Markers
+
+Create zero-sized types to encode game phase:
+
+```rust
+/// Phase marker: Game is being set up
+pub struct Setup;
+
+/// Phase marker: Game is in progress
+pub struct InProgress;
+
+/// Phase marker: Game has finished
+pub struct Finished;
+
+/// Outcome of finished game
+pub enum Outcome {
+    Winner(Player),
+    Draw,
+}
+```
+
+### Step 4: Implement Typestate Game
+
+
+The game struct is generic over phase:
+
+```rust
+/// Type-safe game with phase encoded as type parameter
+pub struct Game<Phase> {
+    board: Board,
+    history: Vec<Move>,
+    phase_data: Phase,  // Phase-specific data
+}
+
+// Setup phase: no current player yet
+impl Game<Setup> {
+    pub fn new() -> Self {
+        Self {
+            board: Board::empty(),
+            history: Vec::new(),
+            phase_data: Setup,
+        }
+    }
+    
+    /// Transition: Setup → InProgress
+    pub fn start(self, first_player: Player) -> Game<InProgress> {
+        Game {
+            board: self.board,
+            history: self.history,
+            phase_data: InProgress { to_move: first_player },
+        }
+    }
+}
+
+// InProgress phase: has current player
+impl Game<InProgress> {
+    /// Who moves next?
+    pub fn to_move(&self) -> Player {
+        self.phase_data.to_move
+    }
+    
+    /// Attempt move - may transition to Finished
+    pub fn make_move(mut self, action: Move) -> Result<MoveResult, MoveError> {
+        // Validate via contracts (see Step 5)
+        LegalMove::check(&action, &self)?;
+        
+        // Apply move
+        self.board.place(action.position, action.player);
+        self.history.push(action);
+        
+        // Check for game end
+        if let Some(outcome) = self.check_outcome() {
+            Ok(MoveResult::Finished(Game {
+                board: self.board,
+                history: self.history,
+                phase_data: Finished { outcome },
+            }))
+        } else {
+            // Toggle player
+            self.phase_data.to_move = self.phase_data.to_move.opponent();
+            Ok(MoveResult::Continue(self))
+        }
+    }
+}
+```
+
+**Key insight:** `make_move()` **consumes** `self`—you can't accidentally reuse stale game state.
+
+### Step 5: Define Contracts
+
+Declarative rules as zero-sized struct types:
+
+```rust
+/// Contract: Square must be empty
+pub struct SquareIsEmpty;
+
+impl SquareIsEmpty {
+    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+        if !game.board().is_empty(mov.position) {
+            Err(MoveError::SquareOccupied(mov.position))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// Contract: Must be player's turn
+pub struct PlayersTurn;
+
+impl PlayersTurn {
+    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+        if mov.player != game.to_move() {
+            Err(MoveError::WrongPlayer { expected: game.to_move(), got: mov.player })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// Composite contract: Move is legal
+pub struct LegalMove;
+
+impl LegalMove {
+    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+        SquareIsEmpty::check(mov, game)?;
+        PlayersTurn::check(mov, game)?;
+        Ok(())
+    }
+}
+```
+
+### Step 6: Define Actions
+
+Moves are domain events, not just data:
+
+```rust
+/// A move action
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Move {
+    pub player: Player,
+    pub position: Position,
+}
+
+impl Move {
+    pub fn new(player: Player, position: Position) -> Self {
+        Self { player, position }
+    }
+}
+
+/// Move validation error
+#[derive(Debug, Clone, Display, Error)]
+pub enum MoveError {
+    #[display("Square {} is occupied", _0)]
+    SquareOccupied(Position),
+    
+    #[display("Wrong player: expected {:?}, got {:?}", expected, got)]
+    WrongPlayer { expected: Player, got: Player },
+}
+```
+
+### Step 7: Formal Verification (Optional)
+
+Add Kani contracts for proof:
+
+```rust
+#[cfg(kani)]
+mod verification {
+    use super::*;
+    
+    #[kani::proof]
+    fn legal_move_never_fails() {
+        let game: Game<InProgress> = kani::any();
+        let mov: Move = kani::any();
+        
+        // If move passes validation...
+        if LegalMove::check(&mov, &game).is_ok() {
+            let result = game.make_move(mov);
+            // ...then application always succeeds
+            assert!(result.is_ok());
+        }
+    }
+    
+    #[kani::proof]
+    fn board_consistency_preserved() {
+        let game: Game<InProgress> = kani::any();
+        kani::assume(BoardConsistent::holds(game.board()));
+        
+        let mov: Move = kani::any();
+        if let Ok(MoveResult::Continue(next)) = game.make_move(mov) {
+            // Invariant preserved
+            assert!(BoardConsistent::holds(next.board()));
+        }
+    }
+}
+```
 
 ## Installation
 
@@ -261,32 +604,35 @@ X|5|O
 ## Development
 
 ```bash
+# Build the project
+cargo build
+
 # Run with debug logging
 RUST_LOG=strictly_games=debug,elicitation=debug cargo run
 
-# Run tests (once implemented)
+# Run tests
 cargo test
 
-# Format code
-cargo fmt
+# Run with all features (requires OpenCV, Tesseract)
+cargo build --all-features
 
-# Lint
-cargo clippy
+# Run justfile recipes
+just check          # Compile only
+just test-package   # Test this package
+just check-all      # Full check (clippy, fmt, test)
 ```
 
-## Architecture
+## Contributing
 
-```
-src/
-├── main.rs           # MCP server entry point
-├── server.rs         # Tool router and handlers
-└── games/
-    └── tictactoe/
-        ├── types.rs  # Domain types (Player, Board, GameState)
-        └── rules.rs  # Game logic and validation
-```
+We welcome contributions that demonstrate **verification-first development**:
 
-All domain types derive `Elicit` for future interactive elicitation support.
+1. **Design domain types** that make invalid states unrepresentable
+2. **Add contracts** that encode rules declaratively  
+3. **Compose contracts** to build complex validation
+4. **Write Kani proofs** to verify correctness
+5. **Expose via MCP** for agent interaction
+
+See existing games for patterns. All code must follow the architecture principles above.
 
 ## Dependencies
 
@@ -319,31 +665,115 @@ All domain types derive `Elicit` for future interactive elicitation support.
 
 ## Philosophy
 
-Traditional approach:
-```
-Prompt: "Only make legal moves"
-Reality: Agents hallucinate illegal moves
-Fix: Better prompts, fine-tuning, RLHF
-```
+The Elicitation Framework rests on three principles:
 
-Strictly Games approach:
-```
-API: move(pos: Position) requires proof(is_empty(pos))
-Reality: Invalid moves don't compile
-Fix: Not needed - prevented by types
+### 1. Make Illegal States Unrepresentable
+
+```rust
+// ❌ Traditional: Positions are numbers (what if user enters 10?)
+type Position = u8;  // 0-255... but only 0-8 valid!
+
+// ✅ Elicitation: Positions are an enum
+enum Position { TopLeft, ..., BottomRight }  // Only 9 exist!
 ```
 
-We believe formal methods and type systems provide better agent guardrails than instructions in natural language.
+### 2. Validation is Composition
 
-## Contributing
+```rust
+// ❌ Traditional: Validation is imperative spaghetti
+fn validate_move(mov: Move, game: Game) -> bool {
+    if game.board[mov.pos] != Empty { return false; }
+    if mov.player != game.current_player { return false; }
+    if game.is_finished { return false; }
+    true
+}
 
-This project demonstrates **verification-first development**:
-1. Design domain types that make invalid states unrepresentable
-2. Add contracts that encode game rules
-3. Use verification tools (Kani, Creusot) to prove correctness
-4. Expose verified operations through MCP
+// ✅ Elicitation: Validation is declarative contracts
+impl LegalMove {
+    fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
+        SquareIsEmpty::check(mov, game)?;
+        PlayersTurn::check(mov, game)?;
+        Ok(())
+    }
+}
+```
 
-See `tictactoe.md` for the detailed design philosophy.
+### 3. Types Are Proofs
+
+```rust
+// If you have Game<Finished>, the game IS finished
+// If you have Game<InProgress>, moves ARE legal
+// If you have Move that passed LegalMove::check, it IS valid
+
+// The type system is your proof system
+```
+
+## Benefits
+
+### For Agents
+- **Fewer hallucinations** - Invalid moves don't exist to hallucinate
+- **Better understanding** - Domain structure encoded in types
+- **Clearer errors** - Type-safe errors with context
+
+### For Developers
+- **Correctness by construction** - Invalid states unrepresentable
+- **Refactoring confidence** - Compiler checks rule changes
+- **Formal verification** - Kani proofs guarantee properties
+- **Reusable components** - Contracts compose across games
+
+### For System Design
+- **Testability** - Pure functions, deterministic
+- **Maintainability** - Type signatures are documentation
+- **Evolvability** - Add features without breaking invariants
+
+## Roadmap
+
+**Phase 1: Foundation** (current)
+- ✅ Typestate state machines (tic-tac-toe)
+- ✅ Contract-based validation
+- ✅ First-class actions
+- ✅ MCP integration
+
+**Phase 2: Verification**
+- Add Kani proofs for contracts
+- Demonstrate proof composition
+- Document verification patterns
+
+**Phase 3: Expanded Games**
+- Blackjack (probabilistic states)
+- Checkers (larger state space)
+- Chess (complex rules)
+
+**Phase 4: Elicitation Deep Dive**
+- Interactive game configuration via elicitation
+- Tournament organization
+- Strategy elicitation and comparison
+
+## Code Structure
+
+The implementation demonstrates clean separation:
+
+```
+src/games/tictactoe/
+├── position.rs       # Domain primitive: Position enum
+├── types.rs          # Core types: Player, Square, Board
+├── phases.rs         # Phase markers: Setup, InProgress, Finished
+├── action.rs         # Domain events: Move, MoveError
+├── contracts.rs      # Validation: SquareIsEmpty, PlayersTurn, LegalMove
+├── typestate.rs      # State machine: Game<Phase> with transitions
+├── wrapper.rs        # Type-erased wrapper for runtime polymorphism
+└── mod.rs           # Public API and documentation
+```
+
+### Navigation Guide
+
+1. **Start with types.rs** - See the domain primitives (Player, Square, Board)
+2. **Read phases.rs** - Understand the state machine phases
+3. **Study contracts.rs** - See declarative validation
+4. **Explore typestate.rs** - See how types enforce transitions
+5. **Check wrapper.rs** - Learn runtime polymorphism with AnyGame
+
+Each file is self-contained with extensive documentation.
 
 ## License
 
@@ -360,3 +790,5 @@ Built with the [Elicitation](https://github.com/crumplecup/elicitation) framewor
 ---
 
 **"We're building type-safe operational semantics for agents, not better prompts."**
+
+**Key Insight:** The best way to prevent agents from making mistakes is to make mistakes **impossible to represent** in the type system. That's the Elicitation Framework.
