@@ -1,6 +1,6 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::{GameStatus, Player};
+use crate::games::tictactoe::Player;
 use crate::games::tictactoe::types::Square;
 use crate::session::{PlayerType, SessionManager};
 use elicitation::ElicitCommunicator;
@@ -482,6 +482,10 @@ impl GameServer {
                 };
                 
                 tracing::info!(position = ?position, index = position.to_index(), attempt, "Agent selected position");
+                
+                // Note: Position elicitation demonstrates framework's type constraints
+                // Session constructs implicit Move action from (player, position)
+                // TODO: Elicit Move directly once contracts are integrated into elicitation
                 
                 // Make the move using session API (handles all validation + typestate transitions)
                 match session.make_move(&player_id, position) {

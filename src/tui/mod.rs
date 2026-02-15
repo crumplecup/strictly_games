@@ -2,11 +2,7 @@
 
 #![warn(missing_docs)]
 
-mod app;
-mod mode;
 mod ui;
-mod orchestrator;
-mod http_orchestrator;
 mod players;
 mod http_client;
 mod rest_client;  // Type-safe REST client

@@ -27,8 +27,8 @@ fn test_valid_moves_empty_board() {
 #[test]
 fn test_valid_moves_filters_occupied() {
     let mut board = Board::new();
-    board.set(0, Square::Occupied(Player::X)).unwrap();
-    board.set(4, Square::Occupied(Player::O)).unwrap();
+    board.set(Position::TopLeft, Square::Occupied(Player::X));
+    board.set(Position::Center, Square::Occupied(Player::O));
 
     let valid = Position::valid_moves(&board);
     assert_eq!(valid.len(), 7); // 2 occupied, 7 free

@@ -66,11 +66,49 @@ impl Board {
     pub fn is_empty(&self, pos: super::Position) -> bool {
         matches!(self.get(pos), Square::Empty)
     }
+    
+    /// Checks if the board is full (no empty squares).
+    #[instrument]
+    pub fn is_full(&self) -> bool {
+        self.squares.iter().all(|s| *s != Square::Empty)
+    }
 
     /// Returns all squares as a slice.
     #[instrument]
     pub fn squares(&self) -> &[Square; 9] {
         &self.squares
+    }
+    
+    /// Checks for a winner on the board.
+    #[instrument]
+    pub fn winner(&self) -> Option<Player> {
+        use super::Position;
+        
+        const LINES: [[Position; 3]; 8] = [
+            // Rows
+            [Position::TopLeft, Position::TopCenter, Position::TopRight],
+            [Position::MiddleLeft, Position::Center, Position::MiddleRight],
+            [Position::BottomLeft, Position::BottomCenter, Position::BottomRight],
+            // Columns
+            [Position::TopLeft, Position::MiddleLeft, Position::BottomLeft],
+            [Position::TopCenter, Position::Center, Position::BottomCenter],
+            [Position::TopRight, Position::MiddleRight, Position::BottomRight],
+            // Diagonals
+            [Position::TopLeft, Position::Center, Position::BottomRight],
+            [Position::TopRight, Position::Center, Position::BottomLeft],
+        ];
+
+        for [a, b, c] in LINES {
+            let sq = self.get(a);
+            if sq != Square::Empty && sq == self.get(b) && sq == self.get(c) {
+                return match sq {
+                    Square::Occupied(player) => Some(player),
+                    Square::Empty => None,
+                };
+            }
+        }
+
+        None
     }
 
     /// Formats the board as a human-readable string.
@@ -100,85 +138,6 @@ impl Board {
 }
 
 impl Default for Board {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Current status of the game.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit)]
-pub enum GameStatus {
-    /// Game is ongoing.
-    InProgress,
-    /// Game ended in a win.
-    Won(Player),
-    /// Game ended in a draw.
-    Draw,
-}
-
-/// Complete game state.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit)]
-pub struct GameState {
-    /// The board.
-    board: Board,
-    /// Current player to move.
-    current_player: Player,
-    /// Game status.
-    status: GameStatus,
-    /// Move history (positions played).
-    history: Vec<super::Position>,
-}
-
-impl GameState {
-    /// Creates a new game.
-    #[instrument]
-    pub fn new() -> Self {
-        Self {
-            board: Board::new(),
-            current_player: Player::X,
-            status: GameStatus::InProgress,
-            history: Vec::new(),
-        }
-    }
-
-    /// Returns the board.
-    #[instrument]
-    pub fn board(&self) -> &Board {
-        &self.board
-    }
-
-    /// Returns the current player.
-    #[instrument]
-    pub fn current_player(&self) -> Player {
-        self.current_player
-    }
-
-    /// Returns the game status.
-    #[instrument]
-    pub fn status(&self) -> &GameStatus {
-        &self.status
-    }
-
-    /// Returns the move history.
-    #[instrument]
-    pub fn history(&self) -> &[super::Position] {
-        &self.history
-    }
-
-    /// Applies a move (unchecked - use Game::make_move for validation).
-    pub(super) fn apply_move(&mut self, pos: super::Position, player: Player) {
-        self.board.set(pos, Square::Occupied(player));
-        self.history.push(pos);
-        self.current_player = player.opponent();
-    }
-
-    /// Sets the game status.
-    pub(super) fn set_status(&mut self, status: GameStatus) {
-        self.status = status;
-    }
-}
-
-impl Default for GameState {
     fn default() -> Self {
         Self::new()
     }
