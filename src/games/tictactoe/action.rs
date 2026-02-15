@@ -28,6 +28,16 @@ impl Move {
     pub fn new(player: Player, position: Position) -> Self {
         Self { player, position }
     }
+    
+    /// Returns the player making this move.
+    pub fn player(&self) -> Player {
+        self.player
+    }
+    
+    /// Returns the position of this move.
+    pub fn position(&self) -> Position {
+        self.position
+    }
 }
 
 impl std::fmt::Display for Move {
@@ -42,6 +52,10 @@ pub enum MoveError {
     /// The square at the position is already occupied.
     #[display("Square {:?} is already occupied", _0)]
     SquareOccupied(Position),
+    
+    /// The game is already over.
+    #[display("Game is already over")]
+    GameOver,
     
     /// It's not this player's turn.
     #[display("It's not {:?}'s turn", _0)]

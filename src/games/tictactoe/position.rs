@@ -82,6 +82,12 @@ impl Position {
         }
     }
 
+    /// Converts position to u8 (0-8).
+    #[instrument]
+    pub fn to_u8(self) -> u8 {
+        self.to_index() as u8
+    }
+
     /// Creates position from board index.
     #[instrument]
     pub fn from_index(index: usize) -> Option<Self> {

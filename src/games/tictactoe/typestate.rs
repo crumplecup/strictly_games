@@ -11,7 +11,7 @@
 use super::action::{Move, MoveError};
 use super::contracts::{assert_invariants, LegalMove};
 use super::phases::{Finished, InProgress, Outcome, Setup};
-use super::{Board, Player, Square};
+use super::{Board, Player, Position, Square};
 use std::marker::PhantomData;
 use tracing::instrument;
 
@@ -142,6 +142,12 @@ impl Game<InProgress> {
     pub fn history(&self) -> &[Move] {
         &self.history
     }
+    
+    /// Returns the valid positions where the current player can move.
+    #[instrument(skip(self))]
+    pub fn valid_moves(&self) -> Vec<Position> {
+        Position::valid_moves(&self.board)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -162,6 +168,12 @@ impl Game<Finished> {
     /// Returns the move history.
     pub fn history(&self) -> &[Move] {
         &self.history
+    }
+    
+    /// Restarts the game (consumes finished, returns setup).
+    #[instrument(skip(self))]
+    pub fn restart(self) -> Game<Setup> {
+        Game::new()
     }
 }
 
