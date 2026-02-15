@@ -111,7 +111,7 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
 #[instrument(skip_all, fields(session_id = %client.session_id, player_id = %client.player_id))]
 async fn run_typesafe_game<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
-    client: RestGameClient,
+    mut client: RestGameClient,  // Make mutable to update last_error
 ) -> Result<()> {
     use tokio::time::{sleep, Duration};
     use crate::games::tictactoe::Player;
@@ -171,15 +171,34 @@ async fn run_typesafe_game<B: ratatui::backend::Backend>(
                 "Waiting...".to_string()
             };
             
+            // Color status based on errors
+            let status_color = if client.last_error.is_some() {
+                Color::Red
+            } else {
+                Color::Yellow
+            };
+            
             let status = Paragraph::new(status_text)
-                .style(Style::default().fg(Color::Yellow))
+                .style(Style::default().fg(status_color))
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL).title("Status"));
             f.render_widget(status, chunks[2]);
             
-            // Help
-            let help = Paragraph::new("Arrow keys: Move | Enter: Place | Q: Quit | R: Restart")
-                .style(Style::default().fg(Color::DarkGray))
+            // Help / Error message
+            let help_text = if let Some(ref error) = client.last_error {
+                format!("ERROR: {}", error)
+            } else {
+                "Arrow keys: Move | Enter: Place | Q: Quit | R: Restart".to_string()
+            };
+            
+            let help_color = if client.last_error.is_some() {
+                Color::Red
+            } else {
+                Color::DarkGray
+            };
+            
+            let help = Paragraph::new(help_text)
+                .style(Style::default().fg(help_color))
                 .alignment(Alignment::Center)
                 .block(Block::default().borders(Borders::ALL));
             f.render_widget(help, chunks[3]);
@@ -192,8 +211,11 @@ async fn run_typesafe_game<B: ratatui::backend::Backend>(
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(()),
                         KeyCode::Char('r') | KeyCode::Char('R') => {
-                            info!("Restart requested (not implemented yet)");
-                            // TODO: Add restart endpoint
+                            info!("Restarting game");
+                            if let Err(e) = client.restart_game().await {
+                                error!(error = %e, "Restart failed");
+                            }
+                            sleep(Duration::from_millis(200)).await; // Let server process
                         }
                         _ => {}
                     }

@@ -11,6 +11,7 @@ pub struct RestGameClient {
     client: reqwest::Client,
     pub session_id: String,
     pub player_id: String,
+    pub last_error: Option<String>,  // Track last error for display
     mcp_session_id: String,  // For MCP tool calls
 }
 
@@ -34,6 +35,7 @@ impl RestGameClient {
             client,
             session_id,
             player_id,
+            last_error: None,
             mcp_session_id,
         })
     }
@@ -101,12 +103,13 @@ impl RestGameClient {
                 "name": "register_player",
                 "arguments": {
                     "session_id": session_id,
-                    "name": name
+                    "name": name,
+                    "type": "human"
                 }
             }
         });
         
-        let _response = client
+        let response = client
             .post(&format!("{}/message", base_url))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
@@ -114,6 +117,14 @@ impl RestGameClient {
             .json(&register_req)
             .send()
             .await?;
+        
+        let response_text = response.text().await?;
+        debug!(response = %response_text, "Register player response");
+        
+        // Check for errors in response
+        if response_text.contains("\"error\"") {
+            return Err(anyhow::anyhow!("Registration failed: {}", response_text));
+        }
         
         let player_id = format!("{}_{}", session_id, name.to_lowercase());
         info!(player_id = %player_id, "Registered successfully");
@@ -140,8 +151,9 @@ impl RestGameClient {
     
     /// Makes a move via MCP tool.
     #[instrument(skip(self), fields(position = ?position))]
-    pub async fn make_move(&self, position: Position) -> Result<()> {
+    pub async fn make_move(&mut self, position: Position) -> Result<()> {
         info!("Making move");
+        self.last_error = None;  // Clear previous error
         
         // Serialize Position properly using serde
         let position_value = serde_json::to_value(&position)?;
@@ -177,12 +189,25 @@ impl RestGameClient {
         let body = response.text().await?;
         debug!(status = %status, body = %body, "Got MCP response");
         
+        // Check for error in JSON-RPC response
+        if body.contains("\"error\"") {
+            // Parse error message
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                if let Some(error_msg) = json.get("error").and_then(|e| e.get("message")).and_then(|m| m.as_str()) {
+                    self.last_error = Some(error_msg.to_string());
+                    anyhow::bail!("Move failed: {}", error_msg);
+                }
+            }
+        }
+        
         if !status.is_success() {
+            self.last_error = Some(format!("HTTP {}", status));
             anyhow::bail!("Move failed: {} - {}", status, body);
         }
         
         Ok(())
     }
+    
     
     /// Starts a new game via MCP tool.
     #[instrument(skip(self))]
@@ -212,6 +237,25 @@ impl RestGameClient {
         
         if !response.status().is_success() {
             anyhow::bail!("Start game failed: {}", response.status());
+        }
+        
+        Ok(())
+    }
+    
+    /// Restarts current game (keeps players registered).
+    #[instrument(skip(self))]
+    pub async fn restart_game(&mut self) -> Result<()> {
+        info!("Restarting game");
+        self.last_error = None;
+        
+        let response = self.client
+            .post(&format!("{}/api/sessions/{}/restart", self.base_url, self.session_id))
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            self.last_error = Some("Restart failed".to_string());
+            anyhow::bail!("Restart failed: {}", response.status());
         }
         
         Ok(())

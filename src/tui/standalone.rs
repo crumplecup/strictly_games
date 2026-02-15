@@ -68,7 +68,7 @@ pub async fn spawn_standalone(port: u16, agent_config: PathBuf) -> Result<Proces
     
     info!("Server is ready, spawning agent");
     
-    // Spawn agent connected to the server
+    // Spawn agent connected to the server, joining the TUI session
     let agent = Command::new(&exe)
         .arg("agent")
         .arg("--config")
@@ -76,8 +76,10 @@ pub async fn spawn_standalone(port: u16, agent_config: PathBuf) -> Result<Proces
         .arg("--server-url")
         .arg(&server_url)
         .arg("--test-play")
+        .arg("--test-session")
+        .arg("tui_session")
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())  // Let agent logs flow to same output
         .spawn()
         .context("Failed to spawn agent process")?;
     
