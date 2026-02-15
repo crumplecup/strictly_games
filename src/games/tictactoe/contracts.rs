@@ -6,7 +6,7 @@
 use super::action::{Move, MoveError};
 use super::phases::InProgress;
 use super::typestate::Game;
-use super::{Board, Player, Position};
+use super::{Board, Player};
 use tracing::{instrument, warn};
 
 // ─────────────────────────────────────────────────────────────

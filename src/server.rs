@@ -1,6 +1,6 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::{GameStatus, Player};
+use crate::games::tictactoe::Player;
 use crate::games::tictactoe::types::Square;
 use crate::session::{PlayerType, SessionManager};
 use elicitation::ElicitCommunicator;

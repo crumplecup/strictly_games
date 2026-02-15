@@ -62,7 +62,4 @@ pub use games::tictactoe::{
     // Domain types
     AnyGame, Board, Position, Square,
     Player as TicTacToePlayer,
-    // Old API (temporary during migration)
-    OldGame, OldGameTransition, OldPlaceError,
-    OldInProgress, OldWon, OldDraw,
 };

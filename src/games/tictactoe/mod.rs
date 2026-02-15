@@ -49,14 +49,8 @@ pub mod action;
 pub mod contracts;
 pub mod typestate;
 
-// Old typestate (to be deprecated)
-mod game;
-
 // Wrapper for session management
 pub mod wrapper;
-
-// Legacy compatibility during migration
-mod rules;
 
 // Primary API - new typestate architecture
 pub use action::{Move, MoveError};
@@ -65,13 +59,6 @@ pub use position::Position;
 pub use typestate::{Game, GameResult};
 pub use types::{Board, Player, Square};
 pub use wrapper::AnyGame;
-
-// Re-export old types temporarily during migration
-pub use game::{Draw as OldDraw, Game as OldGame, GameTransition as OldGameTransition, InProgress as OldInProgress, PlaceError as OldPlaceError, Won as OldWon};
-pub use types::{GameState, GameStatus};
-
-// Legacy compatibility (for TUI)
-pub use rules::Game as LegacyGame;
 
 /// Alias for clarity in session management.
 pub type Mark = Player;

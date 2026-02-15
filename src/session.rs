@@ -1,6 +1,6 @@
 //! Game session management for HTTP multiplayer.
 
-use crate::games::tictactoe::{AnyGame, Game, Setup, InProgress, Mark, Position, Move};
+use crate::games::tictactoe::{AnyGame, Game, Setup, Mark, Position};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
