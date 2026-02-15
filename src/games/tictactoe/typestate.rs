@@ -83,8 +83,8 @@ impl GameInProgress {
         self.board.set(action.position, Square::Occupied(action.player));
         self.history.push(action);
         
-        // Check for winner
-        if let Some(winner) = self.board.winner() {
+        // Check for winner using rules module
+        if let Some(winner) = super::rules::check_winner(&self.board) {
             return Ok(GameResult::Finished(GameFinished {
                 board: self.board,
                 history: self.history,
@@ -92,8 +92,8 @@ impl GameInProgress {
             }));
         }
         
-        // Check for draw
-        if self.board.is_full() {
+        // Check for draw using rules module
+        if super::rules::is_full(&self.board) {
             return Ok(GameResult::Finished(GameFinished {
                 board: self.board,
                 history: self.history,

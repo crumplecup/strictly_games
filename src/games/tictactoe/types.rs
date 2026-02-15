@@ -66,49 +66,11 @@ impl Board {
     pub fn is_empty(&self, pos: super::Position) -> bool {
         matches!(self.get(pos), Square::Empty)
     }
-    
-    /// Checks if the board is full (no empty squares).
-    #[instrument]
-    pub fn is_full(&self) -> bool {
-        self.squares.iter().all(|s| *s != Square::Empty)
-    }
 
     /// Returns all squares as a slice.
     #[instrument]
     pub fn squares(&self) -> &[Square; 9] {
         &self.squares
-    }
-    
-    /// Checks for a winner on the board.
-    #[instrument]
-    pub fn winner(&self) -> Option<Player> {
-        use super::Position;
-        
-        const LINES: [[Position; 3]; 8] = [
-            // Rows
-            [Position::TopLeft, Position::TopCenter, Position::TopRight],
-            [Position::MiddleLeft, Position::Center, Position::MiddleRight],
-            [Position::BottomLeft, Position::BottomCenter, Position::BottomRight],
-            // Columns
-            [Position::TopLeft, Position::MiddleLeft, Position::BottomLeft],
-            [Position::TopCenter, Position::Center, Position::BottomCenter],
-            [Position::TopRight, Position::MiddleRight, Position::BottomRight],
-            // Diagonals
-            [Position::TopLeft, Position::Center, Position::BottomRight],
-            [Position::TopRight, Position::Center, Position::BottomLeft],
-        ];
-
-        for [a, b, c] in LINES {
-            let sq = self.get(a);
-            if sq != Square::Empty && sq == self.get(b) && sq == self.get(c) {
-                return match sq {
-                    Square::Occupied(player) => Some(player),
-                    Square::Empty => None,
-                };
-            }
-        }
-
-        None
     }
 
     /// Formats the board as a human-readable string.

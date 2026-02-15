@@ -43,6 +43,9 @@
 pub mod position;
 pub mod types;
 
+// Game rules (pure functions)
+pub mod rules;
+
 // Typestate architecture
 pub mod phases;
 pub mod action;
@@ -56,6 +59,7 @@ pub mod wrapper;
 pub use action::{Move, MoveError};
 pub use phases::{Finished, InProgress, Outcome, Setup};
 pub use position::Position;
+pub use rules::{check_winner, is_draw, is_full};
 pub use typestate::{GameSetup, GameInProgress, GameFinished, GameResult};
 pub use types::{Board, Player, Square};
 pub use wrapper::AnyGame;
