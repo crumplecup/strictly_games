@@ -55,6 +55,10 @@ pub mod action;
 pub mod contracts;
 pub mod typestate;
 
+// Kani support (formal verification)
+#[cfg(kani)]
+pub mod kani_support;
+
 // Wrapper for session management
 pub mod wrapper;
 

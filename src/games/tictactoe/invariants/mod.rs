@@ -3,6 +3,9 @@
 //! Invariants are logical properties that must hold throughout game execution.
 //! They are testable independently and serve as documentation of system guarantees.
 
+#[cfg(kani)]
+mod verification;
+
 /// A logical property that must hold for a given state.
 ///
 /// Invariants express system guarantees that should never be violated.

@@ -158,6 +158,19 @@ impl GameInProgress {
         
         Ok(GameResult::InProgress(game))
     }
+
+    /// Creates a game from parts (for Kani arbitrary states).
+    ///
+    /// **WARNING**: Bypasses normal construction - allows invalid states.
+    /// Only for formal verification.
+    #[cfg(kani)]
+    pub fn from_parts(board: Board, history: Vec<Move>, to_move: Player) -> Self {
+        Self {
+            board,
+            history,
+            to_move,
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
