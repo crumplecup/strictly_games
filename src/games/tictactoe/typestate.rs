@@ -5,7 +5,7 @@
 //! ALWAYS has an outcome, not `Option<Outcome>`.
 
 use super::action::{Move, MoveError};
-use super::contracts::{assert_invariants, LegalMove};
+use super::contracts::{assert_invariants, LegalMove, MoveContract, Contract};
 use super::invariants::{AlternatingTurnInvariant, HistoryConsistentInvariant, Invariant, MonotonicBoardInvariant};
 use super::phases::Outcome;
 use super::{Board, Player, Position, Square};
@@ -75,56 +75,52 @@ impl GameInProgress {
     /// Makes a move, consuming self and transitioning to next state.
     ///
     /// Returns either a new InProgress or a Finished state.
+    ///
+    /// Contract enforcement:
+    /// - Preconditions checked always (LegalMove)
+    /// - Postconditions checked in debug builds only
     #[instrument(skip(self))]
-    pub fn make_move(mut self, action: Move) -> Result<GameResult, MoveError> {
-        // Contract validation
-        LegalMove::check(&action, &self)?;
+    pub fn make_move(self, action: Move) -> Result<GameResult, MoveError> {
+        // Store state for postcondition checking
+        let before = self.clone();
+        
+        // Precondition: Check contract
+        MoveContract::pre(&self, &action)?;
         
         // Apply move
-        self.board.set(action.position, Square::Occupied(action.player));
-        self.history.push(action);
+        let mut game = self;
+        game.board.set(action.position, Square::Occupied(action.player));
+        game.history.push(action);
         
         // Check for winner using rules module
-        if let Some(winner) = super::rules::check_winner(&self.board) {
+        if let Some(winner) = super::rules::check_winner(&game.board) {
             return Ok(GameResult::Finished(GameFinished {
-                board: self.board,
-                history: self.history,
+                board: game.board,
+                history: game.history,
                 outcome: Outcome::Winner(winner),
             }));
         }
         
         // Check for draw using rules module
-        if super::rules::is_full(&self.board) {
+        if super::rules::is_full(&game.board) {
             return Ok(GameResult::Finished(GameFinished {
-                board: self.board,
-                history: self.history,
+                board: game.board,
+                history: game.history,
                 outcome: Outcome::Draw,
             }));
         }
         
         // Continue game
-        self.to_move = self.to_move.opponent();
+        game.to_move = game.to_move.opponent();
         
-        // Assert invariants in debug builds
-        debug_assert!(
-            MonotonicBoardInvariant::holds(&self),
-            "{}",
-            MonotonicBoardInvariant::description()
-        );
-        debug_assert!(
-            AlternatingTurnInvariant::holds(&self),
-            "{}",
-            AlternatingTurnInvariant::description()
-        );
-        debug_assert!(
-            HistoryConsistentInvariant::holds(&self),
-            "{}",
-            HistoryConsistentInvariant::description()
-        );
+        // Postcondition: Verify contract in debug builds
+        #[cfg(debug_assertions)]
+        MoveContract::post(&before, &game)?;
         
-        assert_invariants(&self);
+        // Legacy invariant assertions
+        assert_invariants(&game);
         
-        Ok(GameResult::InProgress(self))
+        Ok(GameResult::InProgress(game))
     }
     
     /// Returns the current player to move.

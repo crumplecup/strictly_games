@@ -60,6 +60,10 @@ pub enum MoveError {
     /// It's not this player's turn.
     #[display("It's not {:?}'s turn", _0)]
     WrongPlayer(Player),
+    
+    /// An invariant was violated (postcondition failure).
+    #[display("Invariant violation: {}", _0)]
+    InvariantViolation(String),
 }
 
 impl std::error::Error for MoveError {}

@@ -1,55 +1,31 @@
 //! Contract-based validation for tic-tac-toe.
 //!
-//! Contracts are declarative rules that can be checked independently.
-//! They serve as both validation and documentation of game rules.
+//! Contracts define correctness through preconditions and postconditions.
+//! They formalize the Hoare-style reasoning: {P} action {Q}
 
 use super::action::{Move, MoveError};
+use super::invariants::{AlternatingTurnInvariant, HistoryConsistentInvariant, Invariant, MonotonicBoardInvariant};
 use super::typestate::GameInProgress;
 use super::{Board, Player};
 use tracing::{instrument, warn};
 
 // ─────────────────────────────────────────────────────────────
-//  Game Invariants
+//  Contract Trait
 // ─────────────────────────────────────────────────────────────
 
-/// Invariant: Board state is consistent (X's and O's differ by ≤ 1).
-pub struct BoardConsistent;
-
-impl BoardConsistent {
-    #[instrument(skip(board))]
-    pub fn holds(board: &Board) -> bool {
-        let x_count = board.squares().iter().filter(|s| matches!(s, super::Square::Occupied(Player::X))).count();
-        let o_count = board.squares().iter().filter(|s| matches!(s, super::Square::Occupied(Player::O))).count();
-        
-        let diff = if x_count >= o_count {
-            x_count - o_count
-        } else {
-            o_count - x_count
-        };
-        
-        let valid = diff <= 1;
-        if !valid {
-            warn!(x_count, o_count, "Board consistency violated");
-        }
-        valid
-    }
-}
-
-/// Invariant: History length matches filled squares.
-pub struct HistoryComplete;
-
-impl HistoryComplete {
-    #[instrument(skip(game))]
-    pub fn holds(game: &GameInProgress) -> bool {
-        let filled = game.board().squares().iter().filter(|s| !matches!(s, super::Square::Empty)).count();
-        let history_len = game.history().len();
-        
-        let valid = filled == history_len;
-        if !valid {
-            warn!(filled, history_len, "History completeness violated");
-        }
-        valid
-    }
+/// A contract defines preconditions and postconditions for state transitions.
+///
+/// Contracts formalize Hoare-style reasoning:
+/// - Precondition: {P(state, action)} - must hold before applying action
+/// - Postcondition: {Q(before, after)} - must hold after applying action
+pub trait Contract<S, A> {
+    /// Checks preconditions before applying the action.
+    fn pre(state: &S, action: &A) -> Result<(), MoveError>;
+    
+    /// Checks postconditions after applying the action.
+    ///
+    /// This verifies that the transition maintained system invariants.
+    fn post(before: &S, after: &S) -> Result<(), MoveError>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -98,12 +74,163 @@ impl LegalMove {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Invariant Assertions
+//  Move Contract (Pre + Post)
 // ─────────────────────────────────────────────────────────────
+
+/// Contract for move actions.
+///
+/// Preconditions:
+/// - Square must be empty
+/// - Must be player's turn
+///
+/// Postconditions:
+/// - Board remains monotonic
+/// - Players still alternate
+/// - History remains consistent with board
+pub struct MoveContract;
+
+impl Contract<GameInProgress, Move> for MoveContract {
+    fn pre(game: &GameInProgress, action: &Move) -> Result<(), MoveError> {
+        LegalMove::check(action, game)
+    }
+    
+    fn post(before: &GameInProgress, after: &GameInProgress) -> Result<(), MoveError> {
+        // Verify all invariants still hold
+        if !MonotonicBoardInvariant::holds(after) {
+            return Err(MoveError::InvariantViolation(
+                "Postcondition failed: Board not monotonic".to_string()
+            ));
+        }
+        
+        if !AlternatingTurnInvariant::holds(after) {
+            return Err(MoveError::InvariantViolation(
+                "Postcondition failed: Players not alternating".to_string()
+            ));
+        }
+        
+        if !HistoryConsistentInvariant::holds(after) {
+            return Err(MoveError::InvariantViolation(
+                "Postcondition failed: History inconsistent".to_string()
+            ));
+        }
+        
+        Ok(())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Legacy Invariants (for backward compatibility)
+// ─────────────────────────────────────────────────────────────
+
+/// Invariant: Board state is consistent (X's and O's differ by ≤ 1).
+pub struct BoardConsistent;
+
+impl BoardConsistent {
+    #[instrument(skip(board))]
+    pub fn holds(board: &Board) -> bool {
+        let x_count = board.squares().iter().filter(|s| matches!(s, super::Square::Occupied(Player::X))).count();
+        let o_count = board.squares().iter().filter(|s| matches!(s, super::Square::Occupied(Player::O))).count();
+        
+        let diff = if x_count >= o_count {
+            x_count - o_count
+        } else {
+            o_count - x_count
+        };
+        
+        let valid = diff <= 1;
+        if !valid {
+            warn!(x_count, o_count, "Board consistency violated");
+        }
+        valid
+    }
+}
+
+/// Invariant: History length matches filled squares.
+pub struct HistoryComplete;
+
+impl HistoryComplete {
+    #[instrument(skip(game))]
+    pub fn holds(game: &GameInProgress) -> bool {
+        let filled = game.board().squares().iter().filter(|s| !matches!(s, super::Square::Empty)).count();
+        let history_len = game.history().len();
+        
+        let valid = filled == history_len;
+        if !valid {
+            warn!(filled, history_len, "History completeness violated");
+        }
+        valid
+    }
+}
 
 /// Asserts that all game invariants hold (panic on violation in debug builds).
 #[instrument(skip(game))]
 pub fn assert_invariants(game: &GameInProgress) {
     debug_assert!(BoardConsistent::holds(game.board()), "Board consistency violated");
     debug_assert!(HistoryComplete::holds(game), "History completeness violated");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::games::tictactoe::{GameSetup, GameResult, Position};
+
+    #[test]
+    fn test_precondition_empty_square() {
+        let game = GameSetup::new().start(Player::X);
+        let action = Move::new(Player::X, Position::Center);
+        
+        // Should pass - square is empty
+        assert!(MoveContract::pre(&game, &action).is_ok());
+    }
+
+    #[test]
+    fn test_precondition_occupied_square() {
+        let game = GameSetup::new().start(Player::X);
+        let action = Move::new(Player::X, Position::Center);
+        
+        if let Ok(GameResult::InProgress(game)) = game.make_move(action) {
+            // Try to play same square
+            let action2 = Move::new(Player::O, Position::Center);
+            assert!(matches!(
+                MoveContract::pre(&game, &action2),
+                Err(MoveError::SquareOccupied(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn test_precondition_wrong_turn() {
+        let game = GameSetup::new().start(Player::X);
+        let action = Move::new(Player::O, Position::Center);  // O plays when it's X's turn
+        
+        assert!(matches!(
+            MoveContract::pre(&game, &action),
+            Err(MoveError::WrongPlayer(_))
+        ));
+    }
+
+    #[test]
+    fn test_postcondition_holds_after_move() {
+        let game = GameSetup::new().start(Player::X);
+        let action = Move::new(Player::X, Position::Center);
+        
+        if let Ok(GameResult::InProgress(after)) = game.clone().make_move(action) {
+            // Postcondition should hold
+            assert!(MoveContract::post(&game, &after).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_postcondition_detects_corruption() {
+        let game = GameSetup::new().start(Player::X);
+        let action = Move::new(Player::X, Position::Center);
+        
+        if let Ok(GameResult::InProgress(mut after)) = game.clone().make_move(action) {
+            // Corrupt the board
+            after.board.set(Position::TopLeft, super::super::Square::Occupied(Player::O));
+            
+            // Postcondition should fail
+            assert!(MoveContract::post(&game, &after).is_err());
+        }
+    }
 }
