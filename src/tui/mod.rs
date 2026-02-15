@@ -2,9 +2,6 @@
 
 #![warn(missing_docs)]
 
-mod ui;
-mod players;
-mod http_client;
 mod rest_client;  // Type-safe REST client
 mod standalone;
 mod input;  // Cursor movement
