@@ -129,8 +129,11 @@ impl AgentConfig {
 #[derive(Debug, Clone, Display, Error)]
 #[display("Config error: {} at {}:{}", message, file, line)]
 pub struct ConfigError {
+    /// Error message.
     pub message: String,
+    /// Line number where error occurred.
     pub line: u32,
+    /// Source file where error occurred.
     pub file: &'static str,
 }
 

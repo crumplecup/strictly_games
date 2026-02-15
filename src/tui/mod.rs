@@ -17,9 +17,9 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{io, path::PathBuf};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 
-use crate::games::tictactoe::{AnyGame, Position};
+use crate::games::tictactoe::Position;
 use rest_client::RestGameClient;
 
 /// Run the TUI client

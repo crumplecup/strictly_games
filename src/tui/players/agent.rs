@@ -1,11 +1,11 @@
 //! AI agent player that prompts agent via MCP sampling.
 
 use super::Player;
-use anyhow::{Context, Result};
-use rmcp::model::{Content, CreateMessageRequestParams, Role, SamplingMessage};
+use anyhow::Result;
+use rmcp::model::{CreateMessageRequestParams, Role, SamplingMessage};
 use rmcp::service::{Peer, RoleServer};
 use std::sync::Arc;
-use crate::games::tictactoe::{AnyGame, Position, Player as Mark};
+use crate::games::tictactoe::{AnyGame, Position};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 

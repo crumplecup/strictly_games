@@ -12,7 +12,7 @@ use crate::games::tictactoe::{types::Board, Player, Position};
 
 /// Renders the game board with cursor highlight.
 pub fn draw(frame: &mut Frame, board: &Board, cursor: Position, status: &str) {
-    let area = frame.size();
+    let area = frame.area();
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)

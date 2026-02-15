@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 use tokio::process::{Child, Command};
 use tokio::time::{sleep, Duration, timeout};
-use tracing::{debug, info, warn, instrument};
+use tracing::{debug, info, instrument};
 
 /// Guards for spawned subprocesses. Kills processes on drop.
 pub struct ProcessGuards {

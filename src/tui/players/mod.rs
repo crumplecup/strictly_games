@@ -8,11 +8,6 @@ pub mod simple_ai;
 pub mod http;
 pub mod http_human;
 
-pub use agent::AgentPlayer;
-pub use human::HumanPlayer;
-pub use simple_ai::SimpleAI;
-pub use http::HttpOpponent;
-pub use http_human::HttpHumanPlayer;
 
 /// Trait for players (human or AI).
 #[async_trait]

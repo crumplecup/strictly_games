@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use tokio::time::{sleep, Duration};
 use tracing::{debug, error, info, instrument, warn};
 
 /// Game board state from server.
@@ -455,7 +454,6 @@ impl HttpGameClient {
         //  4 | X | 6  
         // -----------
         //  7 | 8 | 9
-        let mut in_board = false;
         let mut row = 0;
         
         for line in text.lines() {
@@ -481,7 +479,6 @@ impl HttpGameClient {
             
             // Parse board grid (lines with | separators)
             if line.contains('|') && !line.contains('-') {
-                in_board = true;
                 let cells: Vec<&str> = line.split('|').map(|s| s.trim()).collect();
                 
                 if cells.len() == 3 {
