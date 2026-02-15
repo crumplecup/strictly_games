@@ -4,7 +4,7 @@
 //! They formalize the Hoare-style reasoning: {P} action {Q}
 
 use super::action::{Move, MoveError};
-use super::invariants::{AlternatingTurnInvariant, HistoryConsistentInvariant, Invariant, MonotonicBoardInvariant};
+use super::invariants::{InvariantSet, TicTacToeInvariants};
 use super::typestate::GameInProgress;
 use super::{Board, Player};
 use tracing::{instrument, warn};
@@ -94,27 +94,16 @@ impl Contract<GameInProgress, Move> for MoveContract {
         LegalMove::check(action, game)
     }
     
-    fn post(before: &GameInProgress, after: &GameInProgress) -> Result<(), MoveError> {
-        // Verify all invariants still hold
-        if !MonotonicBoardInvariant::holds(after) {
-            return Err(MoveError::InvariantViolation(
-                "Postcondition failed: Board not monotonic".to_string()
-            ));
-        }
-        
-        if !AlternatingTurnInvariant::holds(after) {
-            return Err(MoveError::InvariantViolation(
-                "Postcondition failed: Players not alternating".to_string()
-            ));
-        }
-        
-        if !HistoryConsistentInvariant::holds(after) {
-            return Err(MoveError::InvariantViolation(
-                "Postcondition failed: History inconsistent".to_string()
-            ));
-        }
-        
-        Ok(())
+    fn post(_before: &GameInProgress, after: &GameInProgress) -> Result<(), MoveError> {
+        // Verify all invariants using the composed set
+        TicTacToeInvariants::check_all(after).map_err(|violations| {
+            let descriptions = violations
+                .iter()
+                .map(|v| v.description.as_str())
+                .collect::<Vec<_>>()
+                .join("; ");
+            MoveError::InvariantViolation(format!("Postcondition failed: {}", descriptions))
+        })
     }
 }
 
