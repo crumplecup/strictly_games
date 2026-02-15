@@ -4,20 +4,16 @@
 
 #![warn(missing_docs)]
 
-mod agent_config;
-mod agent_handler;
 mod cli;
-mod games;
-mod llm_client;
-mod server;
-mod session;
-mod tui;
 
 use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
 use rmcp::ServiceExt;
-use server::GameServer;
+use strictly_games::{
+    AgentConfig, GameAgent, GameServer, SessionManager,
+    run_tui as run_tui_impl, Game,
+};
 use tracing::{error, info, instrument};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -95,7 +91,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     let session_manager = Arc::new(LocalSessionManager::default());
     
     // Create SHARED SessionManager for game state (already has Arc<Mutex<>> internally)
-    let game_sessions = session::SessionManager::new();
+    let game_sessions = SessionManager::new();
     
     // Configure for STATEFUL mode (required for elicitation loops)
     let mut config = StreamableHttpServerConfig::default();
@@ -126,7 +122,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 if let Some(session) = sessions.get_session(&session_id) {
                     Json(session.game.clone())
                 } else {
-                    Json(crate::games::tictactoe::Game::new().into())
+                    Json(Game::new().into())
                 }
             }
         }))
@@ -180,7 +176,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
 /// Run the TUI client
 #[instrument(skip_all, fields(server_url = ?server_url, port))]
 async fn run_tui(server_url: Option<String>, port: u16, agent_config: std::path::PathBuf) -> Result<()> {
-    tui::run(server_url, port, agent_config).await
+    run_tui_impl(server_url, port, agent_config).await
 }
 
 /// Run the MCP agent
@@ -201,7 +197,7 @@ async fn run_agent(
     info!(config_name = %config.name(), "Config loaded");
     
     // Create handler
-    let handler = agent_handler::GameAgent::new(config.clone());
+    let handler = GameAgent::new(config.clone());
     info!("Handler created");
     
     // Initialize LLM client
@@ -272,7 +268,7 @@ async fn run_agent(
 #[instrument(skip(peer, config))]
 async fn test_play_game(
     peer: &rmcp::Peer<rmcp::RoleClient>,
-    config: &agent_config::AgentConfig,
+    config: &AgentConfig,
     session_id: &str,
 ) -> Result<()> {
     use serde_json::json;
@@ -297,9 +293,9 @@ async fn test_play_game(
 
 #[instrument(skip(handler))]
 async fn connect_http(
-    handler: agent_handler::GameAgent,
+    handler: GameAgent,
     url: &str,
-) -> Result<rmcp::service::RunningService<rmcp::RoleClient, agent_handler::GameAgent>> {
+) -> Result<rmcp::service::RunningService<rmcp::RoleClient, GameAgent>> {
     use rmcp::transport::StreamableHttpClientTransport;
     
     info!(url, "Creating HTTP transport");
@@ -315,17 +311,17 @@ async fn connect_http(
 fn load_agent_config(
     config_path: &std::path::Path,
     server_command_override: Option<String>,
-) -> Result<agent_config::AgentConfig> {
+) -> Result<AgentConfig> {
     info!("Loading agent configuration");
     
     let mut config = if config_path.exists() {
-        agent_config::AgentConfig::from_file(config_path)?
+        AgentConfig::from_file(config_path)?
     } else {
         info!(
             "Config file not found at {}, using defaults",
             config_path.display()
         );
-        agent_config::AgentConfig::new(
+        AgentConfig::new(
             "Agent_1".to_string(),
             vec![
                 "cargo".to_string(),
@@ -341,7 +337,7 @@ fn load_agent_config(
     if let Some(cmd) = server_command_override {
         info!(command = %cmd, "Overriding server command");
         let parts: Vec<String> = cmd.split_whitespace().map(|s| s.to_string()).collect();
-        config = agent_config::AgentConfig::new(config.name().clone(), parts, config.server_cwd().clone());
+        config = AgentConfig::new(config.name().clone(), parts, config.server_cwd().clone());
     }
     
     Ok(config)
@@ -349,7 +345,7 @@ fn load_agent_config(
 
 #[instrument(skip(config))]
 async fn start_server(
-    config: &agent_config::AgentConfig,
+    config: &AgentConfig,
 ) -> Result<(
     tokio::process::ChildStdin,
     tokio::process::ChildStdout,

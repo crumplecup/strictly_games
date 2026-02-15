@@ -208,40 +208,6 @@ impl RestGameClient {
         Ok(())
     }
     
-    
-    /// Starts a new game via MCP tool.
-    #[instrument(skip(self))]
-    pub async fn start_game(&self) -> Result<()> {
-        info!("Starting new game");
-        
-        let request = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 4,
-            "method": "tools/call",
-            "params": {
-                "name": "start_game",
-                "arguments": {
-                    "session_id": self.session_id
-                }
-            }
-        });
-        
-        let response = self.client
-            .post(&format!("{}/message", self.base_url))
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json, text/event-stream")
-            .header("mcp-session-id", &self.mcp_session_id)
-            .json(&request)
-            .send()
-            .await?;
-        
-        if !response.status().is_success() {
-            anyhow::bail!("Start game failed: {}", response.status());
-        }
-        
-        Ok(())
-    }
-    
     /// Restarts current game (keeps players registered).
     #[instrument(skip(self))]
     pub async fn restart_game(&mut self) -> Result<()> {

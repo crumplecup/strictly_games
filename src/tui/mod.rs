@@ -2,9 +2,6 @@
 
 #![warn(missing_docs)]
 
-mod ui;
-mod players;
-mod http_client;
 mod rest_client;  // Type-safe REST client
 mod standalone;
 mod input;  // Cursor movement
@@ -17,9 +14,9 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{io, path::PathBuf};
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 
-use crate::games::tictactoe::{AnyGame, Position};
+use crate::games::tictactoe::Position;
 use rest_client::RestGameClient;
 
 /// Run the TUI client

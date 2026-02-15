@@ -38,6 +38,7 @@ mod games;
 mod llm_client;
 mod server;
 mod session;
+mod tui;
 
 // Crate-level exports - Agent configuration
 pub use agent_config::{AgentConfig, ConfigError};
@@ -53,6 +54,9 @@ pub use server::{GameServer, GetBoardRequest, MakeMoveRequest, PlayGameRequest, 
 
 // Crate-level exports - Session management
 pub use session::{GameSession, Player, PlayerType, SessionManager};
+
+// Crate-level exports - TUI
+pub use tui::run as run_tui;
 
 // Crate-level exports - Game types (tic-tac-toe with typestates)
 pub use games::tictactoe::{
