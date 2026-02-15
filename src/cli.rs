@@ -32,9 +32,17 @@ pub enum Command {
     
     /// Run the terminal UI client
     Tui {
-        /// HTTP server URL
-        #[arg(long, default_value = "http://localhost:3000")]
-        server_url: String,
+        /// Game server URL (HTTP). If not provided, runs in standalone mode.
+        #[arg(long)]
+        server_url: Option<String>,
+        
+        /// Port for standalone mode server
+        #[arg(long, default_value = "3000")]
+        port: u16,
+        
+        /// Path to agent config for standalone mode
+        #[arg(long, default_value = "agent_config.toml")]
+        agent_config: std::path::PathBuf,
     },
     
     /// Run an MCP agent that plays games

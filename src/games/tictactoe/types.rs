@@ -1,8 +1,8 @@
 //! Core domain types for tic-tac-toe.
 
 use elicitation::{Elicit, Prompt, Select};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 
 /// Player in the game.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
@@ -15,6 +15,7 @@ pub enum Player {
 
 impl Player {
     /// Returns the opponent player.
+    #[instrument]
     pub fn opponent(self) -> Self {
         match self {
             Player::X => Player::O,
@@ -41,44 +42,47 @@ pub struct Board {
 
 impl Board {
     /// Creates a new empty board.
+    #[instrument]
     pub fn new() -> Self {
         Self {
             squares: [Square::Empty; 9],
         }
     }
 
-    /// Gets the square at the given position (0-8).
-    pub fn get(&self, pos: usize) -> Option<Square> {
-        self.squares.get(pos).copied()
+    /// Gets the square at the given position.
+    #[instrument]
+    pub fn get(&self, pos: super::Position) -> Square {
+        self.squares[pos.to_index()]
     }
 
     /// Sets the square at the given position.
-    pub fn set(&mut self, pos: usize, square: Square) -> Result<(), &'static str> {
-        if pos >= 9 {
-            return Err("Position out of bounds");
-        }
-        self.squares[pos] = square;
-        Ok(())
+    #[instrument]
+    pub fn set(&mut self, pos: super::Position, square: Square) {
+        self.squares[pos.to_index()] = square;
     }
 
     /// Checks if a square is empty.
-    pub fn is_empty(&self, pos: usize) -> bool {
-        matches!(self.get(pos), Some(Square::Empty))
+    #[instrument]
+    pub fn is_empty(&self, pos: super::Position) -> bool {
+        matches!(self.get(pos), Square::Empty)
     }
 
     /// Returns all squares as a slice.
+    #[instrument]
     pub fn squares(&self) -> &[Square; 9] {
         &self.squares
     }
 
     /// Formats the board as a human-readable string.
+    #[instrument]
     pub fn display(&self) -> String {
+        use super::Position;
         let mut result = String::new();
         for row in 0..3 {
             for col in 0..3 {
-                let pos = row * 3 + col;
-                let symbol = match self.squares[pos] {
-                    Square::Empty => (pos + 1).to_string(),
+                let pos = Position::from_index(row * 3 + col).unwrap();
+                let symbol = match self.squares[pos.to_index()] {
+                    Square::Empty => (pos.to_index() + 1).to_string(),
                     Square::Occupied(Player::X) => "X".to_string(),
                     Square::Occupied(Player::O) => "O".to_string(),
                 };
@@ -122,11 +126,12 @@ pub struct GameState {
     /// Game status.
     status: GameStatus,
     /// Move history (positions played).
-    history: Vec<usize>,
+    history: Vec<super::Position>,
 }
 
 impl GameState {
     /// Creates a new game.
+    #[instrument]
     pub fn new() -> Self {
         Self {
             board: Board::new(),
@@ -137,28 +142,32 @@ impl GameState {
     }
 
     /// Returns the board.
+    #[instrument]
     pub fn board(&self) -> &Board {
         &self.board
     }
 
     /// Returns the current player.
+    #[instrument]
     pub fn current_player(&self) -> Player {
         self.current_player
     }
 
     /// Returns the game status.
+    #[instrument]
     pub fn status(&self) -> &GameStatus {
         &self.status
     }
 
     /// Returns the move history.
-    pub fn history(&self) -> &[usize] {
+    #[instrument]
+    pub fn history(&self) -> &[super::Position] {
         &self.history
     }
 
     /// Applies a move (unchecked - use Game::make_move for validation).
-    pub(super) fn apply_move(&mut self, pos: usize, player: Player) {
-        self.board.set(pos, Square::Occupied(player)).unwrap();
+    pub(super) fn apply_move(&mut self, pos: super::Position, player: Player) {
+        self.board.set(pos, Square::Occupied(player));
         self.history.push(pos);
         self.current_player = player.opponent();
     }
@@ -175,9 +184,4 @@ impl Default for GameState {
     }
 }
 
-/// A move in the game (position 0-8).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Elicit)]
-pub struct Move {
-    /// Position on the board (0-8, where 0=top-left, 8=bottom-right).
-    pub position: u8,
-}
+

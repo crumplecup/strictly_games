@@ -1,13 +1,13 @@
 //! Application state and logic.
 
-use crate::games::tictactoe::Game;
+use crate::games::tictactoe::{AnyGame, Position};
 use tracing::debug;
 
 use super::orchestrator::GameEvent;
 
 /// Main application state.
 pub struct App {
-    game: Game,
+    game: AnyGame,
     status_message: String,
     current_player_name: Option<String>,
 }
@@ -16,14 +16,14 @@ impl App {
     /// Creates a new application.
     pub fn new() -> Self {
         Self {
-            game: Game::new(),
+            game: crate::games::tictactoe::Game::new().into(),
             status_message: "Waiting for game to start...".to_string(),
             current_player_name: None,
         }
     }
 
     /// Gets the current game.
-    pub fn game(&self) -> &Game {
+    pub fn game(&self) -> &AnyGame {
         &self.game
     }
 
@@ -49,12 +49,18 @@ impl App {
             }
             GameEvent::MoveMade { player, position } => {
                 // Update our game state
-                if let Err(e) = self.game.make_move(position) {
-                    self.status_message = format!("Move error: {}", e);
-                } else {
-                    debug!(player = %player, position, "Move applied to UI state");
-                    self.status_message = format!("{} played position {}", player, position + 1);
-                }
+                let old_game = std::mem::replace(&mut self.game, crate::games::tictactoe::Game::new().into());
+                match old_game.clone().place(position) {
+                    Ok(new_game) => {
+                        debug!(player = %player, position = ?position, "Move applied to UI state");
+                        self.status_message = format!("{} played {}", player, position.label());
+                        self.game = new_game;
+                    }
+                    Err(e) => {
+                        self.status_message = format!("Move error: {}", e);
+                        self.game = old_game; // Restore old game on error
+                    }
+                };
             }
             GameEvent::GameOver { winner } => {
                 self.status_message = match winner {
@@ -72,7 +78,7 @@ impl App {
     /// Restarts the game.
     pub fn restart(&mut self) {
         debug!("Restarting game");
-        self.game = Game::new();
+        self.game = crate::games::tictactoe::Game::new().into();
         self.status_message = "Game restarted. Player X's turn.".to_string();
         self.current_player_name = None;
     }

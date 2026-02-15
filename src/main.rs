@@ -18,7 +18,7 @@ use clap::Parser;
 use cli::{Cli, Command};
 use rmcp::ServiceExt;
 use server::GameServer;
-use tracing::{info, instrument};
+use tracing::{error, info, instrument};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Server => run_mcp_server().await,
         Command::Http { port, host } => run_http_server(host, port).await,
-        Command::Tui { server_url } => run_tui(server_url).await,
+        Command::Tui { server_url, port, agent_config } => run_tui(server_url, port, agent_config).await,
         Command::Agent {
             config,
             server_url,
@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
 }
 
 /// Run the MCP game server (stdio mode)
+#[instrument]
 async fn run_mcp_server() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -60,6 +61,7 @@ async fn run_mcp_server() -> Result<()> {
 }
 
 /// Run the HTTP game server
+#[instrument(skip_all, fields(host = %host, port))]
 async fn run_http_server(host: String, port: u16) -> Result<()> {
     use axum::{body::Body, http::Request, Router};
     use rmcp::transport::streamable_http_server::{
@@ -69,12 +71,22 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     use std::sync::Arc;
     use tower::ServiceBuilder;
     use tracing::{debug, warn};
+    use std::fs::OpenOptions;
+
+    // Log server to file since TUI owns stdout
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("server.log")
+        .expect("Failed to open server.log");
 
     tracing_subscriber::fmt()
+        .with_writer(std::sync::Arc::new(log_file))
         .with_env_filter(
             EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| EnvFilter::new("info,rmcp=debug"))
         )
+        .with_ansi(false)
         .init();
 
     info!("Starting Strictly Games MCP server on HTTP");
@@ -82,26 +94,51 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
 
     let session_manager = Arc::new(LocalSessionManager::default());
     
-    // Create SHARED SessionManager for game state (Arc for multi-request sharing)
-    let game_sessions = Arc::new(session::SessionManager::new());
+    // Create SHARED SessionManager for game state (already has Arc<Mutex<>> internally)
+    let game_sessions = session::SessionManager::new();
     
     // Configure for STATEFUL mode (required for elicitation loops)
     let mut config = StreamableHttpServerConfig::default();
     config.stateful_mode = true;  // Keep connections alive for bidirectional communication
     debug!(?config, "HTTP service configuration");
     
+    // Clone sessions for different uses (cheap - clones internal Arc)
+    let rest_sessions = game_sessions.clone();
+    let mcp_game_sessions = game_sessions.clone();
+    
     // Factory creates GameServer that shares session state
     let http_service = StreamableHttpService::new(
         move || {
             debug!("Creating new GameServer instance with shared sessions");
-            Ok(GameServer::with_sessions((*game_sessions).clone()))
+            Ok(GameServer::with_sessions(mcp_game_sessions.clone()))
         },
-        session_manager,
+        session_manager.clone(),
         config,
     );
     
-    // Wrap service with request logging
+    // Build app with REST API and MCP fallback
     let app = Router::new()
+        .route("/health", axum::routing::get(|| async { "OK" }))
+        .route("/api/sessions/:session_id/game", axum::routing::get({
+            let sessions = rest_sessions.clone();
+            move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
+                use axum::Json;
+                if let Some(session) = sessions.get_session(&session_id) {
+                    Json(session.game.clone())
+                } else {
+                    Json(crate::games::tictactoe::Game::new().into())
+                }
+            }
+        }))
+        .route("/api/sessions/:session_id/restart", axum::routing::post({
+            move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
+                use axum::http::StatusCode;
+                match rest_sessions.restart_game(&session_id) {
+                    Ok(()) => StatusCode::OK,
+                    Err(_) => StatusCode::NOT_FOUND,
+                }
+            }
+        }))
         .fallback_service(ServiceBuilder::new()
             .map_request(|req: Request<Body>| {
                 info!(
@@ -141,8 +178,9 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
 }
 
 /// Run the TUI client
-async fn run_tui(server_url: String) -> Result<()> {
-    tui::run_tui(server_url).await
+#[instrument(skip_all, fields(server_url = ?server_url, port))]
+async fn run_tui(server_url: Option<String>, port: u16, agent_config: std::path::PathBuf) -> Result<()> {
+    tui::run(server_url, port, agent_config).await
 }
 
 /// Run the MCP agent
@@ -160,19 +198,27 @@ async fn run_agent(
     
     // Load configuration
     let config = load_agent_config(&config, server_command)?;
+    info!(config_name = %config.name(), "Config loaded");
     
     // Create handler
     let handler = agent_handler::GameAgent::new(config.clone());
+    info!("Handler created");
     
     // Initialize LLM client
     info!("Initializing LLM client");
-    handler.initialize_llm().await.map_err(|e| anyhow::anyhow!(e))?;
+    handler.initialize_llm().await.map_err(|e| {
+        error!(error = %e, "LLM init failed");
+        anyhow::anyhow!(e)
+    })?;
+    info!("LLM initialized");
     
     // Connect to server (either HTTP or stdio)
     let running_service = if let Some(server_url) = &server_url {
         // HTTP mode
         info!(url = %server_url, "Connecting to HTTP MCP server");
-        connect_http(handler, server_url).await?
+        let svc = connect_http(handler, server_url).await?;
+        info!("Connected to HTTP server");
+        svc
     } else {
         // Stdio mode (spawn server)
         info!("Starting server process for stdio connection");
@@ -231,7 +277,7 @@ async fn test_play_game(
 ) -> Result<()> {
     use serde_json::json;
     
-    info!(session_id, "Calling play_game tool");
+    info!(session_id, player_name = %config.name(), "test_play_game: Calling play_game tool");
     
     let result = peer
         .call_tool(rmcp::model::CallToolRequestParams {
@@ -245,7 +291,7 @@ async fn test_play_game(
         })
         .await?;
     
-    info!(result = ?result, "play_game completed");
+    info!(result = ?result, "test_play_game: play_game completed");
     Ok(())
 }
 
@@ -346,13 +392,30 @@ async fn start_server(
 
 #[instrument]
 fn initialize_agent_tracing() {
+    use tracing_subscriber::fmt::format::FmtSpan;
+    use std::fs::OpenOptions;
+    
+    // Log agent to file since TUI owns stderr
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("agent.log")
+        .expect("Failed to open agent.log");
+    
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,strictly_games=debug".into()),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::sync::Arc::new(log_file))
+                .with_span_events(FmtSpan::ENTER | FmtSpan::CLOSE)
+                .with_line_number(true)
+                .with_thread_ids(true)
+                .with_ansi(false)
+        )
         .init();
     
-    info!("Agent tracing initialized");
+    info!("Agent tracing initialized, logging to agent.log");
 }

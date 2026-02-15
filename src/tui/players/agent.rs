@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use rmcp::model::{Content, CreateMessageRequestParams, Role, SamplingMessage};
 use rmcp::service::{Peer, RoleServer};
 use std::sync::Arc;
-use crate::games::tictactoe::Game;
+use crate::games::tictactoe::{AnyGame, Position, Player as Mark};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -16,14 +16,14 @@ use tracing::{debug, info, warn};
 pub struct AgentPlayer {
     name: String,
     peer: Option<Arc<Peer<RoleServer>>>,
-    move_rx: mpsc::UnboundedReceiver<usize>,
+    move_rx: mpsc::UnboundedReceiver<Position>,
 }
 
 impl AgentPlayer {
     /// Creates a new agent player with optional MCP peer for prompting.
     pub fn new(
         name: impl Into<String>,
-        move_rx: mpsc::UnboundedReceiver<usize>,
+        move_rx: mpsc::UnboundedReceiver<Position>,
         peer: Option<Arc<Peer<RoleServer>>>,
     ) -> Self {
         let name = name.into();
@@ -39,14 +39,14 @@ impl AgentPlayer {
 
 #[async_trait::async_trait]
 impl Player for AgentPlayer {
-    async fn get_move(&mut self, game: &Game) -> Result<usize> {
+    async fn get_move(&mut self, game: &AnyGame) -> Result<Position> {
         debug!(agent = %self.name, "Agent's turn");
 
         // If we have a peer, send a prompt to the agent
         if let Some(peer) = &self.peer {
-            let state = game.state();
-            let board = state.board().display();
-            let current_player = state.current_player();
+            let board = game.board().display();
+            let current_player = game.to_move()
+                .ok_or_else(|| anyhow::anyhow!("Game is over"))?;
 
             let prompt = format!(
                 "It's your turn! You are playing as {:?}.\n\n\
@@ -59,11 +59,17 @@ impl Player for AgentPlayer {
             info!(agent = %self.name, "Sending prompt to agent");
 
             let params = CreateMessageRequestParams {
-                meta: None,
-                task: None,
                 messages: vec![SamplingMessage {
                     role: Role::User,
-                    content: Content::text(prompt),
+                    content: rmcp::model::SamplingContent::Single(
+                        rmcp::model::SamplingMessageContent::Text(
+                            rmcp::model::RawTextContent {
+                                text: prompt,
+                                meta: None,
+                            }
+                        )
+                    ),
+                    meta: None,
                 }],
                 model_preferences: None,
                 system_prompt: Some(
@@ -74,6 +80,10 @@ impl Player for AgentPlayer {
                 max_tokens: 100,
                 stop_sequences: None,
                 metadata: None,
+                tool_choice: None,
+                tools: None,
+                meta: None,
+                task: None,
             };
 
             match peer.create_message(params).await {
@@ -95,7 +105,7 @@ impl Player for AgentPlayer {
         
         match tokio::time::timeout(timeout_duration, self.move_rx.recv()).await {
             Ok(Some(position)) => {
-                debug!(agent = %self.name, position, "Received move from agent");
+                debug!(agent = %self.name, position = ?position, "Received move from agent");
                 Ok(position)
             }
             Ok(None) => {
