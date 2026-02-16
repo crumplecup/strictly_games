@@ -2,9 +2,10 @@
 
 use async_openai::{
     config::OpenAIConfig,
-    types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
-        ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
+    types::chat::{
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
+        ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
+        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
     },
     Client as OpenAIClient,
 };
@@ -183,35 +184,22 @@ impl LlmClient {
 
         debug!("Building chat completion request");
         let messages = vec![
-            ChatCompletionRequestMessage::System(
-                ChatCompletionRequestSystemMessageArgs::default()
-                    .content(system_prompt)
-                    .build()
-                    .map_err(|e| {
-                        error!(error = ?e, "Failed to build system message");
-                        LlmError::new(format!("Failed to build system message: {}", e))
-                    })?,
-            ),
-            ChatCompletionRequestMessage::User(
-                ChatCompletionRequestUserMessageArgs::default()
-                    .content(user_message)
-                    .build()
-                    .map_err(|e| {
-                        error!(error = ?e, "Failed to build user message");
-                        LlmError::new(format!("Failed to build user message: {}", e))
-                    })?,
-            ),
+            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                content: ChatCompletionRequestSystemMessageContent::Text(system_prompt.to_string()),
+                name: None,
+            }),
+            ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+                content: ChatCompletionRequestUserMessageContent::Text(user_message.to_string()),
+                name: None,
+            }),
         ];
 
-        let request = CreateChatCompletionRequestArgs::default()
-            .model(&self.config.model)
-            .messages(messages)
-            .max_tokens(self.config.max_tokens)
-            .build()
-            .map_err(|e| {
-                error!(error = ?e, "Failed to build request");
-                LlmError::new(format!("Failed to build request: {}", e))
-            })?;
+        let request = CreateChatCompletionRequest {
+            model: self.config.model.clone(),
+            messages,
+            max_completion_tokens: Some(self.config.max_tokens),
+            ..Default::default()
+        };
 
         debug!("Sending request to OpenAI");
         let response = client.chat().create(request).await.map_err(|e| {

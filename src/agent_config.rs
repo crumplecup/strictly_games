@@ -34,12 +34,12 @@ pub struct AgentConfig {
 
 #[instrument]
 fn default_provider() -> LlmProvider {
-    LlmProvider::OpenAI
+    LlmProvider::Anthropic
 }
 
 #[instrument]
 fn default_model() -> String {
-    "gpt-4o-mini".to_string()
+    "claude-3-5-haiku-20241022".to_string()
 }
 
 #[instrument]

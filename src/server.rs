@@ -1,9 +1,7 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::Player;
-use crate::games::tictactoe::types::Square;
+use crate::games::tictactoe::{Player, Position, ValidPositions};
 use crate::session::{PlayerType, SessionManager};
-use elicitation::ElicitCommunicator;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
@@ -382,143 +380,111 @@ impl GameServer {
                 continue;
             }
             
-            // It's our turn - elicit Position using Select paradigm with retry
-            tracing::info!(mark = ?mark, "Agent's turn, eliciting Position via Select");
+            // It's our turn - use pure elicitation (walled garden pattern)
+            tracing::info!(mark = ?mark, "Agent's turn - entering elicitation walled garden");
             
-            const MAX_RETRIES: usize = 5;
-            let mut position_selected = false;
-            
-            for attempt in 1..=MAX_RETRIES {
-                // Get valid positions before elicitation
-                let valid_positions = {
-                    let board = session.game.board();
-                    crate::games::tictactoe::Position::valid_moves(board)
-                };
+            // Elicitation + Validation loop (demonstrates composition)
+            // Elicitation ensures TYPE safety (Position enum)
+            // Validation ensures SEMANTIC correctness (square is empty)
+            let position = loop {
+                // THE ONLY WAY TO GET A POSITION: Through filtered elicitation
+                // Server wraps Position::valid_moves into the elicitation call stack
+                let candidate = self.elicit_position_filtered(peer.clone(), &req.session_id)
+                    .await?;
                 
-                if valid_positions.is_empty() {
-                    tracing::error!("No valid positions available (board full)");
-                    return Err(McpError::internal_error("Board is full", None));
+                tracing::info!(position = ?candidate, "Position elicited via framework Select paradigm");
+                
+                // Validate against board state (composition of elicitation + contracts)
+                // Note: With filtering above, this should always pass, but defensive check
+                let session = self.sessions.get_session(&req.session_id)
+                    .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
+                    
+                let board = session.game.board();
+                if board.is_empty(candidate) {
+                    tracing::debug!(position = ?candidate, "Position validated as empty");
+                    break candidate;
+                } else {
+                    tracing::warn!(
+                        position = ?candidate,
+                        "Position occupied despite filtering - retrying"
+                    );
+                    continue;
                 }
-                
-                tracing::info!(attempt, valid_count = valid_positions.len(), "Eliciting position (attempt {}/{})", attempt, MAX_RETRIES);
-                
-                // Build context-rich prompt with board state
-                let board_display = {
-                    let board = session.game.board();
-                    let mut display = String::from("Current board:\n");
-                    for row in 0..3 {
-                        display.push_str("  ");
-                        for col in 0..3 {
-                            let pos = crate::games::tictactoe::Position::from_index(row * 3 + col).unwrap();
-                            let marker = match board.get(pos) {
-                                Square::Empty => " ".to_string(),
-                                Square::Occupied(Player::X) => "X".to_string(),
-                                Square::Occupied(Player::O) => "O".to_string(),
-                            };
-                            display.push_str(&format!("{:^3}", marker));
-                            if col < 2 { display.push('|'); }
-                        }
-                        display.push('\n');
-                        if row < 2 { display.push_str("  -----------\n"); }
-                    }
-                    display
-                };
-                
-                // Build list of valid positions
-                let valid_options = valid_positions.iter()
-                    .map(|pos| format!("- {}", pos.label()))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                
-                let enhanced_prompt = format!(
-                    "{}\n\nYour mark: {}\n\nAvailable moves:\n{}\n\nRespond with the position name (e.g., 'Center', 'Top-left'):",
-                    board_display,
-                    match mark {
-                        crate::games::tictactoe::Player::X => "X",
-                        crate::games::tictactoe::Player::O => "O",
-                    },
-                    valid_options
-                );
-                
-                // Create ElicitServer wrapper and send enhanced prompt
-                let elicit_server = elicitation::ElicitServer::new(peer.clone());
-                
-                // Send prompt and parse response
-                let response = match elicit_server.send_prompt(&enhanced_prompt).await {
-                    Ok(resp) => resp,
-                    Err(e) => {
-                        tracing::error!(error = ?e, attempt, "Prompt send failed");
-                        if attempt == MAX_RETRIES {
-                            return Err(McpError::internal_error(format!("Failed to send prompt after {} attempts: {}", MAX_RETRIES, e), None));
-                        }
-                        tracing::warn!(attempt, "Retrying elicitation");
-                        continue;
-                    }
-                };
-                
-                // Parse response - try as label first (preferred), then number as fallback
-                let position = match crate::games::tictactoe::Position::from_label_or_number(&response) {
-                    Some(pos) if valid_positions.contains(&pos) => pos,
-                    Some(pos) => {
-                        tracing::warn!(position = ?pos, response = %response, attempt, "Parsed position but it's not available");
-                        if attempt == MAX_RETRIES {
-                            return Err(McpError::invalid_params(
-                                format!("Position {:?} is not available", pos),
-                                None
-                            ));
-                        }
-                        continue;
-                    }
-                    None => {
-                        tracing::warn!(response = %response, attempt, "Could not parse response as position");
-                        if attempt == MAX_RETRIES {
-                            return Err(McpError::invalid_params(
-                                format!("Invalid response: {}", response),
-                                None
-                            ));
-                        }
-                        continue;
-                    }
-                };
-                
-                tracing::info!(position = ?position, index = position.to_index(), attempt, "Agent selected position");
-                
-                // Note: Position elicitation demonstrates framework's type constraints
-                // Session constructs implicit Move action from (player, position)
-                // TODO: Elicit Move directly once contracts are integrated into elicitation
-                
-                // Make the move using session API (handles all validation + typestate transitions)
-                match session.make_move(&player_id, position) {
-                    Ok(()) => {
-                        tracing::info!(position = ?position, "Move executed successfully");
-                        position_selected = true;
-                        break;
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, position = ?position, attempt, "Move rejected, retrying");
-                        if attempt == MAX_RETRIES {
-                            return Err(McpError::internal_error(
-                                format!("Move failed after {} attempts: {}", MAX_RETRIES, e),
-                                None,
-                            ));
-                        }
-                        continue;
-                    }
-                }
-            }
+            };
             
-            if !position_selected {
-                tracing::error!("Failed to select valid position after {} attempts", MAX_RETRIES);
-                return Err(McpError::internal_error(
-                    format!("Could not complete move after {} attempts", MAX_RETRIES),
-                    None,
-                ));
+            tracing::info!(position = ?position, "Position elicited via framework Select paradigm");
+            
+            // Elicitation guarantees type safety, validation loop ensures semantic correctness
+            // Session API handles final validation + typestate transitions
+            match session.make_move(&player_id, position) {
+                Ok(()) => {
+                    tracing::info!(position = ?position, "Move executed - typestate transition complete");
+                }
+                Err(e) => {
+                    // Should not happen - we validated above - but defensive
+                    tracing::error!(error = %e, position = ?position, "Move rejected despite validation");
+                    return Err(McpError::internal_error(
+                        format!("Move rejected: {}", e),
+                        None,
+                    ));
+                }
             }
             
             // Update game state atomically (preserves player registrations)
             self.sessions.update_game_atomic(&req.session_id, session.game)
                 .map_err(|e| McpError::internal_error(e, None))?;
         }
+    }
+
+    /// Elicit a position with board-state filtering (walled garden pattern).
+    ///
+    /// This demonstrates the pattern for context-aware selection:
+    /// 1. Get current board state
+    /// 2. Filter Position::ALL to only valid (empty) squares  
+    /// 3. Wrap in ValidPositions view struct (derives Elicit)
+    /// 4. Call elicitation on the view - framework handles the rest
+    ///
+    /// Future: This pattern could be generalized with Select::Filter associated type.
+    #[instrument(skip(self, peer), fields(session_id))]
+    async fn elicit_position_filtered(
+        &self,
+        peer: Peer<RoleServer>,
+        session_id: &str,
+    ) -> Result<Position, McpError> {
+        // Get current board state for filtering
+        let session = self.sessions.get_session(session_id)
+            .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+        
+        let board = session.game.board();
+        let valid_positions = Position::valid_moves(board);
+        
+        if valid_positions.is_empty() {
+            return Err(McpError::internal_error("No valid moves available", None));
+        }
+        
+        tracing::debug!(
+            valid_count = valid_positions.len(),
+            positions = ?valid_positions,
+            "Filtered to valid positions"
+        );
+        
+        // Wrap in view struct and elicit through framework
+        let view = ValidPositions {
+            positions: valid_positions,
+        };
+        
+        let position = view.elicit_position(peer)
+            .await
+            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
+        
+        tracing::info!(position = ?position, "Position selected from filtered options");
+        Ok(position)
+    }
+
+    // Auto-generate elicitation tools for type-safe LLM interaction
+    elicitation::elicit_tools! {
+        Position,
+        Player,
     }
 }
 

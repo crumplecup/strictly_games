@@ -102,6 +102,8 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     let rest_sessions = game_sessions.clone();
     let mcp_game_sessions = game_sessions.clone();
     
+    debug!("About to create StreamableHttpService");
+    
     // Factory creates GameServer that shares session state
     let http_service = StreamableHttpService::new(
         move || {
@@ -112,10 +114,12 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
         config,
     );
     
+    debug!("StreamableHttpService created successfully");
+    
     // Build app with REST API and MCP fallback
     let app = Router::new()
         .route("/health", axum::routing::get(|| async { "OK" }))
-        .route("/api/sessions/:session_id/game", axum::routing::get({
+        .route("/api/sessions/{session_id}/game", axum::routing::get({
             let sessions = rest_sessions.clone();
             move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                 use axum::Json;
@@ -126,7 +130,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 }
             }
         }))
-        .route("/api/sessions/:session_id/restart", axum::routing::post({
+        .route("/api/sessions/{session_id}/restart", axum::routing::post({
             move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                 use axum::http::StatusCode;
                 match rest_sessions.restart_game(&session_id) {
@@ -188,6 +192,9 @@ async fn run_agent(
     test_play: bool,
     test_session: Option<String>,
 ) -> Result<()> {
+    // Load .env file (needed when run as subprocess)
+    dotenvy::dotenv().ok();
+    
     initialize_agent_tracing();
     
     info!("Starting MCP agent");
