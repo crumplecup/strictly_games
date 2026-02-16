@@ -1,6 +1,6 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::Player;
+use crate::games::tictactoe::{Player, Position};
 use crate::games::tictactoe::types::Square;
 use crate::session::{PlayerType, SessionManager};
 use elicitation::ElicitCommunicator;
@@ -519,6 +519,12 @@ impl GameServer {
             self.sessions.update_game_atomic(&req.session_id, session.game)
                 .map_err(|e| McpError::internal_error(e, None))?;
         }
+    }
+
+    // Auto-generate elicitation tools for type-safe LLM interaction
+    elicitation::elicit_tools! {
+        Position,
+        Player,
     }
 }
 
