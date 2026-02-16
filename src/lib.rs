@@ -71,4 +71,6 @@ pub use games::tictactoe::{
     // Domain types
     AnyGame, Board, Position, Square,
     Player as TicTacToePlayer,
+    // Filtered position view
+    ValidPositions,
 };

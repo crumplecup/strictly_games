@@ -1,6 +1,6 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::{Player, Position};
+use crate::games::tictactoe::{Player, Position, ValidPositions};
 use crate::session::{PlayerType, SessionManager};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -383,27 +383,46 @@ impl GameServer {
             // It's our turn - use pure elicitation (walled garden pattern)
             tracing::info!(mark = ?mark, "Agent's turn - entering elicitation walled garden");
             
-            // THE ONLY WAY TO GET A POSITION: Through elicitation framework
-            // This is the "walled garden" - agents cannot escape to manual construction
-            let position = self.elicit_position(peer.clone())
-                .await
-                .map_err(|e| {
-                    tracing::error!(error = ?e, "Position elicitation failed");
-                    McpError::internal_error(format!("Elicitation failed: {}", e), None)
-                })?;
+            // Elicitation + Validation loop (demonstrates composition)
+            // Elicitation ensures TYPE safety (Position enum)
+            // Validation ensures SEMANTIC correctness (square is empty)
+            let position = loop {
+                // THE ONLY WAY TO GET A POSITION: Through filtered elicitation
+                // Server wraps Position::valid_moves into the elicitation call stack
+                let candidate = self.elicit_position_filtered(peer.clone(), &req.session_id)
+                    .await?;
+                
+                tracing::info!(position = ?candidate, "Position elicited via framework Select paradigm");
+                
+                // Validate against board state (composition of elicitation + contracts)
+                // Note: With filtering above, this should always pass, but defensive check
+                let session = self.sessions.get_session(&req.session_id)
+                    .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
+                    
+                let board = session.game.board();
+                if board.is_empty(candidate) {
+                    tracing::debug!(position = ?candidate, "Position validated as empty");
+                    break candidate;
+                } else {
+                    tracing::warn!(
+                        position = ?candidate,
+                        "Position occupied despite filtering - retrying"
+                    );
+                    continue;
+                }
+            };
             
             tracing::info!(position = ?position, "Position elicited via framework Select paradigm");
             
-            // Elicitation guarantees type safety - now apply game rules via typestate
-            // Session API handles validation + typestate transitions
+            // Elicitation guarantees type safety, validation loop ensures semantic correctness
+            // Session API handles final validation + typestate transitions
             match session.make_move(&player_id, position) {
                 Ok(()) => {
                     tracing::info!(position = ?position, "Move executed - typestate transition complete");
                 }
                 Err(e) => {
-                    // Even with elicitation, game rules might reject (e.g., position occupied)
-                    // This demonstrates: elicitation ≠ validation, they compose
-                    tracing::error!(error = %e, position = ?position, "Move rejected by game rules");
+                    // Should not happen - we validated above - but defensive
+                    tracing::error!(error = %e, position = ?position, "Move rejected despite validation");
                     return Err(McpError::internal_error(
                         format!("Move rejected: {}", e),
                         None,
@@ -415,6 +434,51 @@ impl GameServer {
             self.sessions.update_game_atomic(&req.session_id, session.game)
                 .map_err(|e| McpError::internal_error(e, None))?;
         }
+    }
+
+    /// Elicit a position with board-state filtering (walled garden pattern).
+    ///
+    /// This demonstrates the pattern for context-aware selection:
+    /// 1. Get current board state
+    /// 2. Filter Position::ALL to only valid (empty) squares  
+    /// 3. Wrap in ValidPositions view struct (derives Elicit)
+    /// 4. Call elicitation on the view - framework handles the rest
+    ///
+    /// Future: This pattern could be generalized with Select::Filter associated type.
+    #[instrument(skip(self, peer), fields(session_id))]
+    async fn elicit_position_filtered(
+        &self,
+        peer: Peer<RoleServer>,
+        session_id: &str,
+    ) -> Result<Position, McpError> {
+        // Get current board state for filtering
+        let session = self.sessions.get_session(session_id)
+            .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+        
+        let board = session.game.board();
+        let valid_positions = Position::valid_moves(board);
+        
+        if valid_positions.is_empty() {
+            return Err(McpError::internal_error("No valid moves available", None));
+        }
+        
+        tracing::debug!(
+            valid_count = valid_positions.len(),
+            positions = ?valid_positions,
+            "Filtered to valid positions"
+        );
+        
+        // Wrap in view struct and elicit through framework
+        let view = ValidPositions {
+            positions: valid_positions,
+        };
+        
+        let position = view.elicit_position(peer)
+            .await
+            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
+        
+        tracing::info!(position = ?position, "Position selected from filtered options");
+        Ok(position)
     }
 
     // Auto-generate elicitation tools for type-safe LLM interaction

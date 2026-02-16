@@ -1,7 +1,8 @@
 //! Position enum with Select paradigm for tic-tac-toe moves.
 
 use super::types::Board;
-use elicitation::{Prompt, Select};
+use elicitation::{ElicitCommunicator, ElicitError, ElicitErrorKind, ElicitServer, Prompt, Select};
+use rmcp::{Peer, RoleServer};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -31,6 +32,73 @@ pub enum Position {
     BottomCenter,
     /// Bottom-right (position 8)
     BottomRight,
+}
+
+/// View struct for filtered position selection.
+///
+/// Wraps a dynamic list of valid positions to enable
+/// context-aware selection through the framework.
+#[derive(Debug, Clone)]
+pub struct ValidPositions {
+    /// Filtered list of valid positions
+    pub positions: Vec<Position>,
+}
+
+impl Prompt for ValidPositions {}
+
+impl Select for ValidPositions {
+    fn options() -> &'static [Self] {
+        // This will never be called - we override elicit_position() instead
+        &[]
+    }
+    
+    fn labels() -> &'static [&'static str] {
+        // This will never be called - we override elicit_position() instead
+        &[]
+    }
+    
+    fn from_label(_label: &str) -> Option<Self> {
+        // This will never be called - we override elicit_position() instead
+        None
+    }
+}
+
+impl ValidPositions {
+    /// Elicit a position from the filtered list.
+    pub async fn elicit_position(
+        self,
+        peer: Peer<RoleServer>,
+    ) -> Result<Position, ElicitError> {
+        // Build prompt with filtered options
+        let mut prompt = String::from("Please select a Position:\n\nOptions:\n");
+        for (idx, pos) in self.positions.iter().enumerate() {
+            prompt.push_str(&format!("{}. {}\n", idx + 1, pos.label()));
+        }
+        prompt.push_str(&format!("\nRespond with the number (1-{}) or exact label:", self.positions.len()));
+        
+        // Use framework's ElicitServer
+        let server = ElicitServer::new(peer);
+        let response: String = server.send_prompt(&prompt).await?;
+        
+        // Parse response
+        let selected = if let Ok(num) = response.trim().parse::<usize>() {
+            if num >= 1 && num <= self.positions.len() {
+                self.positions[num - 1]
+            } else {
+                return Err(ElicitError::new(ElicitErrorKind::ParseError(
+                    format!("Invalid number: {}", num)
+                )));
+            }
+        } else {
+            Position::from_label(response.trim())
+                .filter(|pos| self.positions.contains(pos))
+                .ok_or_else(|| ElicitError::new(ElicitErrorKind::ParseError(
+                    format!("Invalid position: {}", response)
+                )))?
+        };
+        
+        Ok(selected)
+    }
 }
 
 impl Position {
