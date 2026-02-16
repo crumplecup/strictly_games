@@ -5,9 +5,9 @@
 //! ALWAYS has an outcome, not `Option<Outcome>`.
 
 use super::action::{Move, MoveError};
-use super::contracts::{assert_invariants, MoveContract, Contract};
+use super::contracts::{validate_move, execute_move};
 use super::phases::Outcome;
-use super::{Board, Player, Position, Square};
+use super::{Board, Player, Position};
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -75,21 +75,18 @@ impl GameInProgress {
     ///
     /// Returns either a new InProgress or a Finished state.
     ///
-    /// Contract enforcement:
-    /// - Preconditions checked always (LegalMove)
-    /// - Postconditions checked in debug builds only
+    /// Proof-carrying validation:
+    /// - Establishes proof of LegalMove (square empty AND player turn)
+    /// - Executes move with proof (zero-cost guarantee)
+    /// - Type system enforces validation happened
     #[instrument(skip(self))]
     pub fn make_move(self, action: Move) -> Result<GameResult, MoveError> {
-        // Store state for postcondition checking
-        let before = self.clone();
+        // Establish proof that preconditions hold
+        let proof = validate_move(&action, &self)?;
         
-        // Precondition: Check contract
-        MoveContract::pre(&self, &action)?;
-        
-        // Apply move
+        // Execute with proof (zero-cost, enforced by type system)
         let mut game = self;
-        game.board.set(action.position, Square::Occupied(action.player));
-        game.history.push(action);
+        execute_move(&action, &mut game, proof);
         
         // Check for winner using rules module
         if let Some(winner) = super::rules::check_winner(&game.board) {
@@ -111,13 +108,6 @@ impl GameInProgress {
         
         // Continue game
         game.to_move = game.to_move.opponent();
-        
-        // Postcondition: Verify contract in debug builds
-        #[cfg(debug_assertions)]
-        MoveContract::post(&before, &game)?;
-        
-        // Legacy invariant assertions
-        assert_invariants(&game);
         
         Ok(GameResult::InProgress(game))
     }
