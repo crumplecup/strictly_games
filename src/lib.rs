@@ -34,6 +34,7 @@
 // Private module declarations
 mod agent_config;
 mod agent_handler;
+mod elicit_router;
 mod games;
 mod llm_client;
 mod server;
@@ -45,6 +46,9 @@ pub use agent_config::{AgentConfig, ConfigError};
 
 // Crate-level exports - Agent handler
 pub use agent_handler::GameAgent;
+
+// Crate-level exports - Elicitation router
+pub use elicit_router::TicTacToeElicitRouter;
 
 // Crate-level exports - LLM client
 pub use llm_client::{LlmClient, LlmConfig, LlmError, LlmProvider};
