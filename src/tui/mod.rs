@@ -105,7 +105,10 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
 async fn run_typesafe_game<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     mut client: RestGameClient,  // Make mutable to update last_error
-) -> Result<()> {
+) -> Result<()>
+where
+    <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
+{
     use tokio::time::{sleep, Duration};
     use crate::games::tictactoe::Player;
     

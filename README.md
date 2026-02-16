@@ -1,12 +1,15 @@
 # Strictly Games
 
-> **The Elicitation Framework Showcase: Type-Safe Games for LLM Agents**
+## The Elicitation Framework Showcase: Type-Safe Games for LLM Agents
+
+> Art is transforming chaos into form, and that's what games are.  Games have rules.  -- Stephen Sondheim
 
 Strictly Games demonstrates the [Elicitation Framework](https://github.com/crumplecup/elicitation) in action—showing how to build **type-safe operational semantics** that make invalid agent behavior **unrepresentable** at the type level.
 
 ## Why This Matters
 
 Traditional approach:
+
 ```
 Prompt: "Only make legal moves in tic-tac-toe"
 Reality: Agent tries position 10 (doesn't exist) or places X on occupied square
@@ -14,6 +17,7 @@ Fix: Better prompts, few-shot examples, RLHF
 ```
 
 Elicitation approach:
+
 ```rust
 // Positions are an enum - position 10 doesn't exist
 pub enum Position { TopLeft, TopCenter, ... }
@@ -96,6 +100,7 @@ impl LegalMove {
 ```
 
 Contracts are:
+
 - **Declarative** - State what must be true, not how to check it
 - **Composable** - Complex rules built from simple ones
 - **Verifiable** - Can be formally proven with Kani/Creusot
@@ -197,7 +202,6 @@ pub enum Outcome {
 ```
 
 ### Step 4: Implement Typestate Game
-
 
 The game struct is generic over phase:
 
@@ -430,6 +434,7 @@ Add to your Claude Desktop MCP configuration (`claude_desktop_config.json`):
 ```
 
 On macOS:
+
 ```bash
 # Edit config
 code ~/Library/Application\ Support/Claude/claude_desktop_config.json
@@ -438,6 +443,7 @@ code ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
 On Linux:
+
 ```bash
 # Edit config
 code ~/.config/Claude/claude_desktop_config.json
@@ -481,6 +487,7 @@ copilot --additional-mcp-config @mcp-config.json
 ```
 
 **Example config file** (`mcp-config.json`):
+
 ```json
 {
   "mcpServers": {
@@ -520,12 +527,14 @@ cargo run tui
 ```
 
 Controls:
+
 - **Arrow keys**: Move cursor
 - **Enter**: Place move
 - **q**: Quit
 - **r**: Restart game
 
 The TUI automatically:
+
 1. Spawns HTTP game server on port 3000
 2. Spawns AI agent connected to the server
 3. Connects as human player
@@ -579,17 +588,20 @@ Move accepted. Player O to move.
 ### Available Tools
 
 **`start_game`**
+
 - Starts a new tic-tac-toe game
 - Player X goes first
 - Returns the empty board
 
 **`make_move`**
+
 - Arguments: `position` (0-8, where 0=top-left, 8=bottom-right)
 - Validates the move (square must be empty, game in progress)
 - Returns updated board and game status
 - Example: `{"position": 4}` plays center square
 
 **`get_board`**
+
 - Returns current board state
 - Shows current player, game status, move count
 
@@ -658,21 +670,25 @@ See existing games for patterns. All code must follow the architecture principle
 ## Roadmap
 
 **Phase 1: Foundation** (current)
+
 - ✅ Basic MCP server infrastructure
 - ✅ Tic-tac-toe with move validation
 - ✅ Full observability via tracing
 
 **Phase 2: Contracts**
+
 - Add Kani-verified contracts for move legality
 - Demonstrate proof-carrying code pattern
 - Contract composition for complex operations
 
 **Phase 3: Expanded Games**
+
 - Blackjack (probabilistic verification)
 - Checkers (game tree search)
 - Chess (complex state space)
 
 **Phase 4: Elicitation Integration**
+
 - Interactive game configuration
 - Tournament organization
 - Strategy elicitation
@@ -725,17 +741,20 @@ impl LegalMove {
 ## Benefits
 
 ### For Agents
+
 - **Fewer hallucinations** - Invalid moves don't exist to hallucinate
 - **Better understanding** - Domain structure encoded in types
 - **Clearer errors** - Type-safe errors with context
 
 ### For Developers
+
 - **Correctness by construction** - Invalid states unrepresentable
 - **Refactoring confidence** - Compiler checks rule changes
 - **Formal verification** - Kani proofs guarantee properties
 - **Reusable components** - Contracts compose across games
 
 ### For System Design
+
 - **Testability** - Pure functions, deterministic
 - **Maintainability** - Type signatures are documentation
 - **Evolvability** - Add features without breaking invariants
@@ -743,22 +762,26 @@ impl LegalMove {
 ## Roadmap
 
 **Phase 1: Foundation** (current)
+
 - ✅ Typestate state machines (tic-tac-toe)
 - ✅ Contract-based validation
 - ✅ First-class actions
 - ✅ MCP integration
 
 **Phase 2: Verification**
+
 - Add Kani proofs for contracts
 - Demonstrate proof composition
 - Document verification patterns
 
 **Phase 3: Expanded Games**
+
 - Blackjack (probabilistic states)
 - Checkers (larger state space)
 - Chess (complex rules)
 
 **Phase 4: Elicitation Deep Dive**
+
 - Interactive game configuration via elicitation
 - Tournament organization
 - Strategy elicitation and comparison
@@ -792,6 +815,7 @@ Each file is self-contained with extensive documentation.
 ## License
 
 Licensed under either of:
+
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 - MIT license ([LICENSE-MIT](LICENSE-MIT))
 
