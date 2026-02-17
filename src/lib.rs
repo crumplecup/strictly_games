@@ -34,6 +34,7 @@
 // Private module declarations
 mod agent_config;
 mod agent_handler;
+mod db;
 mod games;
 mod llm_client;
 mod server;
@@ -42,6 +43,9 @@ mod tui;
 
 // Crate-level exports - Agent configuration
 pub use agent_config::{AgentConfig, ConfigError};
+
+// Crate-level exports - Database
+pub use db::{AggregatedStats, DbError, GameOutcome, GameRepository, GameStat, NewGameStat, NewUser, User};
 
 // Crate-level exports - Agent handler
 pub use agent_handler::GameAgent;
@@ -71,6 +75,4 @@ pub use games::tictactoe::{
     // Domain types
     AnyGame, Board, Position, Square,
     Player as TicTacToePlayer,
-    // Filtered position view
-    ValidPositions,
 };

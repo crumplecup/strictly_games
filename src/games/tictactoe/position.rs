@@ -11,7 +11,7 @@ use tracing::instrument;
 ///
 /// This enum uses the Select paradigm - agents choose from
 /// a finite set of options. The game server filters which
-/// positions are valid (unoccupied) before elicitation.
+/// positions are valid (unoccupied) using the Filter trait.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, elicitation::Elicit, strum::EnumIter)]
 pub enum Position {
     /// Top-left (position 0)
@@ -32,73 +32,6 @@ pub enum Position {
     BottomCenter,
     /// Bottom-right (position 8)
     BottomRight,
-}
-
-/// View struct for filtered position selection.
-///
-/// Wraps a dynamic list of valid positions to enable
-/// context-aware selection through the framework.
-#[derive(Debug, Clone)]
-pub struct ValidPositions {
-    /// Filtered list of valid positions
-    pub positions: Vec<Position>,
-}
-
-impl Prompt for ValidPositions {}
-
-impl Select for ValidPositions {
-    fn options() -> &'static [Self] {
-        // This will never be called - we override elicit_position() instead
-        &[]
-    }
-    
-    fn labels() -> &'static [&'static str] {
-        // This will never be called - we override elicit_position() instead
-        &[]
-    }
-    
-    fn from_label(_label: &str) -> Option<Self> {
-        // This will never be called - we override elicit_position() instead
-        None
-    }
-}
-
-impl ValidPositions {
-    /// Elicit a position from the filtered list.
-    pub async fn elicit_position(
-        self,
-        peer: Peer<RoleServer>,
-    ) -> Result<Position, ElicitError> {
-        // Build prompt with filtered options
-        let mut prompt = String::from("Please select a Position:\n\nOptions:\n");
-        for (idx, pos) in self.positions.iter().enumerate() {
-            prompt.push_str(&format!("{}. {}\n", idx + 1, pos.label()));
-        }
-        prompt.push_str(&format!("\nRespond with the number (1-{}) or exact label:", self.positions.len()));
-        
-        // Use framework's ElicitServer
-        let server = ElicitServer::new(peer);
-        let response: String = server.send_prompt(&prompt).await?;
-        
-        // Parse response
-        let selected = if let Ok(num) = response.trim().parse::<usize>() {
-            if num >= 1 && num <= self.positions.len() {
-                self.positions[num - 1]
-            } else {
-                return Err(ElicitError::new(ElicitErrorKind::ParseError(
-                    format!("Invalid number: {}", num)
-                )));
-            }
-        } else {
-            Position::from_label(response.trim())
-                .filter(|pos| self.positions.contains(pos))
-                .ok_or_else(|| ElicitError::new(ElicitErrorKind::ParseError(
-                    format!("Invalid position: {}", response)
-                )))?
-        };
-        
-        Ok(selected)
-    }
 }
 
 impl Position {
@@ -188,16 +121,59 @@ impl Position {
 
     /// Filters positions by board state - returns only empty squares.
     ///
-    /// This is the key method for dynamic selection: we have a static
-    /// enum with all positions, but filter which ones to present based
-    /// on runtime board state.
+    /// Uses the elicitation Filter trait to provide dynamic, context-aware
+    /// selection based on runtime board state.
     #[instrument(skip(board))]
     pub fn valid_moves(board: &Board) -> Vec<Position> {
-        Self::ALL
-            .iter()
-            .copied()
-            .filter(|pos| board.is_empty(*pos))
-            .collect()
+        Position::select_with_filter(|pos| board.is_empty(*pos))
+    }
+
+    /// Elicit a position from filtered valid moves.
+    ///
+    /// This method combines filtering with elicitation, using the framework's
+    /// Filter trait to present only valid (empty) positions to the user.
+    #[instrument(skip(board, peer))]
+    pub async fn elicit_valid_position(
+        board: &Board,
+        peer: Peer<RoleServer>,
+    ) -> Result<Position, ElicitError> {
+        let valid_positions = Self::valid_moves(board);
+        
+        if valid_positions.is_empty() {
+            return Err(ElicitError::new(ElicitErrorKind::ParseError(
+                "No valid moves available".to_string()
+            )));
+        }
+        
+        // Build prompt with filtered options
+        let mut prompt = String::from("Please select a Position:\n\nOptions:\n");
+        for (idx, pos) in valid_positions.iter().enumerate() {
+            prompt.push_str(&format!("{}. {}\n", idx + 1, pos.label()));
+        }
+        prompt.push_str(&format!("\nRespond with the number (1-{}) or exact label:", valid_positions.len()));
+        
+        // Use framework's ElicitServer
+        let server = ElicitServer::new(peer);
+        let response: String = server.send_prompt(&prompt).await?;
+        
+        // Parse response
+        let selected = if let Ok(num) = response.trim().parse::<usize>() {
+            if num >= 1 && num <= valid_positions.len() {
+                valid_positions[num - 1]
+            } else {
+                return Err(ElicitError::new(ElicitErrorKind::ParseError(
+                    format!("Invalid number: {}", num)
+                )));
+            }
+        } else {
+            Self::from_label_or_number(response.trim())
+                .filter(|pos| valid_positions.contains(pos))
+                .ok_or_else(|| ElicitError::new(ElicitErrorKind::ParseError(
+                    format!("Invalid position: {}", response)
+                )))?
+        };
+        
+        Ok(selected)
     }
 }
 

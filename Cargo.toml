@@ -9,9 +9,14 @@ repository = "https://github.com/crumplecup/strictly_games"
 default-run = "strictly_games"
 
 [dependencies]
-elicitation = { path = "../elicitation/crates/elicitation", features = [
-  "rand",
+# Database persistence
+diesel = { version = "2", features = [
+  "sqlite",
+  "chrono",
+  "returning_clauses_for_sqlite_3_35",
 ] }
+chrono = { version = "0.4", features = ["serde"] }
+elicitation = { version = "0.8.0", features = ["rand"] }
 rmcp = { version = "0.15", features = [
   "server",
   "client",

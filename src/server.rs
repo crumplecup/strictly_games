@@ -1,6 +1,6 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::{Player, Position, ValidPositions};
+use crate::games::tictactoe::{Player, Position};
 use crate::session::{PlayerType, SessionManager};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -438,13 +438,12 @@ impl GameServer {
 
     /// Elicit a position with board-state filtering (walled garden pattern).
     ///
-    /// This demonstrates the pattern for context-aware selection:
+    /// This demonstrates the pattern for context-aware selection using
+    /// the elicitation framework's Filter trait:
     /// 1. Get current board state
-    /// 2. Filter Position::ALL to only valid (empty) squares  
-    /// 3. Wrap in ValidPositions view struct (derives Elicit)
-    /// 4. Call elicitation on the view - framework handles the rest
-    ///
-    /// Future: This pattern could be generalized with Select::Filter associated type.
+    /// 2. Use Position::elicit_valid_position() which internally filters
+    ///    using Position::select_with_filter(|pos| board.is_empty(*pos))
+    /// 3. Framework handles the prompt construction and response parsing
     #[instrument(skip(self, peer), fields(session_id))]
     async fn elicit_position_filtered(
         &self,
@@ -456,24 +455,9 @@ impl GameServer {
             .ok_or_else(|| McpError::internal_error("Session not found", None))?;
         
         let board = session.game.board();
-        let valid_positions = Position::valid_moves(board);
         
-        if valid_positions.is_empty() {
-            return Err(McpError::internal_error("No valid moves available", None));
-        }
-        
-        tracing::debug!(
-            valid_count = valid_positions.len(),
-            positions = ?valid_positions,
-            "Filtered to valid positions"
-        );
-        
-        // Wrap in view struct and elicit through framework
-        let view = ValidPositions {
-            positions: valid_positions,
-        };
-        
-        let position = view.elicit_position(peer)
+        // Use the new Filter-based API
+        let position = Position::elicit_valid_position(board, peer)
             .await
             .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
         

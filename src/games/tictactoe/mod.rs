@@ -50,7 +50,7 @@ pub mod wrapper;
 // Primary API - typestate architecture
 pub use action::{Move, MoveError};
 pub use phases::{Finished, InProgress, Outcome, Setup};
-pub use position::{Position, ValidPositions};
+pub use position::Position;
 pub use typestate::{GameSetup, GameInProgress, GameFinished, GameResult};
 pub use types::{Board, Player, Square};
 pub use wrapper::AnyGame;

@@ -1,425 +1,484 @@
 # Strictly Games
 
-## The Elicitation Framework Showcase: Type-Safe Games for LLM Agents
+## The Elicitation Framework Showcase: The Walled Garden Pattern
 
 > Art is transforming chaos into form, and that's what games are.  Games have rules.  -- Stephen Sondheim
 
-Strictly Games demonstrates the [Elicitation Framework](https://github.com/crumplecup/elicitation) in action—showing how to build **type-safe operational semantics** that make invalid agent behavior **unrepresentable** at the type level.
+Strictly Games demonstrates the [Elicitation Framework](https://github.com/crumplecup/elicitation) in action—showing how to build **walled gardens** where invalid agent actions are **structurally impossible**.
 
 ## Why This Matters
 
-Traditional approach:
+**Traditional approach: Validate after the fact**
 
 ```
 Prompt: "Only make legal moves in tic-tac-toe"
-Reality: Agent tries position 10 (doesn't exist) or places X on occupied square
-Fix: Better prompts, few-shot examples, RLHF
+Reality: Agent tries position 10 or occupied square
+Response: Return error, hope agent learns
 ```
 
-Elicitation approach:
+**Elicitation approach: Make invalid moves unrepresentable**
 
 ```rust
-// Positions are an enum - position 10 doesn't exist
-pub enum Position { TopLeft, TopCenter, ... }
+// Agent calls play_game - enters walled garden
+let position = elicit_position_filtered(peer, session_id).await?;
+//              ↑ Only shows empty squares
+//              Agent CANNOT express occupied square
+//              Invalid move doesn't exist in action space
 
-// Moves validated by contracts before application
-SquareIsEmpty::check(&action, &game)?;
-PlayersTurn::check(&action, &game)?;
-
-// Invalid moves don't compile, can't be represented
+// Contracts verify what elicitation already enforced
+let proof = validate_move(&action, &game)?;
+execute_move(&action, &mut game, proof);
 ```
 
-**We're not building better prompts. We're building type systems that make correctness inevitable.**
+**We're not building better prompts or better validation. We're building action spaces where mistakes don't exist.**
 
-## The Elicitation Architecture
+## The Walled Garden Pattern
 
-This codebase showcases four key patterns from the Elicitation Framework:
+The key insight: **Agents and humans have different interfaces.**
 
-### 1. **Typestate State Machines**
+### Agents: Elicitation-Enforced (Structural Correctness)
 
-Game phases are encoded in type parameters, making illegal state transitions impossible:
-
-```rust
-// Phase encoded as type parameter
-let game: Game<Setup> = Game::new();
-
-// start() consumes Setup, returns InProgress
-let game: Game<InProgress> = game.start(Player::X);
-
-// make_move() consumes InProgress, returns InProgress or Finished
-let result: MoveResult = game.make_move(action)?;
-```
-
-Invalid transitions don't exist: you can't call `make_move()` on `Game<Setup>` or `restart()` on `Game<InProgress>`.
-
-### 2. **First-Class Actions**
-
-Domain events (moves) are validated independently before application:
+Agents ONLY call `play_game`, which uses elicitation internally:
 
 ```rust
-// Actions are domain types with validation
-let action = Move::new(Player::X, Position::Center);
-
-// Contract-based validation (declarative, composable)
-LegalMove::check(&action, &game)?;
-
-// Apply validated action
-let result = game.make_move(action)?;
-```
-
-Actions carry their own semantics—they're not just data, they're **proof-carrying code**.
-
-### 3. **Contract-Driven Validation**
-
-Rules are declarative contracts, not imperative checks:
-
-```rust
-/// Precondition: Square must be empty
-pub struct SquareIsEmpty;
-
-impl SquareIsEmpty {
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
-        if !game.board().is_empty(mov.position) {
-            Err(MoveError::SquareOccupied(mov.position))
-        } else {
-            Ok(())
-        }
-    }
-}
-
-// Compose contracts
-pub struct LegalMove;
-
-impl LegalMove {
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
-        SquareIsEmpty::check(mov, game)?;
-        PlayersTurn::check(mov, game)?;
-        Ok(())
+#[tool(description = "Play a complete game. You will be prompted for moves.")]
+pub async fn play_game(
+    &self,
+    peer: Peer<RoleServer>,
+    req: PlayGameRequest,
+) -> Result<CallToolResult, McpError> {
+    loop {
+        // THE WALLED GARDEN: Filter using elicitation 0.8.0 Filter trait
+        let position = Position::elicit_valid_position(&board, peer.clone()).await?;
+        
+        // This validation should never fail (defensive check)
+        session.make_move(&player_id, position)?;
     }
 }
 ```
 
-Contracts are:
+**What the agent sees:**
+- "Choose position: 1. TopLeft, 2. Center, 5. BottomRight"
+- Occupied squares are **not in the list**
+- Agent **cannot express** an invalid move
 
-- **Declarative** - State what must be true, not how to check it
-- **Composable** - Complex rules built from simple ones
-- **Verifiable** - Can be formally proven with Kani/Creusot
-- **Reusable** - Same contracts work across game variants
+### Humans: Validation-Based (Runtime Checking)
 
-### 4. **Clean Boundaries**
-
-Domain logic is pure—no presentation, no I/O, no framework coupling:
+Humans/TUI call `make_move` directly with runtime validation:
 
 ```rust
-// Domain types know nothing about:
-// - How they're rendered (terminal? GUI? web?)
-// - How moves arrive (MCP? HTTP? keyboard?)
-// - Where state is stored (memory? database?)
-
-// This makes them:
-// - Testable in isolation
-// - Reusable across contexts
-// - Formally verifiable
-// - Framework-agnostic
+#[tool(description = "Make a move at the specified position")]
+pub async fn make_move(
+    &self,
+    req: MakeMoveRequest,
+) -> Result<CallToolResult, McpError> {
+    // Human provides position directly, validation catches errors
+    session.make_move(&req.player_id, req.position)
+        .map_err(|e| McpError::invalid_params(e, None))?;
+    Ok(success)
+}
 ```
 
-The game logic is **pure transformation**—from one valid state to another, with contracts enforcing legality.
+**Why two interfaces?**
+- Agents benefit from **structural prevention** (better UX, fewer retries)
+- Humans need **direct control** (faster input, familiar interaction)
 
-## Tutorial: Implementing Type-Safe Games
+## Four Layers of Correctness
 
-Let's walk through the tic-tac-toe implementation to see these patterns in action.
+This codebase demonstrates how elicitation composes with other verification techniques:
 
-### Step 1: Define Domain Types
+### 1. **Type-Level Correctness** (Compile Time)
 
-Start with the irreducible domain concepts:
+Positions are an enum - invalid positions don't exist:
 
 ```rust
-// Players are an enum - only two exist
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
-pub enum Player { X, O }
-
-// Positions are bounded - only 9 valid squares
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Elicit)]
 pub enum Position {
     TopLeft, TopCenter, TopRight,
     MiddleLeft, Center, MiddleRight,
     BottomLeft, BottomCenter, BottomRight,
 }
+// Position 10 doesn't compile, -1 doesn't compile
+```
 
-// Square state encodes occupancy
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+### 2. **Structural Correctness** (Elicitation Time)
+
+Only valid options are presented:
+
+```rust
+// Filter to empty squares using the Filter trait
+let valid = Position::valid_moves(&board);  // Uses select_with_filter internally
+
+// Or elicit directly with board context
+let position = Position::elicit_valid_position(&board, peer).await?;
+```
+
+### 3. **Contract Correctness** (Zero-Cost Proofs)
+
+Declarative validation with proof-carrying types:
+
+```rust
+// Establish proof that preconditions hold
+let proof = validate_move(&action, &game)?;
+//          ↑ Returns Established<LegalMove>
+
+// Execute with proof (zero-cost, PhantomData)
+execute_move(&action, &mut game, proof);
+//                                 ↑ Type enforces validation happened
+```
+
+### 4. **Typestate Correctness** (Phase Enforcement)
+
+Game phases are distinct types:
+
+```rust
+let game: GameSetup = GameSetup::new();
+let game: GameInProgress = game.start(Player::X);  // Consumes Setup
+let result = game.make_move(action)?;  // Returns GameResult
+
+// Can't call make_move on GameSetup (doesn't have the method)
+// Can't call start on GameFinished (doesn't have the method)
+```
+
+## Tutorial: Building a Walled Garden Game
+
+### Step 1: Define Type-Safe Domain Types
+
+Start with enums that make invalid states unrepresentable:
+
+```rust
+use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use elicitation::Elicit;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, Elicit)]
+pub enum Position {
+    TopLeft, TopCenter, TopRight,
+    MiddleLeft, Center, MiddleRight,
+    BottomLeft, BottomCenter, BottomRight,
+}
+// Position 10 doesn't exist - can't be constructed
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Elicit)]
+pub enum Player { X, O }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Elicit)]
 pub enum Square {
     Empty,
     Occupied(Player),
 }
-```
 
-**Key insight:** Invalid positions (like 10 or -1) **don't exist**—they're not representable in the type.
-
-### Step 2: Build Composite Types
-
-Compose primitives into higher-level structures:
-
-```rust
-// Board is array of squares
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit)]
 pub struct Board {
     squares: [Square; 9],
 }
+```
 
-impl Board {
-    /// Check if position is empty
-    pub fn is_empty(&self, pos: Position) -> bool {
-        matches!(self.squares[pos as usize], Square::Empty)
+**Key insight:** Types used in MCP tools need:
+- `Serialize` + `Deserialize` - For JSON over the wire
+- `JsonSchema` - For MCP tool parameter schemas (on tool parameters only)
+- `Elicit` - For elicitation framework integration
+
+The `Elicit` derive doesn't provide serialization—you must add those yourself.
+
+### Step 2: Implement Context-Aware Filtering
+
+Use the elicitation 0.8.0 Filter trait for runtime filtering:
+
+```rust
+impl Position {
+    /// Filters positions by board state - returns only empty squares.
+    ///
+    /// Uses the elicitation Filter trait to provide dynamic, context-aware
+    /// selection based on runtime board state.
+    pub fn valid_moves(board: &Board) -> Vec<Position> {
+        Position::select_with_filter(|pos| board.is_empty(*pos))
     }
-    
-    /// Place a mark
-    pub fn place(&mut self, pos: Position, player: Player) {
-        self.squares[pos as usize] = Square::Occupied(player);
+
+    /// Elicit a position from filtered valid moves.
+    ///
+    /// This method combines filtering with elicitation, using the framework's
+    /// Filter trait to present only valid (empty) positions to the user.
+    pub async fn elicit_valid_position(
+        board: &Board,
+        peer: Peer<RoleServer>,
+    ) -> Result<Position, ElicitError> {
+        let valid_positions = Self::valid_moves(board);
+        
+        if valid_positions.is_empty() {
+            return Err(ElicitError::parse("No valid moves available"));
+        }
+        
+        // Build prompt with filtered options
+        let mut prompt = String::from("Please select a Position:\n\nOptions:\n");
+        for (idx, pos) in valid_positions.iter().enumerate() {
+            prompt.push_str(&format!("{}. {}\n", idx + 1, pos.label()));
+        }
+        prompt.push_str(&format!("\nRespond with number (1-{}) or label:", valid_positions.len()));
+        
+        // Use framework's ElicitServer
+        let server = ElicitServer::new(peer);
+        let response: String = server.send_prompt(&prompt).await?;
+        
+        // Parse response (number or label)
+        let selected = if let Ok(num) = response.trim().parse::<usize>() {
+            valid_positions.get(num - 1)
+                .copied()
+                .ok_or_else(|| ElicitError::parse("Invalid number"))?
+        } else {
+            Self::from_label_or_number(response.trim())
+                .filter(|pos| valid_positions.contains(pos))
+                .ok_or_else(|| ElicitError::parse("Invalid position"))?
+        };
+        
+        Ok(selected)
     }
 }
 ```
 
-### Step 3: Define Phase Markers
+**Key changes in elicitation 0.8.0:**
+- `Select::options()` returns `Vec<Self>` instead of `&'static [Self]`
+- `Select::labels()` returns `Vec<String>` instead of `Vec<&'static str>`
+- New `Filter` trait enables runtime filtering: `Type::select_with_filter(predicate)`
+- No need for wrapper structs like `ValidPositions`
 
-Create zero-sized types to encode game phase:
+### Step 3: Implement Proof-Carrying Contracts
+
+Use the elicitation framework's contract system:
 
 ```rust
-/// Phase marker: Game is being set up
-pub struct Setup;
+use elicitation::contracts::{And, Established, Prop, both};
 
-/// Phase marker: Game is in progress
-pub struct InProgress;
+// Propositions (type-level statements)
+pub struct SquareEmpty;
+impl Prop for SquareEmpty {}
 
-/// Phase marker: Game has finished
-pub struct Finished;
+pub struct PlayerTurn;
+impl Prop for PlayerTurn {}
 
-/// Outcome of finished game
-pub enum Outcome {
-    Winner(Player),
-    Draw,
+// Composite proposition
+pub type LegalMove = And<SquareEmpty, PlayerTurn>;
+
+// Validation functions (establish proofs)
+pub fn validate_square_empty(
+    mov: &Move,
+    game: &GameInProgress,
+) -> Result<Established<SquareEmpty>, MoveError> {
+    if !game.board().is_empty(mov.position) {
+        Err(MoveError::SquareOccupied(mov.position))
+    } else {
+        Ok(Established::assert())
+    }
+}
+
+pub fn validate_player_turn(
+    mov: &Move,
+    game: &GameInProgress,
+) -> Result<Established<PlayerTurn>, MoveError> {
+    if mov.player != game.to_move() {
+        Err(MoveError::WrongPlayer(mov.player))
+    } else {
+        Ok(Established::assert())
+    }
+}
+
+// Composite validation
+pub fn validate_move(
+    mov: &Move,
+    game: &GameInProgress,
+) -> Result<Established<LegalMove>, MoveError> {
+    let square_proof = validate_square_empty(mov, game)?;
+    let turn_proof = validate_player_turn(mov, game)?;
+    Ok(both(square_proof, turn_proof))
+}
+
+// Proof-carrying execution
+pub fn execute_move(
+    mov: &Move,
+    game: &mut GameInProgress,
+    _proof: Established<LegalMove>,  // Zero-cost, enforced at compile time
+) {
+    // Proof guarantees: square empty AND player's turn
+    game.board.set(mov.position, Square::Occupied(mov.player));
+    game.history.push(*mov);
 }
 ```
 
-### Step 4: Implement Typestate Game
+### Step 4: Build Typestate State Machine
 
-The game struct is generic over phase:
+Encode game phases as distinct types:
 
 ```rust
-/// Type-safe game with phase encoded as type parameter
-pub struct Game<Phase> {
+/// Game in setup phase
+pub struct GameSetup {
+    board: Board,
+}
+
+/// Game in progress
+pub struct GameInProgress {
+    pub(super) board: Board,
+    pub(super) history: Vec<Move>,
+    pub(super) to_move: Player,
+}
+
+/// Game finished
+pub struct GameFinished {
     board: Board,
     history: Vec<Move>,
-    phase_data: Phase,  // Phase-specific data
+    outcome: Outcome,  // NOT Option - always present
 }
 
-// Setup phase: no current player yet
-impl Game<Setup> {
+impl GameSetup {
     pub fn new() -> Self {
-        Self {
-            board: Board::empty(),
-            history: Vec::new(),
-            phase_data: Setup,
-        }
+        Self { board: Board::new() }
     }
     
     /// Transition: Setup → InProgress
-    pub fn start(self, first_player: Player) -> Game<InProgress> {
-        Game {
+    pub fn start(self, first_player: Player) -> GameInProgress {
+        GameInProgress {
             board: self.board,
-            history: self.history,
-            phase_data: InProgress { to_move: first_player },
+            history: Vec::new(),
+            to_move: first_player,
         }
     }
 }
 
-// InProgress phase: has current player
-impl Game<InProgress> {
-    /// Who moves next?
-    pub fn to_move(&self) -> Player {
-        self.phase_data.to_move
-    }
-    
-    /// Attempt move - may transition to Finished
-    pub fn make_move(mut self, action: Move) -> Result<MoveResult, MoveError> {
-        // Validate via contracts (see Step 5)
-        LegalMove::check(&action, &self)?;
+impl GameInProgress {
+    /// Make move with proof-carrying validation
+    pub fn make_move(self, action: Move) -> Result<GameResult, MoveError> {
+        // Establish proof
+        let proof = validate_move(&action, &self)?;
         
-        // Apply move
-        self.board.place(action.position, action.player);
-        self.history.push(action);
+        // Execute with proof
+        let mut game = self;
+        execute_move(&action, &mut game, proof);
         
         // Check for game end
-        if let Some(outcome) = self.check_outcome() {
-            Ok(MoveResult::Finished(Game {
-                board: self.board,
-                history: self.history,
-                phase_data: Finished { outcome },
+        if let Some(winner) = check_winner(&game.board) {
+            Ok(GameResult::Finished(GameFinished {
+                board: game.board,
+                history: game.history,
+                outcome: Outcome::Winner(winner),
+            }))
+        } else if is_full(&game.board) {
+            Ok(GameResult::Finished(GameFinished {
+                board: game.board,
+                history: game.history,
+                outcome: Outcome::Draw,
             }))
         } else {
-            // Toggle player
-            self.phase_data.to_move = self.phase_data.to_move.opponent();
-            Ok(MoveResult::Continue(self))
+            game.to_move = game.to_move.opponent();
+            Ok(GameResult::InProgress(game))
         }
     }
 }
 ```
 
-**Key insight:** `make_move()` **consumes** `self`—you can't accidentally reuse stale game state.
+### Step 5: Expose Agent-Only Walled Garden Tool
 
-### Step 5: Define Contracts
-
-Declarative rules as zero-sized struct types:
+Create a tool that ONLY agents can call:
 
 ```rust
-/// Contract: Square must be empty
-pub struct SquareIsEmpty;
-
-impl SquareIsEmpty {
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
-        if !game.board().is_empty(mov.position) {
-            Err(MoveError::SquareOccupied(mov.position))
-        } else {
-            Ok(())
+#[tool(description = "Play a game. You will be prompted for moves interactively.")]
+pub async fn play_game(
+    &self,
+    peer: Peer<RoleServer>,
+    req: PlayGameRequest,
+) -> Result<CallToolResult, McpError> {
+    // Game loop
+    loop {
+        let session = self.sessions.get_session(&req.session_id)?;
+        
+        if session.game.is_over() {
+            return Ok(game_over_message);
         }
-    }
-}
-
-/// Contract: Must be player's turn
-pub struct PlayersTurn;
-
-impl PlayersTurn {
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
-        if mov.player != game.to_move() {
-            Err(MoveError::WrongPlayer { expected: game.to_move(), got: mov.player })
-        } else {
-            Ok(())
+        
+        if !session.is_players_turn(&player_id) {
+            continue;  // Wait for opponent
         }
-    }
-}
-
-/// Composite contract: Move is legal
-pub struct LegalMove;
-
-impl LegalMove {
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
-        SquareIsEmpty::check(mov, game)?;
-        PlayersTurn::check(mov, game)?;
-        Ok(())
+        
+        // THE WALLED GARDEN: Filter using elicitation 0.8.0 Filter trait
+        let board = session.game.board();
+        let position = Position::elicit_valid_position(board, peer.clone()).await?;
+        
+        // Apply move (should never fail - defensive check)
+        session.make_move(&player_id, position)?;
     }
 }
 ```
 
-### Step 6: Define Actions
+### Step 6: Expose Human-Friendly Direct Tool (Optional)
 
-Moves are domain events, not just data:
+For humans/TUI, provide direct access with runtime validation:
 
 ```rust
-/// A move action
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Move {
-    pub player: Player,
-    pub position: Position,
-}
-
-impl Move {
-    pub fn new(player: Player, position: Position) -> Self {
-        Self { player, position }
-    }
-}
-
-/// Move validation error
-#[derive(Debug, Clone, Display, Error)]
-pub enum MoveError {
-    #[display("Square {} is occupied", _0)]
-    SquareOccupied(Position),
+#[tool(description = "Make a move at the specified position")]
+pub async fn make_move(
+    &self,
+    req: MakeMoveRequest,
+) -> Result<CallToolResult, McpError> {
+    let mut session = self.sessions.get_session(&req.session_id)?;
     
-    #[display("Wrong player: expected {:?}, got {:?}", expected, got)]
-    WrongPlayer { expected: Player, got: Player },
+    // Human provides position directly, validation catches errors
+    session.make_move(&req.player_id, req.position)
+        .map_err(|e| McpError::invalid_params(e, None))?;
+    
+    Ok(success_message)
 }
 ```
 
-### Step 7: Formal Verification (Already Done!)
+### Result: Four Layers of Correctness
 
-**You don't write Kani proofs. You already have formal verification through composition.**
+1. **Type-level**: Position 10 doesn't compile
+2. **Structural**: Occupied squares not in agent's action space
+3. **Contract**: Zero-cost proof validation
+4. **Typestate**: Invalid phase transitions don't compile
 
-By using `#[derive(Elicit)]` on your domain types, you inherit the Elicitation Framework's **321 proven contracts**:
+## Getting Started
 
-```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
-pub enum Position {
-    TopLeft, TopCenter, TopRight,
-    MiddleLeft, Center, MiddleRight,
-    BottomLeft, BottomCenter, BottomRight,
-}
-```
+### Quick Start: Standalone TUI Mode
 
-**What this gives you (proven by Kani in the Elicitation Framework):**
-
-✅ **SelectReturnsValidVariant** - Agents can only return one of the 9 positions  
-✅ **SelectExhaustsSpace** - All 9 positions are enumerable  
-✅ **SelectInjective** - Position → index mapping is 1:1  
-✅ **FiniteDomain** - Position space is bounded (exactly 9 elements)  
-✅ **NoInvalidStates** - Position 10 doesn't exist, can't be constructed
-
-**Composed verification:**
-
-```rust
-// Position is verified (via Elicitation)
-// Player is verified (via Elicitation)
-// Therefore Move is verified (composition preserves properties)
-pub struct Move {
-    pub player: Player,    // ✅ Verified
-    pub position: Position, // ✅ Verified
-}
-
-// Contracts on verified types = verified system
-impl LegalMove {
-    pub fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
-        SquareIsEmpty::check(mov, game)?;    // Contract on verified type
-        PlayersTurn::check(mov, game)?;      // Contract on verified type
-        Ok(())
-    }
-}
-```
-
-**The warm blanket of formal verification extends over your entire game through compositional reasoning.**
-
-No Kani setup required. No proof harnesses to write. No verification time. You get it for free by using the framework's verified primitives.
-
-See `FORMAL_VERIFICATION.md` for the complete explanation of inherited verification guarantees.
-
-## Installation
+The easiest way to try Strictly Games - just run the TUI and play against an AI agent:
 
 ```bash
-# Clone the repository
-git clone https://github.com/crumplecup/strictly_games.git
-cd strictly_games
-
-# Build the server
 cargo build --release
+cargo run tui
 ```
 
-## Running the Server
+**Controls:**
+- **Arrow keys** - Move cursor to select position
+- **Enter** - Place your move
+- **r** - Restart game
+- **q** - Quit
 
-The server communicates via stdin/stdout using the MCP protocol:
+The TUI automatically:
+1. Spawns HTTP game server on port 3000
+2. Spawns AI agent connected to the server
+3. Connects you as the human player
+4. Cleans up subprocesses on exit
+
+The game displays a 3x3 grid with a cursor. Move the cursor to an empty square and press Enter to place your mark. The AI agent automatically makes moves when it's their turn.
+
+### Advanced: Distributed Mode
+
+For development or multi-agent scenarios, run components separately:
 
 ```bash
-# Run directly
-cargo run
+# Terminal 1: HTTP server
+cargo run http --port 3000
 
-# Or use the built binary
-./target/release/strictly_games
+# Terminal 2: AI agent (plays via elicitation)
+cargo run agent --server-url http://localhost:3000 --test-play
+
+# Terminal 3: Human player (TUI)
+cargo run tui --server-url http://localhost:3000
 ```
 
-The server will start and wait for MCP messages on stdin. You'll see:
+This demonstrates the architecture: TUI, server, and agents run independently and communicate via HTTP/MCP.
 
-```
-Starting Strictly Games MCP server
-Server ready - connect via MCP protocol
-```
+## Integrating with LLM Tools
 
-## Connecting to Claude Desktop
+### Connecting to Claude Desktop
 
 Add to your Claude Desktop MCP configuration (`claude_desktop_config.json`):
 
@@ -433,31 +492,44 @@ Add to your Claude Desktop MCP configuration (`claude_desktop_config.json`):
 }
 ```
 
-On macOS:
+**Configuration file locations:**
 
-```bash
-# Edit config
-code ~/Library/Application\ Support/Claude/claude_desktop_config.json
+macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+Linux: `~/.config/Claude/claude_desktop_config.json`
 
-# Restart Claude Desktop
+After editing, restart Claude Desktop.
+
+**Playing via Claude:**
+
+```
+You: Let's play tic-tac-toe!
+
+Claude: I'll start a new game.
+[calls start_game tool]
+
+New game started!
+ | | 
+-+-+-
+ | | 
+-+-+-
+ | | 
+
+I'll play X in the center.
+[calls make_move with position: Center]
+
+Move accepted. Player O to move.
+ | | 
+-+-+-
+ |X| 
+-+-+-
+ | | 
 ```
 
-On Linux:
+### Connecting to GitHub Copilot CLI
 
-```bash
-# Edit config
-code ~/.config/Claude/claude_desktop_config.json
+**Persistent configuration** - Edit `~/.copilot/mcp-config.json`:
 
-# Restart Claude Desktop
-```
-
-## Connecting to GitHub Copilot CLI
-
-GitHub Copilot CLI uses a configuration file at `~/.copilot/mcp-config.json`:
-
-```bash
-# Create/edit the config file
-cat > ~/.copilot/mcp-config.json << 'EOF'
+```json
 {
   "mcpServers": {
     "strictly-games": {
@@ -467,42 +539,20 @@ cat > ~/.copilot/mcp-config.json << 'EOF'
     }
   }
 }
-EOF
-
-# Then run copilot normally
-copilot
 ```
 
-**Or use the command-line flag for one-time use:**
+Then run: `copilot`
+
+**One-time use** - Pass config as command-line argument:
 
 ```bash
-# From the project directory
 cd /path/to/strictly_games
-
-# Pass config as JSON
 copilot --additional-mcp-config '{"mcpServers":{"strictly-games":{"command":"'$(pwd)'/target/release/strictly_games","args":[],"env":{}}}}'
-
-# Or from a file
-copilot --additional-mcp-config @mcp-config.json
-```
-
-**Example config file** (`mcp-config.json`):
-
-```json
-{
-  "mcpServers": {
-    "strictly-games": {
-      "command": "/home/user/strictly_games/target/release/strictly_games",
-      "args": [],
-      "env": {}
-    }
-  }
-}
 ```
 
 ### VS Code Integration
 
-For VS Code, add to `.vscode/settings.json` in your workspace:
+Add to `.vscode/settings.json` in your workspace:
 
 ```json
 {
@@ -514,118 +564,49 @@ For VS Code, add to `.vscode/settings.json` in your workspace:
 }
 ```
 
-## Terminal UI (TUI)
+## Available MCP Tools
 
-The TUI provides an interactive terminal interface to play against an AI agent.
+When connected via Claude Desktop or Copilot CLI, agents have access to:
 
-### Standalone Mode (Recommended)
+### For Agents: `play_game`
 
-The easiest way to try the system - spawns server and AI agent automatically:
-
-```bash
-cargo run tui
-```
-
-Controls:
-
-- **Arrow keys**: Move cursor
-- **Enter**: Place move
-- **q**: Quit
-- **r**: Restart game
-
-The TUI automatically:
-
-1. Spawns HTTP game server on port 3000
-2. Spawns AI agent connected to the server
-3. Connects as human player
-4. Cleans up subprocesses on exit
-
-### Remote Mode
-
-Connect to an existing server:
-
-```bash
-# Terminal 1: Start server
-cargo run http --port 3000
-
-# Terminal 2: Start AI agent
-cargo run agent --server-url http://localhost:3000 --test-play
-
-# Terminal 3: Start TUI
-cargo run tui --server-url http://localhost:3000
-```
-
-This demonstrates the distributed architecture: TUI, server, and agent all running independently.
-
-## Playing Tic-Tac-Toe
-
-Once connected, ask Claude or Copilot to play:
+**The walled garden tool** - Agents enter an elicitation loop where only valid moves are shown:
 
 ```
-You: Let's play tic-tac-toe!
-
-Claude: I'll start a new game.
-[calls start_game tool]
-
-New game started!
-1|2|3
--+-+-
-4|5|6
--+-+-
-7|8|9
-
-I'll play X in the center.
-[calls make_move with position: 4]
-
-Move accepted. Player O to move.
-1|2|3
--+-+-
-4|X|6
--+-+-
-7|8|9
+Tool: play_game
+Arguments: { "session_id": "game1", "player_name": "Agent" }
 ```
 
-### Available Tools
+The agent is prompted for each move with ONLY valid (empty) positions. The loop continues until the game ends.
 
-**`start_game`**
+### For Inspection: `get_board`
 
-- Starts a new tic-tac-toe game
-- Player X goes first
-- Returns the empty board
+Returns current game state:
+- Board display
+- Current player
+- Move count
+- Game status
 
-**`make_move`**
+### For Session Management
 
-- Arguments: `position` (0-8, where 0=top-left, 8=bottom-right)
-- Validates the move (square must be empty, game in progress)
-- Returns updated board and game status
-- Example: `{"position": 4}` plays center square
+- `register_player` - Join a session as X or O
+- `start_game` - Reset board for new game
+- `list_sessions` - See available games
 
-**`get_board`**
+### For Humans (TUI/Direct): `make_move`
 
-- Returns current board state
-- Shows current player, game status, move count
-
-### Board Layout
-
-Positions are numbered 0-8:
+Direct move submission with runtime validation:
 
 ```
-0|1|2
--+-+-
-3|4|5
--+-+-
-6|7|8
+Tool: make_move
+Arguments: { 
+  "session_id": "game1", 
+  "player_id": "player1",
+  "position": "Center"  // Position enum value
+}
 ```
 
-Displayed with numbers for empty squares, X/O for occupied:
-
-```
-X|O|3
--+-+-
-X|5|O
--+-+-
-7|8|9
-```
+Used by the TUI—agents should use `play_game` instead.
 
 ## Development
 
@@ -693,124 +674,158 @@ See existing games for patterns. All code must follow the architecture principle
 - Tournament organization
 - Strategy elicitation
 
-## Philosophy
+## Philosophy: The Walled Garden Pattern
 
-The Elicitation Framework rests on three principles:
-
-### 1. Make Illegal States Unrepresentable
+### 1. Structural Prevention > Behavioral Training
 
 ```rust
-// ❌ Traditional: Positions are numbers (what if user enters 10?)
-type Position = u8;  // 0-255... but only 0-8 valid!
+// ❌ Traditional: Train agents not to make mistakes
+Prompt: "Only select empty squares"
+Reality: Agent tries occupied square, gets error, retries
 
-// ✅ Elicitation: Positions are an enum
-enum Position { TopLeft, ..., BottomRight }  // Only 9 exist!
+// ✅ Walled Garden: Make mistakes structurally impossible
+let valid = Position::valid_moves(&board);  // [TopLeft, Center]
+let position = elicit_from_filtered(valid).await?;
+// Agent cannot express occupied square - it's not in the action space
 ```
 
-### 2. Validation is Composition
+### 2. Agents and Humans Have Different Needs
+
+**Agents benefit from structural prevention:**
+- Fewer retries (better token efficiency)
+- Clearer action space (better decisions)
+- Self-documenting interface (what's valid is what's shown)
+
+**Humans benefit from direct control:**
+- Faster input (no prompts, no roundtrips)
+- Familiar patterns (just call the function)
+- Error feedback (learn from mistakes)
 
 ```rust
-// ❌ Traditional: Validation is imperative spaghetti
-fn validate_move(mov: Move, game: Game) -> bool {
-    if game.board[mov.pos] != Empty { return false; }
-    if mov.player != game.current_player { return false; }
-    if game.is_finished { return false; }
-    true
-}
+// Agent: Walled garden (only valid moves shown)
+play_game(peer, session_id).await?;
 
-// ✅ Elicitation: Validation is declarative contracts
-impl LegalMove {
-    fn check(mov: &Move, game: &Game<InProgress>) -> Result<(), MoveError> {
-        SquareIsEmpty::check(mov, game)?;
-        PlayersTurn::check(mov, game)?;
-        Ok(())
-    }
-}
+// Human: Direct access (runtime validation)
+make_move(session_id, player_id, position)?;
 ```
 
-### 3. Types Are Proofs
+### 3. Elicitation Composes With Other Verification
+
+The walled garden pattern doesn't replace other verification techniques—it **composes** with them:
 
 ```rust
-// If you have Game<Finished>, the game IS finished
-// If you have Game<InProgress>, moves ARE legal
-// If you have Move that passed LegalMove::check, it IS valid
+// Layer 1: Type system (compile time)
+enum Position { TopLeft, ... }  // Invalid positions don't exist
 
-// The type system is your proof system
+// Layer 2: Elicitation (action space filtering)
+let valid = filter_to_empty_squares(&board);
+let pos = elicit_from(valid).await?;  // Agent sees only valid
+
+// Layer 3: Contracts (zero-cost proofs)
+let proof = validate_move(&action, &game)?;
+execute_move(&action, &mut game, proof);
+
+// Layer 4: Typestate (phase enforcement)
+let game: GameInProgress = ...;
+game.make_move(action)?;  // Can't call this on GameSetup
 ```
+
+Each layer catches different classes of errors at different times.
 
 ## Benefits
 
 ### For Agents
 
-- **Fewer hallucinations** - Invalid moves don't exist to hallucinate
-- **Better understanding** - Domain structure encoded in types
-- **Clearer errors** - Type-safe errors with context
+- **Structural correctness** - Invalid moves not in action space
+- **Fewer retries** - Every shown option is valid
+- **Token efficiency** - No wasted tokens on invalid attempts
+- **Self-documenting** - Action space IS the specification
 
 ### For Developers
 
+- **Separation of concerns** - Agent interface ≠ Human interface
 - **Correctness by construction** - Invalid states unrepresentable
-- **Refactoring confidence** - Compiler checks rule changes
-- **Formal verification** - Kani proofs guarantee properties
-- **Reusable components** - Contracts compose across games
+- **Compositional verification** - Multiple layers catching different errors
+- **Refactoring confidence** - Compiler enforces invariants
 
 ### For System Design
 
-- **Testability** - Pure functions, deterministic
+- **Testability** - Pure functions, clear boundaries
 - **Maintainability** - Type signatures are documentation
-- **Evolvability** - Add features without breaking invariants
+- **Flexibility** - Same domain logic, multiple interfaces
+- **Observability** - Elicitation loops are visible, traceable
 
 ## Roadmap
 
 **Phase 1: Foundation** (current)
 
-- ✅ Typestate state machines (tic-tac-toe)
-- ✅ Contract-based validation
-- ✅ First-class actions
-- ✅ MCP integration
+- ✅ Walled garden pattern (elicitation-enforced via Filter trait)
+- ✅ Proof-carrying contracts (zero-cost validation)
+- ✅ Typestate state machines (compile-time phase safety)
+- ✅ Dual interfaces (agents vs humans)
 
-**Phase 2: Verification**
+**Phase 2: Framework Integration**
 
-- Add Kani proofs for contracts
-- Demonstrate proof composition
-- Document verification patterns
+- Support for nested elicitation (choose piece, then position)
+- Multi-agent coordination via elicitation
+- Richer filtering strategies (combined predicates)
 
 **Phase 3: Expanded Games**
 
-- Blackjack (probabilistic states)
-- Checkers (larger state space)
-- Chess (complex rules)
+- Blackjack (probabilistic states, hidden information)
+- Checkers (multi-step moves, larger state space)
+- Chess (complex rules, piece-specific moves)
 
-**Phase 4: Elicitation Deep Dive**
+**Phase 4: Advanced Patterns**
 
-- Interactive game configuration via elicitation
-- Tournament organization
+- Tournament organization via elicitation
 - Strategy elicitation and comparison
+- Agent self-play with elicitation logging
+- Formal verification of elicitation-driven systems
 
 ## Code Structure
 
-The implementation demonstrates clean separation:
+The implementation demonstrates the walled garden pattern:
 
 ```
-src/games/tictactoe/
-├── position.rs       # Domain primitive: Position enum
-├── types.rs          # Core types: Player, Square, Board
-├── phases.rs         # Phase markers: Setup, InProgress, Finished
-├── action.rs         # Domain events: Move, MoveError
-├── contracts.rs      # Validation: SquareIsEmpty, PlayersTurn, LegalMove
-├── typestate.rs      # State machine: Game<Phase> with transitions
-├── wrapper.rs        # Type-erased wrapper for runtime polymorphism
-└── mod.rs           # Public API and documentation
+src/
+├── games/tictactoe/
+│   ├── position.rs       # Position enum with valid_moves filtering
+│   ├── types.rs          # Player, Square, Board with #[derive(Elicit)]
+│   ├── phases.rs         # Phase markers (zero-sized types)
+│   ├── action.rs         # Move (domain event)
+│   ├── contracts.rs      # Proof-carrying validation (Established<T>)
+│   ├── typestate.rs      # GameSetup, GameInProgress, GameFinished
+│   └── wrapper.rs        # Type-erased AnyGame for session management
+│
+├── server.rs             # MCP server with dual interfaces:
+│                         #   - play_game (walled garden for agents)
+│                         #   - make_move (direct access for humans)
+│
+├── session.rs            # Session management (players, game state)
+├── agent_handler.rs      # Agent MCP client (calls play_game)
+└── tui/                  # Human TUI (calls make_move)
+
+examples/
+├── agent_config.toml     # Agent configuration
+├── agent_x_config.toml   # Agent X configuration
+└── agent_o_config.toml   # Agent O configuration
 ```
 
 ### Navigation Guide
 
-1. **Start with types.rs** - See the domain primitives (Player, Square, Board)
-2. **Read phases.rs** - Understand the state machine phases
-3. **Study contracts.rs** - See declarative validation
-4. **Explore typestate.rs** - See how types enforce transitions
-5. **Check wrapper.rs** - Learn runtime polymorphism with AnyGame
+**For understanding elicitation:**
+1. **src/server.rs** - See `play_game` (walled garden) vs `make_move` (direct)
+2. **src/games/tictactoe/position.rs** - See `Position::elicit_valid_position()` using Filter trait
+3. **src/main.rs** - See how agents call `play_game` in test mode
 
-Each file is self-contained with extensive documentation.
+**For understanding contracts:**
+1. **src/games/tictactoe/contracts.rs** - See proof-carrying validation
+2. **src/games/tictactoe/typestate.rs** - See how contracts are used in `make_move`
+
+**For understanding typestate:**
+1. **src/games/tictactoe/phases.rs** - See phase markers
+2. **src/games/tictactoe/typestate.rs** - See phase-specific methods
 
 ## License
 
@@ -827,6 +842,6 @@ Built with the [Elicitation](https://github.com/crumplecup/elicitation) framewor
 
 ---
 
-**"We're building type-safe operational semantics for agents, not better prompts."**
+**"We're not validating agent moves after the fact. We're making invalid moves structurally impossible."**
 
-**Key Insight:** The best way to prevent agents from making mistakes is to make mistakes **impossible to represent** in the type system. That's the Elicitation Framework.
+**Key Insight:** The walled garden pattern—filter the action space BEFORE elicitation, so the agent cannot even express an invalid move. This is the Elicitation Framework in action.
