@@ -104,5 +104,3 @@ impl Default for Board {
         Self::new()
     }
 }
-
-

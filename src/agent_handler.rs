@@ -2,10 +2,10 @@
 
 use crate::agent_config::AgentConfig;
 use crate::llm_client::LlmClient;
+use rmcp::ErrorData;
 use rmcp::handler::client::ClientHandler;
 use rmcp::model::*;
 use rmcp::service::{RequestContext, RoleClient};
-use rmcp::ErrorData;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::instrument;
@@ -33,10 +33,7 @@ impl GameAgent {
     pub async fn initialize_llm(&self) -> Result<(), String> {
         tracing::info!("Initializing LLM client");
 
-        let llm_config = self
-            .config
-            .create_llm_config()
-            .map_err(|e| e.to_string())?;
+        let llm_config = self.config.create_llm_config().map_err(|e| e.to_string())?;
 
         let client = LlmClient::new(llm_config);
 
@@ -150,7 +147,7 @@ impl ClientHandler for GameAgent {
         InitializeRequestParams {
             protocol_version: ProtocolVersion::V_2025_06_18,
             capabilities: ClientCapabilities {
-                sampling: None,  // TODO: Enable when implementing LLM client
+                sampling: None, // TODO: Enable when implementing LLM client
                 roots: None,
                 experimental: None,
                 elicitation: None,

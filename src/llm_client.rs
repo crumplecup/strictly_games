@@ -1,16 +1,15 @@
 //! LLM API client abstraction for OpenAI and Anthropic.
 
 use async_openai::{
+    Client as OpenAIClient,
     config::OpenAIConfig,
     types::chat::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
         ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
         ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
     },
-    Client as OpenAIClient,
 };
 use derive_more::{Display, Error};
-use reqwest;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument};
 
@@ -151,11 +150,15 @@ impl LlmClient {
             )));
         }
 
-        debug!(response_length = response_text.len(), "Parsing Anthropic response");
-        let response_json: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
-            error!(error = ?e, response = %response_text, "Failed to parse Anthropic response");
-            LlmError::new(format!("Failed to parse response: {}", e))
-        })?;
+        debug!(
+            response_length = response_text.len(),
+            "Parsing Anthropic response"
+        );
+        let response_json: serde_json::Value =
+            serde_json::from_str(&response_text).map_err(|e| {
+                error!(error = ?e, response = %response_text, "Failed to parse Anthropic response");
+                LlmError::new(format!("Failed to parse response: {}", e))
+            })?;
 
         let content = response_json["content"][0]["text"]
             .as_str()

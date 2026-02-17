@@ -5,7 +5,7 @@
 //! ALWAYS has an outcome, not `Option<Outcome>`.
 
 use super::action::{Move, MoveError};
-use super::contracts::{validate_move, execute_move};
+use super::contracts::{execute_move, validate_move};
 use super::phases::Outcome;
 use super::{Board, Player, Position};
 use tracing::instrument;
@@ -31,12 +31,12 @@ impl GameSetup {
             board: Board::new(),
         }
     }
-    
+
     /// Returns the board.
     pub fn board(&self) -> &Board {
         &self.board
     }
-    
+
     /// Starts the game with the first player (consumes setup, returns in-progress).
     #[instrument(skip(self))]
     pub fn start(self, first_player: Player) -> GameInProgress {
@@ -83,11 +83,11 @@ impl GameInProgress {
     pub fn make_move(self, action: Move) -> Result<GameResult, MoveError> {
         // Establish proof that preconditions hold
         let proof = validate_move(&action, &self)?;
-        
+
         // Execute with proof (zero-cost, enforced by type system)
         let mut game = self;
         execute_move(&action, &mut game, proof);
-        
+
         // Check for winner using rules module
         if let Some(winner) = super::rules::check_winner(&game.board) {
             return Ok(GameResult::Finished(GameFinished {
@@ -96,7 +96,7 @@ impl GameInProgress {
                 outcome: Outcome::Winner(winner),
             }));
         }
-        
+
         // Check for draw using rules module
         if super::rules::is_full(&game.board) {
             return Ok(GameResult::Finished(GameFinished {
@@ -105,46 +105,46 @@ impl GameInProgress {
                 outcome: Outcome::Draw,
             }));
         }
-        
+
         // Continue game
         game.to_move = game.to_move.opponent();
-        
+
         Ok(GameResult::InProgress(game))
     }
-    
+
     /// Returns the current player to move.
     pub fn to_move(&self) -> Player {
         self.to_move
     }
-    
+
     /// Returns the board.
     pub fn board(&self) -> &Board {
         &self.board
     }
-    
+
     /// Returns move history.
     pub fn history(&self) -> &[Move] {
         &self.history
     }
-    
+
     /// Returns valid positions.
     #[instrument(skip(self))]
     pub fn valid_moves(&self) -> Vec<Position> {
         Position::valid_moves(&self.board)
     }
-    
+
     /// Replays moves from initial state.
     #[instrument]
     pub fn replay(moves: &[Move]) -> Result<GameResult, MoveError> {
         let mut game = GameSetup::new().start(Player::X);
-        
+
         for action in moves {
             match game.make_move(*action)? {
                 GameResult::InProgress(g) => game = g,
                 GameResult::Finished(g) => return Ok(GameResult::Finished(g)),
             }
         }
-        
+
         Ok(GameResult::InProgress(game))
     }
 }
@@ -161,7 +161,7 @@ impl GameInProgress {
 pub struct GameFinished {
     board: Board,
     history: Vec<Move>,
-    outcome: Outcome,  // ✅ NOT Option
+    outcome: Outcome, // ✅ NOT Option
 }
 
 impl GameFinished {
@@ -171,17 +171,17 @@ impl GameFinished {
     pub fn outcome(&self) -> &Outcome {
         &self.outcome
     }
-    
+
     /// Returns the board.
     pub fn board(&self) -> &Board {
         &self.board
     }
-    
+
     /// Returns move history.
     pub fn history(&self) -> &[Move] {
         &self.history
     }
-    
+
     /// Restarts the game (consumes finished, returns setup).
     #[instrument(skip(self))]
     pub fn restart(self) -> GameSetup {

@@ -1,9 +1,8 @@
 //! Integration test for agent playing a game.
 
-use strictly_games::agent_config::AgentConfig;
-use strictly_games::agent_handler::GameAgent;
-use tokio::process::Command;
 use std::process::Stdio;
+use strictly_games::{AgentConfig, GameAgent, LlmProvider};
+use tokio::process::Command;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
@@ -28,7 +27,7 @@ async fn test_agent_plays_game() {
             "strictly_games".to_string(),
         ],
         None,
-        strictly_games::llm_client::LlmProvider::Anthropic,
+        LlmProvider::Anthropic,
         "claude-3-5-haiku-20241022".to_string(),
         150,
     );
@@ -47,17 +46,21 @@ async fn test_agent_plays_game() {
 
     // Create agent
     let agent = GameAgent::new(config);
-    agent.initialize_llm().await.expect("Failed to initialize LLM");
+    let _: () = agent
+        .initialize_llm()
+        .await
+        .expect("Failed to initialize LLM");
 
     // Connect to server
-    let running_service = rmcp::serve_client(agent, (server_stdout, server_stdin))
-        .await
-        .expect("Failed to connect to server");
+    let running_service: rmcp::service::RunningService<rmcp::RoleClient, GameAgent> =
+        rmcp::serve_client(agent, (server_stdout, server_stdin))
+            .await
+            .expect("Failed to connect to server");
 
     let peer = running_service.peer();
 
     // List tools
-    let tools = peer
+    let tools: rmcp::model::ListToolsResult = peer
         .list_tools(Default::default())
         .await
         .expect("Failed to list tools");
@@ -68,14 +71,14 @@ async fn test_agent_plays_game() {
     }
 
     // Call play_game tool
-    let args_map: serde_json::Map<String, serde_json::Value> = serde_json::from_value(
-        serde_json::json!({
+    let args_map: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_value(serde_json::json!({
             "session_id": "test_session_1",
             "player_name": "TestAgent"
-        })
-    ).expect("Failed to create args map");
+        }))
+        .expect("Failed to create args map");
 
-    let result = peer
+    let result: rmcp::model::CallToolResult = peer
         .call_tool(rmcp::model::CallToolRequestParams {
             name: "play_game".to_string().into(),
             arguments: Some(args_map),

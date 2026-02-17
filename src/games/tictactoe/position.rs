@@ -12,7 +12,19 @@ use tracing::instrument;
 /// This enum uses the Select paradigm - agents choose from
 /// a finite set of options. The game server filters which
 /// positions are valid (unoccupied) using the Filter trait.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, elicitation::Elicit, strum::EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    elicitation::Elicit,
+    strum::EnumIter,
+)]
 pub enum Position {
     /// Top-left (position 0)
     TopLeft,
@@ -66,7 +78,7 @@ impl Position {
             label.contains(&s_lower) || s_lower.contains(&label)
         })
     }
-    
+
     /// Converts position to board index (0-8).
     #[instrument]
     pub fn to_index(self) -> usize {
@@ -138,41 +150,48 @@ impl Position {
         peer: Peer<RoleServer>,
     ) -> Result<Position, ElicitError> {
         let valid_positions = Self::valid_moves(board);
-        
+
         if valid_positions.is_empty() {
             return Err(ElicitError::new(ElicitErrorKind::ParseError(
-                "No valid moves available".to_string()
+                "No valid moves available".to_string(),
             )));
         }
-        
+
         // Build prompt with filtered options
         let mut prompt = String::from("Please select a Position:\n\nOptions:\n");
         for (idx, pos) in valid_positions.iter().enumerate() {
             prompt.push_str(&format!("{}. {}\n", idx + 1, pos.label()));
         }
-        prompt.push_str(&format!("\nRespond with the number (1-{}) or exact label:", valid_positions.len()));
-        
+        prompt.push_str(&format!(
+            "\nRespond with the number (1-{}) or exact label:",
+            valid_positions.len()
+        ));
+
         // Use framework's ElicitServer
         let server = ElicitServer::new(peer);
         let response: String = server.send_prompt(&prompt).await?;
-        
+
         // Parse response
         let selected = if let Ok(num) = response.trim().parse::<usize>() {
             if num >= 1 && num <= valid_positions.len() {
                 valid_positions[num - 1]
             } else {
-                return Err(ElicitError::new(ElicitErrorKind::ParseError(
-                    format!("Invalid number: {}", num)
-                )));
+                return Err(ElicitError::new(ElicitErrorKind::ParseError(format!(
+                    "Invalid number: {}",
+                    num
+                ))));
             }
         } else {
             Self::from_label_or_number(response.trim())
                 .filter(|pos| valid_positions.contains(pos))
-                .ok_or_else(|| ElicitError::new(ElicitErrorKind::ParseError(
-                    format!("Invalid position: {}", response)
-                )))?
+                .ok_or_else(|| {
+                    ElicitError::new(ElicitErrorKind::ParseError(format!(
+                        "Invalid position: {}",
+                        response
+                    )))
+                })?
         };
-        
+
         Ok(selected)
     }
 }

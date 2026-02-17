@@ -1,12 +1,12 @@
 //! Serializable game wrapper for typestate phases.
 
-use super::typestate::{GameSetup, GameInProgress, GameFinished, GameResult};
-use super::phases::Outcome;
 use super::action::Move;
+use super::phases::Outcome;
 use super::position::Position;
 use super::types::{Board, Player};
+use super::typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn, instrument};
+use tracing::{debug, instrument, warn};
 
 /// Serializable wrapper for Game<S> in any phase.
 ///
@@ -129,21 +129,20 @@ impl AnyGame {
             AnyGame::Won { winner, .. } => {
                 format!("Game over. Player {:?} wins!", winner)
             }
-            AnyGame::Draw { .. } => {
-                "Game over. Draw!".to_string()
-            }
-            AnyGame::Finished { outcome, .. } => {
-                match outcome {
-                    Outcome::Winner(player) => format!("Game over. Player {:?} wins!", player),
-                    Outcome::Draw => "Game over. Draw!".to_string(),
-                }
-            }
+            AnyGame::Draw { .. } => "Game over. Draw!".to_string(),
+            AnyGame::Finished { outcome, .. } => match outcome {
+                Outcome::Winner(player) => format!("Game over. Player {:?} wins!", player),
+                Outcome::Draw => "Game over. Draw!".to_string(),
+            },
         }
     }
 
     /// Returns true if the game is over.
     pub fn is_over(&self) -> bool {
-        matches!(self, AnyGame::Won { .. } | AnyGame::Draw { .. } | AnyGame::Finished { .. })
+        matches!(
+            self,
+            AnyGame::Won { .. } | AnyGame::Draw { .. } | AnyGame::Finished { .. }
+        )
     }
 
     /// Returns the current player to move, if game is in progress.
@@ -158,7 +157,10 @@ impl AnyGame {
     pub fn winner(&self) -> Option<Player> {
         match self {
             AnyGame::Won { winner, .. } => Some(*winner),
-            AnyGame::Finished { outcome: Outcome::Winner(player), .. } => Some(*player),
+            AnyGame::Finished {
+                outcome: Outcome::Winner(player),
+                ..
+            } => Some(*player),
             _ => None,
         }
     }
@@ -169,20 +171,30 @@ impl AnyGame {
     #[instrument(skip(self))]
     pub fn make_move_action(self, action: Move) -> Result<Self, String> {
         match self {
-            AnyGame::InProgress { board: _, to_move: _, history } => {
+            AnyGame::InProgress {
+                board: _,
+                to_move: _,
+                history,
+            } => {
                 // Reconstruct move history (position history → Move actions)
                 let mut current_player = Player::X;
-                let mut moves: Vec<Move> = history.iter().map(|&pos| {
-                    let mov = Move::new(current_player, pos);
-                    current_player = current_player.opponent();
-                    mov
-                }).collect();
-                
+                let mut moves: Vec<Move> = history
+                    .iter()
+                    .map(|&pos| {
+                        let mov = Move::new(current_player, pos);
+                        current_player = current_player.opponent();
+                        mov
+                    })
+                    .collect();
+
                 // Add the new move
                 moves.push(action);
-                
-                debug!(move_count = moves.len(), "Replaying moves with contract validation");
-                
+
+                debug!(
+                    move_count = moves.len(),
+                    "Replaying moves with contract validation"
+                );
+
                 // Replay all moves to reconstruct game state with contract validation
                 match GameInProgress::replay(&moves) {
                     Ok(result) => {
@@ -202,4 +214,3 @@ impl AnyGame {
         }
     }
 }
-

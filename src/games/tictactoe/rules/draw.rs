@@ -13,9 +13,9 @@ pub fn is_full(board: &Board) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::super::{Player, Position};
     use super::super::win::check_winner;
+    use super::*;
 
     fn is_draw(board: &Board) -> bool {
         is_full(board) && check_winner(board).is_none()
@@ -66,7 +66,7 @@ mod tests {
         board.set(Position::BottomLeft, Square::Occupied(Player::O));
         board.set(Position::BottomCenter, Square::Occupied(Player::X));
         board.set(Position::BottomRight, Square::Occupied(Player::O));
-        
+
         assert!(is_draw(&board));
     }
 
@@ -79,7 +79,7 @@ mod tests {
         board.set(Position::TopRight, Square::Occupied(Player::X));
         board.set(Position::MiddleLeft, Square::Occupied(Player::O));
         board.set(Position::Center, Square::Occupied(Player::O));
-        
+
         assert!(!is_draw(&board));
     }
 }

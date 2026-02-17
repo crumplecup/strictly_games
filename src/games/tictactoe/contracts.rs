@@ -84,13 +84,10 @@ pub fn validate_move(
 /// that validation happened at compile time. Cannot call this
 /// function without first obtaining proof via `validate_move()`.
 #[instrument(skip(game, _proof))]
-pub fn execute_move(
-    mov: &Move,
-    game: &mut GameInProgress,
-    _proof: Established<LegalMove>,
-) {
+pub fn execute_move(mov: &Move, game: &mut GameInProgress, _proof: Established<LegalMove>) {
     // Proof guarantees: square empty AND player's turn
     // No need to revalidate - the type system enforces it
-    game.board.set(mov.position, super::Square::Occupied(mov.player));
+    game.board
+        .set(mov.position, super::Square::Occupied(mov.player));
     game.history.push(*mov);
 }

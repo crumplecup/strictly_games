@@ -39,9 +39,9 @@ pub mod types;
 pub mod rules;
 
 // Typestate architecture
-pub mod phases;
 pub mod action;
 pub mod contracts;
+pub mod phases;
 pub mod typestate;
 
 // Wrapper for session management
@@ -51,8 +51,8 @@ pub mod wrapper;
 pub use action::{Move, MoveError};
 pub use phases::{Finished, InProgress, Outcome, Setup};
 pub use position::Position;
-pub use typestate::{GameSetup, GameInProgress, GameFinished, GameResult};
 pub use types::{Board, Player, Square};
+pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 pub use wrapper::AnyGame;
 
 /// Alias for clarity in session management.
@@ -60,4 +60,3 @@ pub type Mark = Player;
 
 /// Compatibility alias for GameSetup
 pub type Game = GameSetup;
-

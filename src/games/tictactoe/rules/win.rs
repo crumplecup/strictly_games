@@ -12,12 +12,32 @@ pub fn check_winner(board: &Board) -> Option<Player> {
     const LINES: [[Position; 3]; 8] = [
         // Rows
         [Position::TopLeft, Position::TopCenter, Position::TopRight],
-        [Position::MiddleLeft, Position::Center, Position::MiddleRight],
-        [Position::BottomLeft, Position::BottomCenter, Position::BottomRight],
+        [
+            Position::MiddleLeft,
+            Position::Center,
+            Position::MiddleRight,
+        ],
+        [
+            Position::BottomLeft,
+            Position::BottomCenter,
+            Position::BottomRight,
+        ],
         // Columns
-        [Position::TopLeft, Position::MiddleLeft, Position::BottomLeft],
-        [Position::TopCenter, Position::Center, Position::BottomCenter],
-        [Position::TopRight, Position::MiddleRight, Position::BottomRight],
+        [
+            Position::TopLeft,
+            Position::MiddleLeft,
+            Position::BottomLeft,
+        ],
+        [
+            Position::TopCenter,
+            Position::Center,
+            Position::BottomCenter,
+        ],
+        [
+            Position::TopRight,
+            Position::MiddleRight,
+            Position::BottomRight,
+        ],
         // Diagonals
         [Position::TopLeft, Position::Center, Position::BottomRight],
         [Position::TopRight, Position::Center, Position::BottomLeft],

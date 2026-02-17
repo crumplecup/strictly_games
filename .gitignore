@@ -2,3 +2,4 @@
 *.log
 .env
 *.env
+strictly_games.db

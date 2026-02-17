@@ -34,7 +34,7 @@ impl Outcome {
             Outcome::Draw => None,
         }
     }
-    
+
     /// Returns true if the game was a draw.
     pub fn is_draw(&self) -> bool {
         matches!(self, Outcome::Draw)

@@ -4,7 +4,7 @@ use crate::llm_client::{LlmConfig, LlmProvider};
 use derive_getters::Getters;
 use derive_more::{Display, Error};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, instrument};
 
 /// Configuration for an MCP agent client.
@@ -30,6 +30,10 @@ pub struct AgentConfig {
     /// Maximum tokens for LLM responses.
     #[serde(default = "default_max_tokens")]
     llm_max_tokens: u32,
+
+    /// Path this config was loaded from (not serialized — set by `from_file`).
+    #[serde(skip)]
+    config_path: Option<PathBuf>,
 }
 
 #[instrument]
@@ -50,11 +54,7 @@ fn default_max_tokens() -> u32 {
 impl AgentConfig {
     /// Creates a new agent configuration.
     #[instrument(skip(name, server_command, server_cwd), fields(agent_name = %name))]
-    pub fn new(
-        name: String,
-        server_command: Vec<String>,
-        server_cwd: Option<String>,
-    ) -> Self {
+    pub fn new(name: String, server_command: Vec<String>, server_cwd: Option<String>) -> Self {
         Self {
             name,
             server_command,
@@ -62,6 +62,7 @@ impl AgentConfig {
             llm_provider: default_provider(),
             llm_model: default_model(),
             llm_max_tokens: default_max_tokens(),
+            config_path: None,
         }
     }
 
@@ -82,6 +83,7 @@ impl AgentConfig {
             llm_provider,
             llm_model,
             llm_max_tokens,
+            config_path: None,
         }
     }
 
@@ -89,14 +91,13 @@ impl AgentConfig {
     #[instrument(skip(path), fields(path = %path.as_ref().display()))]
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         debug!("Loading config from file");
-        let content = std::fs::read_to_string(path.as_ref()).map_err(|e| {
-            ConfigError::new(format!("Failed to read config file: {}", e))
-        })?;
+        let content = std::fs::read_to_string(path.as_ref())
+            .map_err(|e| ConfigError::new(format!("Failed to read config file: {}", e)))?;
 
-        let config: Self = toml::from_str(&content).map_err(|e| {
-            ConfigError::new(format!("Failed to parse config: {}", e))
-        })?;
+        let mut config: Self = toml::from_str(&content)
+            .map_err(|e| ConfigError::new(format!("Failed to parse config: {}", e)))?;
 
+        config.config_path = Some(path.as_ref().to_path_buf());
         info!(agent_name = %config.name, "Config loaded successfully");
         Ok(config)
     }

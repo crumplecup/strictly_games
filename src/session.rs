@@ -33,6 +33,8 @@ pub struct Player {
     pub player_type: PlayerType,
     /// Which mark this player uses (X or O).
     pub mark: Mark,
+    /// Linked user profile ID (set after lobby profile selection).
+    pub user_id: Option<i32>,
 }
 
 /// A game session with two players.
@@ -55,7 +57,9 @@ impl GameSession {
         info!(session_id = %id, "Creating new game session");
         Self {
             id,
-            game: GameSetup::new().start(crate::games::tictactoe::Player::X).into(),
+            game: GameSetup::new()
+                .start(crate::games::tictactoe::Player::X)
+                .into(),
             player_x: None,
             player_o: None,
         }
@@ -75,7 +79,7 @@ impl GameSession {
             info!(player_id = %id, mark = ?player.mark, "Player already registered, returning existing mark");
             return Ok(player.mark);
         }
-        
+
         // Assign to first available slot
         if self.player_x.is_none() {
             info!(player_id = %id, mark = "X", "Registering player as X");
@@ -84,6 +88,7 @@ impl GameSession {
                 name,
                 player_type,
                 mark: Mark::X,
+                user_id: None,
             });
             Ok(Mark::X)
         } else if self.player_o.is_none() {
@@ -93,6 +98,7 @@ impl GameSession {
                 name,
                 player_type,
                 mark: Mark::O,
+                user_id: None,
             });
             Ok(Mark::O)
         } else {
@@ -129,7 +135,7 @@ impl GameSession {
             return false;
         };
         let is_turn = player.mark == current_mark;
-        
+
         debug!(
             player_id,
             player_mark = ?player.mark,
@@ -137,7 +143,7 @@ impl GameSession {
             is_turn,
             "Checked if player's turn"
         );
-        
+
         is_turn
     }
 
@@ -145,15 +151,16 @@ impl GameSession {
     #[instrument(skip(self), fields(session_id = %self.id))]
     pub fn make_move(&mut self, player_id: &str, position: Position) -> Result<(), String> {
         // Validate player exists
-        let player = self.get_player(player_id)
-            .ok_or_else(|| {
-                warn!(player_id, "Unknown player attempted move");
-                "Unknown player".to_string()
-            })?;
+        let player = self.get_player(player_id).ok_or_else(|| {
+            warn!(player_id, "Unknown player attempted move");
+            "Unknown player".to_string()
+        })?;
 
         // Validate it's their turn
         if !self.is_players_turn(player_id) {
-            let expected = self.game.to_move()
+            let expected = self
+                .game
+                .to_move()
                 .ok_or_else(|| "Game is over".to_string())?;
             warn!(
                 player_id,
@@ -161,10 +168,7 @@ impl GameSession {
                 player_mark = ?player.mark,
                 "Player tried to move out of turn"
             );
-            return Err(format!(
-                "Not your turn. Waiting for player {:?}",
-                expected
-            ));
+            return Err(format!("Not your turn. Waiting for player {:?}", expected));
         }
 
         // Construct Move action (first-class domain event)
@@ -172,7 +176,12 @@ impl GameSession {
         debug!(action = %action, "Applying Move action");
 
         // Make the move (consuming transition via wrapper)
-        let old_game = std::mem::replace(&mut self.game, GameSetup::new().start(crate::games::tictactoe::Player::X).into());
+        let old_game = std::mem::replace(
+            &mut self.game,
+            GameSetup::new()
+                .start(crate::games::tictactoe::Player::X)
+                .into(),
+        );
         self.game = old_game.make_move_action(action).map_err(|e| {
             warn!(player_id, action = %action, error = %e, "Invalid move");
             format!("Invalid move: {}", e)
@@ -186,6 +195,30 @@ impl GameSession {
         );
 
         Ok(())
+    }
+
+    /// Links a session player to a user profile by database ID.
+    #[instrument(skip(self), fields(session_id = %self.id))]
+    pub fn set_player_user_id(&mut self, player_id: &str, user_id: i32) -> Result<(), String> {
+        debug!(player_id = %player_id, user_id = %user_id, "Linking player to user profile");
+
+        if let Some(ref mut player) = self.player_x
+            && player.id == player_id
+        {
+            player.user_id = Some(user_id);
+            info!(player_id = %player_id, user_id = %user_id, "Player X linked to profile");
+            return Ok(());
+        }
+        if let Some(ref mut player) = self.player_o
+            && player.id == player_id
+        {
+            player.user_id = Some(user_id);
+            info!(player_id = %player_id, user_id = %user_id, "Player O linked to profile");
+            return Ok(());
+        }
+
+        warn!(player_id = %player_id, "Player not found for profile linking");
+        Err(format!("Player not found: {}", player_id))
     }
 }
 
@@ -209,7 +242,7 @@ impl SessionManager {
     #[instrument(skip(self))]
     pub fn create_session(&self, id: SessionId) -> Result<SessionId, String> {
         let mut sessions = self.sessions.lock().unwrap();
-        
+
         if sessions.contains_key(&id) {
             warn!(session_id = %id, "Session already exists");
             return Err("Session already exists".to_string());
@@ -217,7 +250,7 @@ impl SessionManager {
 
         let session = GameSession::new(id.clone());
         sessions.insert(id.clone(), session);
-        
+
         info!(session_id = %id, "Created new session");
         Ok(id)
     }
@@ -227,11 +260,11 @@ impl SessionManager {
     pub fn get_session(&self, id: &str) -> Option<GameSession> {
         let sessions = self.sessions.lock().unwrap();
         let session = sessions.get(id).cloned();
-        
+
         if session.is_none() {
             debug!(session_id = id, "Session not found");
         }
-        
+
         session
     }
 
@@ -263,46 +296,41 @@ impl SessionManager {
         player_type: PlayerType,
     ) -> Result<Mark, String> {
         let mut sessions = self.sessions.lock().unwrap();
-        
+
         let session = sessions
             .get_mut(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
-        
+
         // Register player while holding the lock
         session.register_player(player_id, name, player_type)
     }
-    
+
     /// Atomically updates game state without overwriting player registrations.
     #[instrument(skip(self, game))]
-    pub fn update_game_atomic(
-        &self,
-        session_id: &str,
-        game: AnyGame,
-    ) -> Result<(), String> {
+    pub fn update_game_atomic(&self, session_id: &str, game: AnyGame) -> Result<(), String> {
         let mut sessions = self.sessions.lock().unwrap();
-        
+
         let session = sessions
             .get_mut(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
-        
+
         session.game = game;
         debug!("Game state updated atomically");
         Ok(())
     }
-    
+
     /// Restarts game in session (keeps players registered).
     #[instrument(skip(self))]
-    pub fn restart_game(
-        &self,
-        session_id: &str,
-    ) -> Result<(), String> {
+    pub fn restart_game(&self, session_id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.lock().unwrap();
-        
+
         let session = sessions
             .get_mut(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
-        
-        session.game = GameSetup::new().start(crate::games::tictactoe::Player::X).into();
+
+        session.game = GameSetup::new()
+            .start(crate::games::tictactoe::Player::X)
+            .into();
         info!("Game restarted with same players");
         Ok(())
     }
