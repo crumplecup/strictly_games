@@ -19,6 +19,7 @@ enum LobbyOption {
     PlayGame,
     ViewStats,
     ChangeProfile,
+    Settings,
     Quit,
 }
 
@@ -29,6 +30,7 @@ impl LobbyOption {
             Self::PlayGame => "Play Game",
             Self::ViewStats => "View Statistics",
             Self::ChangeProfile => "Change Profile",
+            Self::Settings => "Settings",
             Self::Quit => "Quit",
         }
     }
@@ -39,6 +41,7 @@ impl LobbyOption {
             Self::PlayGame,
             Self::ViewStats,
             Self::ChangeProfile,
+            Self::Settings,
             Self::Quit,
         ]
     }
@@ -178,6 +181,7 @@ impl Screen for MainLobbyScreen {
                     LobbyOption::PlayGame => ScreenTransition::GoToAgentSelect,
                     LobbyOption::ViewStats => ScreenTransition::GoToStatsView,
                     LobbyOption::ChangeProfile => ScreenTransition::GoToProfileSelect,
+                    LobbyOption::Settings => ScreenTransition::GoToSettings,
                     LobbyOption::Quit => ScreenTransition::Quit,
                 }
             }

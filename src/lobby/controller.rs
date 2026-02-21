@@ -10,11 +10,14 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::lobby::screen::ScreenTransition;
 use crate::lobby::screens::{
-    AgentSelectScreen, InGameScreen, MainLobbyScreen, ProfileSelectScreen, StatsViewScreen,
+    AgentSelectScreen, InGameScreen, MainLobbyScreen, ProfileSelectScreen, SettingsScreen,
+    StatsViewScreen,
 };
+use crate::lobby::settings::LobbySettings;
 use crate::run_game_session;
 use crate::{
-    AgentConfig, AgentLibrary, AnyGame, GameOutcome, ProfileService, TicTacToePlayer, User,
+    AgentConfig, AgentLibrary, AnyGame, FirstPlayer, GameOutcome, ProfileService, TicTacToePlayer,
+    User,
 };
 
 /// Active screen in the lobby state machine.
@@ -25,6 +28,7 @@ enum ActiveScreen {
     AgentSelect(AgentSelectScreen),
     StatsView(StatsViewScreen),
     InGame(InGameScreen),
+    Settings(SettingsScreen),
 }
 
 /// Controller that drives the lobby state machine.
@@ -37,6 +41,7 @@ pub struct LobbyController {
     current_user: Option<User>,
     agent_config_path: PathBuf,
     server_port: u16,
+    settings: LobbySettings,
 }
 
 impl LobbyController {
@@ -55,6 +60,7 @@ impl LobbyController {
             current_user: None,
             agent_config_path,
             server_port,
+            settings: LobbySettings::new(),
         }
     }
 
@@ -85,6 +91,7 @@ impl LobbyController {
                     ActiveScreen::AgentSelect(s) => s.render(f, &self.profile_service),
                     ActiveScreen::StatsView(s) => s.render(f, &self.profile_service),
                     ActiveScreen::InGame(s) => s.render(f, &self.profile_service),
+                    ActiveScreen::Settings(s) => s.render(f, &self.profile_service),
                 }
             })?;
 
@@ -104,12 +111,16 @@ impl LobbyController {
                     ActiveScreen::AgentSelect(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::StatsView(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::InGame(s) => s.handle_key(key, &self.profile_service),
+                    ActiveScreen::Settings(s) => s.handle_key(key, &self.profile_service),
                 };
 
                 // GoToInGame runs the actual game loop before any other transition.
                 if let ScreenTransition::GoToInGame { ref agent_name } = transition {
                     let agent_name = agent_name.clone();
-                    match self.execute_game(terminal, &agent_name).await {
+                    match self
+                        .execute_game(terminal, &agent_name, self.settings.first_player)
+                        .await
+                    {
                         Ok(next_screen) => {
                             screen = next_screen;
                             continue;
@@ -161,6 +172,15 @@ impl LobbyController {
             }
 
             ScreenTransition::GoToMainLobby => {
+                // Persist any settings changes if returning from the Settings screen.
+                if let Some(updated) = self.extract_settings_from_screen(&current) {
+                    debug!(
+                        first_player = %updated.first_player.label(),
+                        "Saving updated settings"
+                    );
+                    self.settings = updated;
+                }
+
                 let user = match self.extract_user_from_screen(&current) {
                     Some(u) => {
                         self.current_user = Some(u.clone());
@@ -204,6 +224,11 @@ impl LobbyController {
                 )))
             }
 
+            ScreenTransition::GoToSettings => {
+                info!("Navigating to Settings");
+                Some(ActiveScreen::Settings(SettingsScreen::new(self.settings)))
+            }
+
             ScreenTransition::GoToInGame { agent_name } => {
                 info!(agent_name = %agent_name, "Navigating to InGame");
                 Some(ActiveScreen::InGame(InGameScreen::new(agent_name)))
@@ -234,6 +259,15 @@ impl LobbyController {
         }
     }
 
+    /// Extracts updated settings from the settings screen when navigating away.
+    #[instrument(skip(self, screen))]
+    fn extract_settings_from_screen(&self, screen: &ActiveScreen) -> Option<LobbySettings> {
+        match screen {
+            ActiveScreen::Settings(s) => Some(s.settings()),
+            _ => None,
+        }
+    }
+
     /// Finds an agent config by name in the library.
     #[instrument(skip(self))]
     pub fn find_agent(&self, name: &str) -> Option<&AgentConfig> {
@@ -250,11 +284,12 @@ impl LobbyController {
         &mut self,
         terminal: &mut Terminal<B>,
         agent_name: &str,
+        first_player: FirstPlayer,
     ) -> anyhow::Result<ActiveScreen>
     where
         <B as Backend>::Error: Send + Sync + 'static,
     {
-        info!(agent_name = %agent_name, "Executing game session");
+        info!(agent_name = %agent_name, first_player = %first_player.label(), "Executing game session");
 
         let agent_config = match self.agent_library.get_by_name(agent_name) {
             Some(c) => c.clone(),
@@ -293,6 +328,7 @@ impl LobbyController {
             config_path,
             player_name.clone(),
             *self.server_port(),
+            first_player,
         )
         .await?;
 

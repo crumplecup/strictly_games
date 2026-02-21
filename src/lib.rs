@@ -57,7 +57,7 @@ pub use db::{
 };
 
 // Crate-level exports - Lobby
-pub use lobby::{LobbyController, Screen, ScreenTransition};
+pub use lobby::{FirstPlayer, LobbyController, LobbySettings, Screen, ScreenTransition};
 
 // Crate-level exports - Profile service
 pub use profile_service::ProfileService;

@@ -21,6 +21,8 @@ pub enum ScreenTransition {
     GoToAgentSelect,
     /// Navigate to the statistics view for the current user.
     GoToStatsView,
+    /// Navigate to the settings screen.
+    GoToSettings,
     /// Start an in-game session with the selected agent.
     GoToInGame {
         /// Name of the selected agent config to use as the AI opponent.

@@ -17,7 +17,8 @@ use std::{io, path::PathBuf};
 use tracing::{error, info, instrument};
 
 use crate::{
-    AgentLibrary, AnyGame, GameRepository, LobbyController, ProfileService, TicTacToePlayer,
+    AgentLibrary, AnyGame, FirstPlayer, GameRepository, LobbyController, ProfileService,
+    TicTacToePlayer,
 };
 
 use crate::games::tictactoe::Position;
@@ -47,9 +48,11 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
         info!(server_url = %url, "Connecting to remote server");
         (url, None)
     } else {
-        // Standalone mode: spawn server and agent
+        // Standalone mode: spawn server then agent (agent registers first, gets X).
         info!(port, "Starting standalone mode");
-        let guards = standalone::spawn_standalone(port, agent_config).await?;
+        let server = standalone::spawn_server(port).await?;
+        let agent = standalone::spawn_agent(port, agent_config).await?;
+        let guards = standalone::ProcessGuards::new(server, agent);
         let url = format!("http://localhost:{}", port);
         info!(server_url = %url, "Standalone mode initialized");
         (url, Some(guards))
@@ -338,25 +341,49 @@ pub async fn run_lobby(
 ///
 /// Unlike [`run`], this does not restart the game or exit on 'q'; pressing any
 /// key after the game ends returns the outcome to the lobby controller.
-#[instrument(skip(terminal), fields(player_name = %player_name, port))]
+///
+/// `first_player` controls registration order: [`FirstPlayer::Human`] registers
+/// the human before the agent so the human plays as X and moves first;
+/// [`FirstPlayer::Agent`] spawns the agent first so it plays as X.
+#[instrument(skip(terminal), fields(player_name = %player_name, port, first_player = %first_player.label()))]
 pub async fn run_game_session<B: ratatui::backend::Backend + std::io::Write>(
     terminal: &mut Terminal<B>,
     agent_config_path: PathBuf,
     player_name: String,
     port: u16,
+    first_player: FirstPlayer,
 ) -> Result<(AnyGame, TicTacToePlayer)>
 where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
     info!("Starting lobby game session");
 
-    // Spawn standalone server + agent subprocess.
-    let _guards = standalone::spawn_standalone(port, agent_config_path).await?;
     let server_url = format!("http://localhost:{}", port);
 
-    // Register human player.
-    let client =
-        RestGameClient::register(server_url, "tui_session".to_string(), player_name).await?;
+    // Spawn server, then register human and agent in the configured order.
+    // The first to register gets Mark::X and moves first.
+    let server = standalone::spawn_server(port).await?;
+
+    let (client, _guards) = match first_player {
+        FirstPlayer::Human => {
+            // Register human first → human plays as X (moves first).
+            info!("Registering human first (player goes first)");
+            let client =
+                RestGameClient::register(server_url, "tui_session".to_string(), player_name)
+                    .await?;
+            let agent = standalone::spawn_agent(port, agent_config_path).await?;
+            (client, standalone::ProcessGuards::new(server, agent))
+        }
+        FirstPlayer::Agent => {
+            // Spawn agent first → agent plays as X (moves first), human gets O.
+            info!("Spawning agent first (agent goes first)");
+            let agent = standalone::spawn_agent(port, agent_config_path).await?;
+            let client =
+                RestGameClient::register(server_url, "tui_session".to_string(), player_name)
+                    .await?;
+            (client, standalone::ProcessGuards::new(server, agent))
+        }
+    };
 
     let human_mark = client.player_mark;
     info!(mark = ?human_mark, "Human player registered");

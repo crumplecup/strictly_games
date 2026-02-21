@@ -13,7 +13,7 @@ pub struct ProcessGuards {
 }
 
 impl ProcessGuards {
-    fn new(server: Child, agent: Child) -> Self {
+    pub fn new(server: Child, agent: Child) -> Self {
         Self {
             server: Some(server),
             agent: Some(agent),
@@ -37,15 +37,14 @@ impl Drop for ProcessGuards {
     }
 }
 
-/// Spawns server and agent subprocesses for standalone mode.
-#[instrument(skip_all, fields(port, agent_config = %agent_config.display()))]
-pub async fn spawn_standalone(port: u16, agent_config: PathBuf) -> Result<ProcessGuards> {
-    info!("Starting standalone mode: spawning server and agent");
-
-    // Get the path to the current executable
+/// Spawns the HTTP game server and waits until it is ready.
+///
+/// Returns the server [`Child`] process. The caller is responsible for keeping
+/// it alive (typically via [`ProcessGuards`]).
+#[instrument(fields(port))]
+pub async fn spawn_server(port: u16) -> Result<Child> {
     let exe = std::env::current_exe().context("Failed to get current executable path")?;
 
-    // Spawn HTTP server
     info!(port, "Spawning HTTP game server");
     let server = Command::new(&exe)
         .arg("http")
@@ -60,15 +59,25 @@ pub async fn spawn_standalone(port: u16, agent_config: PathBuf) -> Result<Proces
 
     debug!("Server process spawned, waiting for readiness");
 
-    // Wait for server to be ready
     let server_url = format!("http://localhost:{}", port);
     wait_for_server_ready(&server_url)
         .await
         .context("Server failed to become ready")?;
 
-    info!("Server is ready, spawning agent");
+    info!("Server is ready");
+    Ok(server)
+}
 
-    // Spawn agent connected to the server, joining the TUI session
+/// Spawns the agent subprocess and gives it a moment to connect.
+///
+/// Returns the agent [`Child`] process. The caller is responsible for keeping
+/// it alive (typically via [`ProcessGuards`]).
+#[instrument(fields(port, agent_config = %agent_config.display()))]
+pub async fn spawn_agent(port: u16, agent_config: PathBuf) -> Result<Child> {
+    let exe = std::env::current_exe().context("Failed to get current executable path")?;
+    let server_url = format!("http://localhost:{}", port);
+
+    info!("Spawning agent subprocess");
     let agent = Command::new(&exe)
         .arg("agent")
         .arg("--config")
@@ -79,18 +88,15 @@ pub async fn spawn_standalone(port: u16, agent_config: PathBuf) -> Result<Proces
         .arg("--test-session")
         .arg("tui_session")
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::inherit()) // Let agent logs flow to same output
+        .stderr(std::process::Stdio::inherit())
         .spawn()
         .context("Failed to spawn agent process")?;
 
-    debug!("Agent process spawned");
-
-    // Give agent a moment to connect
+    debug!("Agent process spawned, waiting for connection");
     sleep(Duration::from_millis(500)).await;
 
-    info!("Standalone mode initialized successfully");
-
-    Ok(ProcessGuards::new(server, agent))
+    info!("Agent spawned successfully");
+    Ok(agent)
 }
 
 /// Polls server health endpoint until ready or timeout.
