@@ -14,5 +14,9 @@
 
 #[cfg(kani)]
 pub mod kani_proofs;
+
+#[cfg(not(kani))]
 pub mod verus_proofs;
+
+#[cfg(all(not(kani), creusot))]
 pub mod creusot_proofs;
