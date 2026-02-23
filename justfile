@@ -51,7 +51,7 @@ clean:
 # Run all Kani verification harnesses
 verify:
     @echo "Running Kani formal verification..."
-    cargo kani --features verification
+    cargo kani
 
 # Run compositional proof (types verified through framework)
 verify-compositional:
@@ -61,27 +61,32 @@ verify-compositional:
 # Run game invariant proofs (game rules correctness)
 verify-invariants:
     @echo "Verifying game-specific invariants..."
-    cargo kani --harness board_never_has_both_winners
-    cargo kani --harness winner_detection_is_deterministic
-    cargo kani --harness draw_and_winner_are_mutually_exclusive
-    cargo kani --harness position_to_index_is_always_valid
-    cargo kani --harness position_index_round_trips
-    cargo kani --harness winner_requires_at_least_three_marks
     cargo kani --harness player_opponent_is_involutive
+    cargo kani --harness position_to_index_is_always_valid
 
 # Run passive-affirm escape hatch proofs
 verify-passive-affirm:
     @echo "Verifying passive-Affirm escape hatch pattern..."
     cargo kani --harness affirm_continue_always_returns
     cargo kani --harness cancellation_is_monotonic
-    cargo kani --harness multiple_cancels_are_idempotent
-    cargo kani --harness new_session_is_not_cancelled
-    cargo kani --harness reset_cancel_restores_state
 
 # Check that verification code compiles (fast check before running Kani)
 verify-check:
     @echo "Checking verification code compiles..."
-    cargo check --features verification
+    cargo check
+
+# Tracked verification (CSV output with timestamps)
+verify-kani-tracked:
+    @echo "Running tracked Kani verification..."
+    python3 scripts/verify_tracked.py run-kani
+
+# Show current verification status from CSV
+verify-status:
+    python3 scripts/verify_tracked.py status
+
+# Run all tracked verification (future: Kani + Verus + Creusot)
+verify-all-tracked: verify-kani-tracked
+    @echo "✅ Tracked verification complete"
 
 # Install Kani verifier (one-time setup)
 install-kani:

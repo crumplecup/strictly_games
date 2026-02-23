@@ -115,9 +115,52 @@ cargo kani --harness reset_cancel_restores_state
 
 ```bash
 # Check that verification code compiles
-cargo check --features verification
+just verify-check
 
 # Run all proofs (requires Kani installed)
+just verify
+
+# Run specific proof categories
+just verify-compositional    # Framework composition
+just verify-invariants       # Game rules
+just verify-passive-affirm   # Escape hatch
+```
+
+### Tracked Verification (CSV Output)
+
+Run all proofs with timestamp tracking:
+
+```bash
+just verify-kani-tracked
+```
+
+This records results to `verification_results.csv`:
+```csv
+verifier,harness,status,checks,time_seconds,timestamp,error_message
+kani,verify_tictactoe_compositional,Success,10603,8.52,2026-02-23T04:13:45Z,
+kani,player_opponent_is_involutive,Success,10469,7.89,2026-02-23T04:14:12Z,
+```
+
+View current status:
+```bash
+just verify-status
+```
+
+Output:
+```
+KANI: 20/20 passing
+  ✅ affirm_continue_always_returns              10234 checks    7.2s
+  ✅ player_opponent_is_involutive               10469 checks    7.9s
+  ✅ verify_tictactoe_compositional              10603 checks    8.5s
+  ...
+```
+
+**Why track verification?**
+- Continuous monitoring (when proofs last passed)
+- Performance tracking (detect slowdowns)
+- CI/CD integration (automated pipelines)
+- Audit trail (prove verification at specific dates)
+- Multi-verifier comparison (future: Kani + Verus + Creusot)
 cargo kani --features verification
 
 # Run specific harness

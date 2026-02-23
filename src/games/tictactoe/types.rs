@@ -6,6 +6,7 @@ use tracing::instrument;
 
 /// Player in the game.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Player {
     /// Player X (goes first).
     X,
@@ -26,6 +27,7 @@ impl Player {
 
 /// A square on the tic-tac-toe board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Square {
     /// Empty square.
     Empty,

@@ -45,6 +45,10 @@ mod server;
 mod session;
 mod tui;
 
+// Kani proof harnesses (only compiled when running Kani)
+#[cfg(kani)]
+mod kani_proofs;
+
 // Crate-level exports - Agent configuration
 pub use agent_config::{AgentConfig, ConfigError};
 

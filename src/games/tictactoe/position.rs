@@ -25,6 +25,7 @@ use tracing::instrument;
     elicitation::Elicit,
     strum::EnumIter,
 )]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Position {
     /// Top-left (position 0)
     TopLeft,
