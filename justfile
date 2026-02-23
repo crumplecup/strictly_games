@@ -78,26 +78,27 @@ verify-check:
 # Tracked verification (CSV output with timestamps)
 verify-kani-tracked:
     @echo "Running tracked Kani verification..."
-    python3 scripts/verify_tracked.py run-kani
+    cargo run --bin strictly_games -- verify --tool kani
 
 # Run Verus verification with CSV tracking
 verify-verus-tracked:
     @echo "Running tracked Verus verification..."
-    python3 scripts/verify_tracked.py run-verus
+    cargo run --bin strictly_games -- verify --tool verus
 
 # Run Creusot verification with CSV tracking
 verify-creusot-tracked:
     @echo "Running tracked Creusot verification..."
-    python3 scripts/verify_tracked.py run-creusot
+    cargo run --bin strictly_games -- verify --tool creusot
 
 # Show current verification status from CSV
 verify-status:
-    python3 scripts/verify_tracked.py status
+    @echo "Verification status:"
+    @echo "Run 'just verify-all-tracked' to see all results"
 
 # Run all tracked verification (Kani + Verus + Creusot)
 verify-all-tracked:
     @echo "Running verification trifecta..."
-    python3 scripts/verify_tracked.py run-all
+    cargo run --bin strictly_games -- verify --tool all
 
 # Generate verification dashboard from CSV
 verify-dashboard:
