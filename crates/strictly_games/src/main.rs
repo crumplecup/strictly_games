@@ -25,8 +25,8 @@ async fn main() -> Result<()> {
             init_logging();
             run_mcp_server().await
         }
-        Command::Http { port, host } => {
-            init_logging();
+        Command::Http { port, host} => {
+            // HTTP server sets up its own file logging
             run_http_server(host, port).await
         }
         Command::Tui {
@@ -113,7 +113,8 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,rmcp=debug")),
         )
         .with_ansi(false)
-        .init();
+        .try_init()
+        .ok(); // Ignore error if already initialized
 
     info!("Starting Strictly Games MCP server on HTTP");
     info!(port, "Server will listen on http://localhost:{}", port);

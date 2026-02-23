@@ -46,18 +46,37 @@ pub async fn spawn_server(port: u16) -> Result<Child> {
     let exe = std::env::current_exe().context("Failed to get current executable path")?;
 
     info!(port, "Spawning HTTP game server");
-    let server = Command::new(&exe)
+    debug!(exe = %exe.display(), "Server executable path");
+    
+    let mut server = Command::new(&exe)
         .arg("http")
         .arg("--port")
         .arg(port.to_string())
         .arg("--host")
         .arg("127.0.0.1")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())  // Capture stdout to see errors
+        .stderr(std::process::Stdio::piped())  // Capture stderr
         .spawn()
         .context("Failed to spawn server process")?;
 
-    debug!("Server process spawned, waiting for readiness");
+    debug!(pid = ?server.id(), "Server process spawned, waiting for readiness");
+
+    // Give server a moment to start and fail if it's going to
+    sleep(Duration::from_millis(100)).await;
+    
+    // Check if server already exited
+    if let Ok(Some(status)) = server.try_wait() {
+        // Server exited immediately - capture output
+        let output = server.wait_with_output().await?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!(
+            "Server exited immediately with status {:?}\nstdout: {}\nstderr: {}",
+            status,
+            stdout,
+            stderr
+        );
+    }
 
     let server_url = format!("http://localhost:{}", port);
     wait_for_server_ready(&server_url)
@@ -105,8 +124,11 @@ async fn wait_for_server_ready(server_url: &str) -> Result<()> {
     let client = reqwest::Client::new();
     let health_url = format!("{}/health", server_url);
 
+    debug!(health_url = %health_url, "Starting health check polling");
+
     let result = timeout(Duration::from_secs(10), async {
         for attempt in 1..=20 {
+            debug!(attempt, "Attempting health check");
             match client.get(&health_url).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     info!("Server health check passed");
