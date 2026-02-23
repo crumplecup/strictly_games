@@ -896,7 +896,9 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "elicitation"
-version = "0.8.1"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccfda6117fb6799cc8e1034ea051215b11ab68e54d961d694b84def51336f93a"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -924,7 +926,9 @@ dependencies = [
 
 [[package]]
 name = "elicitation_derive"
-version = "0.8.1"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0458d29bf7ddcb9f3499db388d32d8443d7b934517c9b0e9634660da3cc25bee"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -933,7 +937,9 @@ dependencies = [
 
 [[package]]
 name = "elicitation_macros"
-version = "0.8.1"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c3de77e34bead1b0d99228964f464797faeaf86a4a366d65628fdae3c8322c9"
 dependencies = [
  "proc-macro2",
  "quote",
