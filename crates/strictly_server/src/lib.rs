@@ -53,10 +53,10 @@ pub use llm_client::LlmClient;
 pub use server::GameServer;
 
 // Public API exports - Session
-pub use session::GameSession;
+pub use session::{GameSession, SessionManager};
 
 // Public API exports - TUI
-pub use tui::run_game_session;
+pub use tui::{run as tui_run, run_game_session};
 
 // Public API exports - Verification
 pub use verify::{run_all as run_verification_all, run_kani, run_verus, run_creusot};

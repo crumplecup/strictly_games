@@ -9,8 +9,9 @@ mod cli;
 use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
-use strictly_server::{GameServer, run_game_session};
+use strictly_server::{GameServer, run_game_session, AgentConfig, GameAgent, SessionManager, AnyGame, Board};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{info, warn, error, instrument};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,7 +35,7 @@ async fn main() -> Result<()> {
             agent_config,
         } => {
             // TUI has its own logging setup
-            strictly_server::tui::run(server_url, port, agent_config).await
+            strictly_server::tui_run(server_url, port, agent_config).await
         }
         Command::Lobby {
             db_path,
@@ -42,7 +43,8 @@ async fn main() -> Result<()> {
             port,
         } => {
             // Lobby has its own logging setup
-            run_lobby(db_path, agents_dir, port).await
+            let agent_config = std::path::PathBuf::from("agent_config.toml");
+            run_lobby(db_path, agents_dir, port, agent_config).await
         }
         Command::Agent {
             config,
@@ -78,21 +80,10 @@ fn run_verify(tool: &str, verbose: bool) -> Result<()> {
     }
 }
 
-/// Run the MCP game server (stdio mode)
-#[instrument]
 async fn run_mcp_server() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
-
-    info!("Starting Strictly Games MCP server");
-
+    tracing::info!("Starting MCP server");
     let server = GameServer::new();
-
-    info!("Server ready - connect via MCP protocol");
-    let service = server.serve(rmcp::transport::stdio()).await?;
-    service.waiting().await?;
-
+    rmcp::service::serve_server(server, rmcp::transport::stdio()).await?;
     Ok(())
 }
 
@@ -169,7 +160,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                     if let Some(session) = sessions.get_session(&session_id) {
                         Json(session.game.clone())
                     } else {
-                        Json(Game::new().into())
+                        Json(AnyGame::Setup { board: Board::default() })
                     }
                 }
             }),
@@ -234,7 +225,58 @@ async fn run_lobby(
     port: u16,
     agent_config: std::path::PathBuf,
 ) -> Result<()> {
-    run_lobby_impl(db_path, agents_dir, port, agent_config).await
+    use strictly_server::{AgentLibrary, GameRepository, LobbyController, ProfileService};
+    use ratatui::{Terminal, backend::CrosstermBackend};
+    use std::io;
+
+    // Setup terminal
+    crossterm::terminal::enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    crossterm::execute!(
+        stdout,
+        crossterm::terminal::EnterAlternateScreen,
+        crossterm::event::EnableMouseCapture
+    )?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Setup services
+    let repository = GameRepository::new(db_path)?;
+    let profile_service = ProfileService::new(repository.clone());
+    let agent_library = if let Some(dir) = agents_dir {
+        AgentLibrary::scan(dir).unwrap_or_else(|e| {
+            warn!("Failed to scan agent directory: {}, using empty library", e);
+            AgentLibrary::scan_default().unwrap_or_else(|_| {
+                panic!("Failed to load default agent library")
+            })
+        })
+    } else {
+        AgentLibrary::scan_default().unwrap_or_else(|e| {
+            warn!("Failed to scan default agents: {}, using empty library", e);
+            panic!("No agent library available")
+        })
+    };
+
+    // Run lobby
+    let mut controller = LobbyController::new(
+        profile_service,
+        agent_library,
+        agent_config,
+        port,
+    );
+
+    let result = controller.run(&mut terminal).await;
+
+    // Restore terminal
+    crossterm::terminal::disable_raw_mode()?;
+    crossterm::execute!(
+        terminal.backend_mut(),
+        crossterm::terminal::LeaveAlternateScreen,
+        crossterm::event::DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    result
 }
 
 /// Run the MCP agent

@@ -3108,13 +3108,19 @@ name = "strictly_games"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "clap",
  "crossterm",
  "dotenvy",
+ "http-body-util",
+ "hyper",
  "ratatui",
  "rmcp",
+ "serde",
+ "serde_json",
  "strictly_server",
  "tokio",
+ "tower",
  "tracing",
  "tracing-subscriber",
 ]
