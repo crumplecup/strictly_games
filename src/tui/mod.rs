@@ -238,7 +238,14 @@ where
             && let Event::Key(key) = event::read()?
         {
             match key.code {
-                KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(()),
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    // Trigger passive-Affirm escape hatch
+                    info!("User pressed 'q', cancelling game");
+                    if let Err(e) = client.cancel_game().await {
+                        error!(error = %e, "Failed to cancel game");
+                    }
+                    return Ok(());
+                }
                 KeyCode::Enter => {
                     info!(position = ?cursor, "Making move");
                     if let Err(e) = client.make_move(cursor).await {
@@ -407,8 +414,6 @@ async fn run_lobby_game<B: ratatui::backend::Backend>(
 where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
-    use crate::games::tictactoe::Player;
-    use crossterm::event::KeyEventKind;
     use tokio::time::{Duration, sleep};
 
     info!("Starting lobby game loop");
@@ -420,145 +425,26 @@ where
 
         // Once game is over, render final state and wait for any keypress.
         if game.is_over() {
-            terminal.draw(|f| {
-                use ratatui::{
-                    layout::{Alignment, Constraint, Direction, Layout},
-                    style::{Color, Modifier, Style},
-                    widgets::{Block, Borders, Paragraph},
-                };
-
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([
-                        Constraint::Length(3),
-                        Constraint::Min(0),
-                        Constraint::Length(3),
-                        Constraint::Length(3),
-                    ])
-                    .split(f.area());
-
-                let title = Paragraph::new("Strictly Games - Tic Tac Toe")
-                    .style(
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .alignment(Alignment::Center)
-                    .block(Block::default().borders(Borders::ALL));
-                f.render_widget(title, chunks[0]);
-
-                let board_lines = render_board_with_cursor(game.board(), cursor);
-                let board = Paragraph::new(board_lines)
-                    .alignment(Alignment::Center)
-                    .block(Block::default().borders(Borders::ALL).title("Board"));
-                f.render_widget(board, chunks[1]);
-
-                let status_text = game.status_string();
-                let status = Paragraph::new(status_text)
-                    .style(
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .alignment(Alignment::Center)
-                    .block(Block::default().borders(Borders::ALL).title("Result"));
-                f.render_widget(status, chunks[2]);
-
-                let help = Paragraph::new("Press any key to return to lobby")
-                    .style(Style::default().fg(Color::DarkGray))
-                    .alignment(Alignment::Center)
-                    .block(Block::default().borders(Borders::ALL));
-                f.render_widget(help, chunks[3]);
-            })?;
-
-            // Wait for any keypress.
-            loop {
-                if event::poll(Duration::from_millis(100))?
-                    && let Event::Key(key) = event::read()?
-                    && key.kind == KeyEventKind::Press
-                {
-                    return Ok(game);
-                }
-                sleep(Duration::from_millis(50)).await;
-            }
+            return render_game_over_and_wait(terminal, &game, cursor).await;
         }
 
         // Render in-progress game.
-        terminal.draw(|f| {
-            use ratatui::{
-                layout::{Alignment, Constraint, Direction, Layout},
-                style::{Color, Modifier, Style},
-                widgets::{Block, Borders, Paragraph},
-            };
-
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),
-                    Constraint::Min(0),
-                    Constraint::Length(3),
-                    Constraint::Length(3),
-                ])
-                .split(f.area());
-
-            let title = Paragraph::new("Strictly Games - Tic Tac Toe")
-                .style(
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            f.render_widget(title, chunks[0]);
-
-            let board_lines = render_board_with_cursor(game.board(), cursor);
-            let board = Paragraph::new(board_lines)
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).title("Board"));
-            f.render_widget(board, chunks[1]);
-
-            let status_text = if let Some(player) = game.to_move() {
-                format!(
-                    "Player {} to move. Use arrow keys + Enter",
-                    if player == Player::X { "X" } else { "O" }
-                )
-            } else {
-                "Waiting...".to_string()
-            };
-
-            let status_color = if client.last_error.is_some() {
-                Color::Red
-            } else {
-                Color::Yellow
-            };
-            let status = Paragraph::new(status_text)
-                .style(Style::default().fg(status_color))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).title("Status"));
-            f.render_widget(status, chunks[2]);
-
-            let help_text = if let Some(ref error) = client.last_error {
-                format!("ERROR: {}", error)
-            } else {
-                "Arrow keys: Move | Enter: Place".to_string()
-            };
-            let help_color = if client.last_error.is_some() {
-                Color::Red
-            } else {
-                Color::DarkGray
-            };
-            let help = Paragraph::new(help_text)
-                .style(Style::default().fg(help_color))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            f.render_widget(help, chunks[3]);
-        })?;
+        render_active_game(terminal, &game, &client, cursor)?;
 
         // Handle input.
         if event::poll(Duration::from_millis(100))?
             && let Event::Key(key) = event::read()?
         {
             match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    // Trigger passive-Affirm escape hatch
+                    info!("User pressed 'q', cancelling game");
+                    if let Err(e) = client.cancel_game().await {
+                        error!(error = %e, "Failed to cancel game");
+                    }
+                    // Fetch and return current game state
+                    return client.get_game().await;
+                }
                 KeyCode::Enter => {
                     info!(position = ?cursor, "Making move");
                     if let Err(e) = client.make_move(cursor).await {
@@ -575,6 +461,166 @@ where
 
         sleep(Duration::from_millis(50)).await;
     }
+}
+
+/// Renders the game-over screen and waits for any keypress.
+#[instrument(skip_all)]
+async fn render_game_over_and_wait<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    game: &AnyGame,
+    cursor: Position,
+) -> Result<AnyGame>
+where
+    <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
+{
+    use crossterm::event::KeyEventKind;
+    use ratatui::{
+        layout::{Alignment, Constraint, Direction, Layout},
+        style::{Color, Modifier, Style},
+        widgets::{Block, Borders, Paragraph},
+    };
+    use tokio::time::{Duration, sleep};
+
+    terminal.draw(|f| {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(3),
+                Constraint::Length(3),
+            ])
+            .split(f.area());
+
+        let title = Paragraph::new("Strictly Games - Tic Tac Toe")
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(title, chunks[0]);
+
+        let board_lines = render_board_with_cursor(game.board(), cursor);
+        let board = Paragraph::new(board_lines)
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL).title("Board"));
+        f.render_widget(board, chunks[1]);
+
+        let status_text = game.status_string();
+        let status = Paragraph::new(status_text)
+            .style(
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL).title("Result"));
+        f.render_widget(status, chunks[2]);
+
+        let help = Paragraph::new("Press any key to return to lobby")
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(help, chunks[3]);
+    })?;
+
+    // Wait for any keypress.
+    loop {
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            return Ok(game.clone());
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Renders the active game state with cursor.
+#[instrument(skip_all)]
+fn render_active_game<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    game: &AnyGame,
+    client: &RestGameClient,
+    cursor: Position,
+) -> Result<()>
+where
+    <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
+{
+    use crate::games::tictactoe::Player;
+    use ratatui::{
+        layout::{Alignment, Constraint, Direction, Layout},
+        style::{Color, Modifier, Style},
+        widgets::{Block, Borders, Paragraph},
+    };
+
+    terminal.draw(|f| {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(3),
+                Constraint::Length(3),
+            ])
+            .split(f.area());
+
+        let title = Paragraph::new("Strictly Games - Tic Tac Toe")
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(title, chunks[0]);
+
+        let board_lines = render_board_with_cursor(game.board(), cursor);
+        let board = Paragraph::new(board_lines)
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL).title("Board"));
+        f.render_widget(board, chunks[1]);
+
+        let status_text = if let Some(player) = game.to_move() {
+            format!(
+                "Player {} to move. Use arrow keys + Enter",
+                if player == Player::X { "X" } else { "O" }
+            )
+        } else {
+            "Waiting...".to_string()
+        };
+
+        let status_color = if client.last_error.is_some() {
+            Color::Red
+        } else {
+            Color::Yellow
+        };
+        let status = Paragraph::new(status_text)
+            .style(Style::default().fg(status_color))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL).title("Status"));
+        f.render_widget(status, chunks[2]);
+
+        let help_text = if let Some(ref error) = client.last_error {
+            format!("ERROR: {}", error)
+        } else {
+            "Arrow keys: Move | Enter: Place | Q: Quit".to_string()
+        };
+        let help_color = if client.last_error.is_some() {
+            Color::Red
+        } else {
+            Color::DarkGray
+        };
+        let help = Paragraph::new(help_text)
+            .style(Style::default().fg(help_color))
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::ALL));
+        f.render_widget(help, chunks[3]);
+    })?;
+
+    Ok(())
 }
 
 /// Renders board with cursor highlighting.

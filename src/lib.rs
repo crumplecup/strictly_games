@@ -70,7 +70,8 @@ pub use llm_client::{LlmClient, LlmConfig, LlmError, LlmProvider};
 
 // Crate-level exports - Server types
 pub use server::{
-    GameServer, GetBoardRequest, MakeMoveRequest, PlayGameRequest, RegisterPlayerRequest,
+    CancelGameRequest, GameServer, GetBoardRequest, MakeMoveRequest, PlayGameRequest,
+    RegisterPlayerRequest,
 };
 
 // Crate-level exports - Session management

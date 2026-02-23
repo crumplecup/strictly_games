@@ -235,4 +235,40 @@ impl RestGameClient {
 
         Ok(())
     }
+
+    /// Cancels the current game (triggers passive-Affirm escape hatch).
+    #[instrument(skip(self))]
+    pub async fn cancel_game(&mut self) -> Result<()> {
+        info!("Cancelling game via MCP tool");
+        self.last_error = None;
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "cancel_game",
+                "arguments": {
+                    "session_id": self.session_id
+                }
+            }
+        });
+
+        let response = self
+            .client
+            .post(format!("{}/message", self.base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            self.last_error = Some("Cancel failed".to_string());
+            anyhow::bail!("Cancel failed: {}", response.status());
+        }
+
+        Ok(())
+    }
 }

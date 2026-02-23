@@ -50,6 +50,13 @@ pub struct GetBoardRequest {
     pub session_id: String,
 }
 
+/// Request for cancelling a game.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CancelGameRequest {
+    /// Session ID.
+    pub session_id: String,
+}
+
 /// Main server handler.
 pub struct GameServer {
     sessions: SessionManager,
@@ -256,6 +263,27 @@ impl GameServer {
         Ok(CallToolResult::success(vec![Content::text(message)]))
     }
 
+    /// Cancels an ongoing game (triggers passive-Affirm escape hatch).
+    #[instrument(skip(self, req), fields(session_id = %req.session_id))]
+    #[tool(description = "Cancel the current game (allows graceful exit from game loop)")]
+    pub async fn cancel_game(
+        &self,
+        Parameters(req): Parameters<CancelGameRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        info!(session_id = %req.session_id, "Cancelling game via escape hatch");
+
+        let session = self
+            .sessions
+            .get_session(&req.session_id)
+            .ok_or_else(|| McpError::invalid_params("Session not found", None))?;
+
+        session.request_cancel();
+
+        Ok(CallToolResult::success(vec![Content::text(
+            "Game cancellation requested.".to_string(),
+        )]))
+    }
+
     /// Lists all available game sessions
     #[instrument(skip(self))]
     #[tool(description = "List all available game sessions to see which ones need players")]
@@ -354,6 +382,20 @@ impl GameServer {
 
         // Game loop - continue until game is over
         loop {
+            // PASSIVE-AFFIRM: Escape hatch check (no user prompt, just flag)
+            // This is the building block for control flow - user can press 'q' to cancel
+            let session = self
+                .sessions
+                .get_session(&req.session_id)
+                .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+
+            if !session.affirm_continue() {
+                info!("Game loop cancelled by user request (passive-affirm escape hatch)");
+                return Ok(CallToolResult::success(vec![Content::text(
+                    "Game cancelled by user.".to_string(),
+                )]));
+            }
+
             // Get fresh session state at start of each iteration
             let mut session = self
                 .sessions
@@ -402,6 +444,19 @@ impl GameServer {
                 let max_polls = 300; // 5 minutes (1 second per poll)
                 for poll_count in 0..max_polls {
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+                    // PASSIVE-AFFIRM: Check escape hatch while waiting
+                    let check_session = self
+                        .sessions
+                        .get_session(&req.session_id)
+                        .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
+
+                    if !check_session.affirm_continue() {
+                        info!("Game loop cancelled while waiting for opponent");
+                        return Ok(CallToolResult::success(vec![Content::text(
+                            "Game cancelled by user.".to_string(),
+                        )]));
+                    }
 
                     // Refresh session state
                     let refreshed_session = self

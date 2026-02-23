@@ -4,6 +4,7 @@ use crate::games::tictactoe::{AnyGame, GameSetup, Mark, Position};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::sync::watch;
 use tracing::{debug, info, instrument, warn};
 
 /// Unique identifier for a game session.
@@ -48,6 +49,11 @@ pub struct GameSession {
     pub player_x: Option<Player>,
     /// Player O.
     pub player_o: Option<Player>,
+    /// Cancellation token for passive-Affirm escape hatch.
+    /// When true, the game loop should gracefully exit.
+    pub cancellation_tx: watch::Sender<bool>,
+    /// Receiver for cancellation signal.
+    cancellation_rx: watch::Receiver<bool>,
 }
 
 impl GameSession {
@@ -55,6 +61,7 @@ impl GameSession {
     #[instrument]
     pub fn new(id: SessionId) -> Self {
         info!(session_id = %id, "Creating new game session");
+        let (cancellation_tx, cancellation_rx) = watch::channel(false);
         Self {
             id,
             game: GameSetup::new()
@@ -62,6 +69,8 @@ impl GameSession {
                 .into(),
             player_x: None,
             player_o: None,
+            cancellation_tx,
+            cancellation_rx,
         }
     }
 
@@ -195,6 +204,35 @@ impl GameSession {
         );
 
         Ok(())
+    }
+
+    /// Passive-Affirm escape hatch: Check if game should continue.
+    ///
+    /// This is the building block for control flow - returns true if the game
+    /// loop should continue, false if cancelled (user pressed 'q').
+    ///
+    /// This is a **passive** affirm - no user prompt, just a flag check.
+    #[instrument(skip(self), fields(session_id = %self.id))]
+    pub fn affirm_continue(&self) -> bool {
+        let cancelled = *self.cancellation_rx.borrow();
+        if cancelled {
+            info!("Game loop cancelled via escape hatch");
+        }
+        !cancelled
+    }
+
+    /// Request cancellation of the game loop (called when user presses 'q').
+    #[instrument(skip(self), fields(session_id = %self.id))]
+    pub fn request_cancel(&self) {
+        info!("Requesting game loop cancellation");
+        let _ = self.cancellation_tx.send(true);
+    }
+
+    /// Reset cancellation flag (e.g., when starting a new game).
+    #[instrument(skip(self), fields(session_id = %self.id))]
+    pub fn reset_cancel(&self) {
+        debug!("Resetting cancellation flag");
+        let _ = self.cancellation_tx.send(false);
     }
 
     /// Links a session player to a user profile by database ID.
