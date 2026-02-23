@@ -3098,6 +3098,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "strictly_server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-openai",
+ "async-trait",
+ "axum",
+ "chrono",
+ "crossterm",
+ "derive-getters",
+ "derive-new",
+ "derive_more",
+ "derive_setters",
+ "diesel",
+ "diesel_migrations",
+ "dotenvy",
+ "elicitation",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "ratatui",
+ "reqwest 0.13.2",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "strictly_tictactoe",
+ "strum 0.28.0",
+ "tempfile",
+ "tokio",
+ "toml 1.0.1+spec-1.1.0",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "strictly_tictactoe"
 version = "0.1.0"
 dependencies = [

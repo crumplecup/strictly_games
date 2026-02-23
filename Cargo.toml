@@ -4,6 +4,7 @@ members = [
     "crates/strictly_games",
     "crates/strictly_tictactoe",
     "crates/strictly_proofs",
+    "crates/strictly_server",
 ]
 
 [workspace.package]
