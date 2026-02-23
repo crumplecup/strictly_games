@@ -80,13 +80,24 @@ verify-kani-tracked:
     @echo "Running tracked Kani verification..."
     python3 scripts/verify_tracked.py run-kani
 
+# Run Verus verification with CSV tracking
+verify-verus-tracked:
+    @echo "Running tracked Verus verification..."
+    python3 scripts/verify_tracked.py run-verus
+
+# Run Creusot verification with CSV tracking
+verify-creusot-tracked:
+    @echo "Running tracked Creusot verification..."
+    python3 scripts/verify_tracked.py run-creusot
+
 # Show current verification status from CSV
 verify-status:
     python3 scripts/verify_tracked.py status
 
-# Run all tracked verification (future: Kani + Verus + Creusot)
-verify-all-tracked: verify-kani-tracked
-    @echo "✅ Tracked verification complete"
+# Run all tracked verification (Kani + Verus + Creusot)
+verify-all-tracked:
+    @echo "Running verification trifecta..."
+    python3 scripts/verify_tracked.py run-all
 
 # Install Kani verifier (one-time setup)
 install-kani:

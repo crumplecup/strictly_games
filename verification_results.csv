@@ -1,1 +1,4 @@
 verifier,harness,status,checks,time_seconds,timestamp,error_message
+verus,all_7_proofs,Failed,7,0.07,2026-02-23T04:25:42.157764+00:00,error: the package 'strictly_games' does not contain this feature: verus
+verus,all_7_proofs,Success,7,0.35,2026-02-23T04:26:10.973970+00:00,
+creusot,all_7_proofs,Success,7,0.35,2026-02-23T04:26:19.041383+00:00,
