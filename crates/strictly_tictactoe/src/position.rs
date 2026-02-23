@@ -1,0 +1,143 @@
+//! Position enum with Select paradigm for tic-tac-toe moves.
+
+use super::types::Board;
+use elicitation::{Elicit, Prompt, Select};
+use serde::{Deserialize, Serialize};
+
+/// A position on the tic-tac-toe board (0-8).
+///
+/// This enum uses the Select paradigm - agents choose from
+/// a finite set of options. The game server filters which
+/// positions are valid (unoccupied) using the Filter trait.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Elicit,
+    strum::EnumIter,
+)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
+pub enum Position {
+    /// Top-left (position 0)
+    TopLeft,
+    /// Top-center (position 1)
+    TopCenter,
+    /// Top-right (position 2)
+    TopRight,
+    /// Middle-left (position 3)
+    MiddleLeft,
+    /// Center (position 4)
+    Center,
+    /// Middle-right (position 5)
+    MiddleRight,
+    /// Bottom-left (position 6)
+    BottomLeft,
+    /// Bottom-center (position 7)
+    BottomCenter,
+    /// Bottom-right (position 8)
+    BottomRight,
+}
+
+impl Position {
+    /// Get label for this position (for display).
+    pub fn label(&self) -> &'static str {
+        match self {
+            Position::TopLeft => "Top-left",
+            Position::TopCenter => "Top-center",
+            Position::TopRight => "Top-right",
+            Position::MiddleLeft => "Middle-left",
+            Position::Center => "Center",
+            Position::MiddleRight => "Middle-right",
+            Position::BottomLeft => "Bottom-left",
+            Position::BottomCenter => "Bottom-center",
+            Position::BottomRight => "Bottom-right",
+        }
+    }
+
+    /// Parse from label or number (0-8).
+    
+    pub fn from_label_or_number(s: &str) -> Option<Position> {
+        // Try as number first (position index 0-8)
+        if let Ok(num) = s.trim().parse::<usize>() {
+            return Self::from_index(num);
+        }
+
+        // Try as label (case-insensitive, partial match)
+        let s_lower = s.to_lowercase();
+        <Position as strum::IntoEnumIterator>::iter().find(|pos| {
+            let label = pos.label().to_lowercase();
+            label.contains(&s_lower) || s_lower.contains(&label)
+        })
+    }
+
+    /// Converts position to board index (0-8).
+    
+    pub fn to_index(self) -> usize {
+        match self {
+            Position::TopLeft => 0,
+            Position::TopCenter => 1,
+            Position::TopRight => 2,
+            Position::MiddleLeft => 3,
+            Position::Center => 4,
+            Position::MiddleRight => 5,
+            Position::BottomLeft => 6,
+            Position::BottomCenter => 7,
+            Position::BottomRight => 8,
+        }
+    }
+
+    /// Converts position to u8 (0-8).
+    
+    pub fn to_u8(self) -> u8 {
+        self.to_index() as u8
+    }
+
+    /// Creates position from board index.
+    
+    pub fn from_index(index: usize) -> Option<Self> {
+        match index {
+            0 => Some(Position::TopLeft),
+            1 => Some(Position::TopCenter),
+            2 => Some(Position::TopRight),
+            3 => Some(Position::MiddleLeft),
+            4 => Some(Position::Center),
+            5 => Some(Position::MiddleRight),
+            6 => Some(Position::BottomLeft),
+            7 => Some(Position::BottomCenter),
+            8 => Some(Position::BottomRight),
+            _ => None,
+        }
+    }
+
+    /// All 9 positions.
+    pub const ALL: [Position; 9] = [
+        Position::TopLeft,
+        Position::TopCenter,
+        Position::TopRight,
+        Position::MiddleLeft,
+        Position::Center,
+        Position::MiddleRight,
+        Position::BottomLeft,
+        Position::BottomCenter,
+        Position::BottomRight,
+    ];
+
+    /// Filters positions by board state - returns only empty squares.
+    ///
+    /// Uses the elicitation Filter trait to provide dynamic, context-aware
+    /// selection based on runtime board state.
+    pub fn valid_moves(board: &Board) -> Vec<Position> {
+        Position::ALL.iter().copied().filter(|pos| board.is_empty(*pos)).collect()
+    }
+}
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.label())
+    }
+}

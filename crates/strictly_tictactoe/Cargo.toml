@@ -1,0 +1,21 @@
+[package]
+name = "strictly_tictactoe"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure tic-tac-toe game logic with formal verification support"
+
+[dependencies]
+elicitation = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+tracing = { workspace = true }
+rmcp = { workspace = true }
+schemars = { workspace = true }
+
+[features]
+# Marker features for verification tools
+verification = []
