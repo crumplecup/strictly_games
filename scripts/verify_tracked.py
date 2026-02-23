@@ -185,47 +185,66 @@ def run_verus_all(csv_path: Path, verbose: bool = False):
     
     print(f"Found {len(proofs)} proofs\n")
     
-    # For Verus, the proofs come from #[derive(Elicit)] on types
-    # which generates verus_proof() methods compositionally.
-    # We verify that types compile cleanly with Elicit derive.
+    # Run Verus verification on the library
     start = time.time()
     try:
         result = subprocess.run(
-            ["cargo", "check"],
-            capture_output=True, text=True, timeout=300
+            ["verus", "--crate-type=lib", "src/lib.rs", "--verify-module", "verus_proofs"],
+            capture_output=True, text=True, timeout=600
         )
         elapsed = time.time() - start
         output = result.stdout + result.stderr
         
-        # Check compilation success
-        status = "Success" if result.returncode == 0 else "Failed"
-        error_msg = ""
-        if status == "Failed":
-            # Extract errors
-            lines = result.stderr.split('\n')
+        # Parse Verus output - it reports "verification results:: N verified, M errors"
+        if "verification results::" in output.lower():
+            # Extract verification stats
+            match = re.search(r'verification results::\s*(\d+)\s*verified,\s*(\d+)\s*errors?', output, re.IGNORECASE)
+            if match:
+                verified_count = int(match.group(1))
+                error_count = int(match.group(2))
+                status = "Success" if error_count == 0 else "Failed"
+                error_msg = f"{error_count} verification errors" if error_count > 0 else ""
+            else:
+                status = "Unknown"
+                error_msg = "Could not parse verification results"
+        elif result.returncode == 0:
+            status = "Success"
+            error_msg = ""
+        else:
+            status = "Failed"
+            # Extract error message
+            lines = output.split('\n')
             error_lines = [l for l in lines if 'error' in l.lower()][:3]
             error_msg = ' '.join(error_lines).replace("\n", " ").strip()[:200]
         
-        results = [VerificationResult("verus", f"compositional_{len(proofs)}_types", status, len(proofs), round(elapsed, 2), error_msg)]
+        results = [VerificationResult("verus", f"verus_proofs_{len(proofs)}_functions", status, len(proofs), round(elapsed, 2), error_msg)]
         write_csv(results, csv_path)
         
         if status == "Success":
-            print(f"✅ All {len(proofs)} types verified compositionally in {elapsed:.1f}s")
-            print(f"   (Types derive Elicit → inherit verus_proof() from framework)")
+            print(f"✅ All {len(proofs)} proofs verified in {elapsed:.1f}s")
         else:
-            print(f"❌ Compilation failed")
+            print(f"❌ Verification failed: {error_msg}")
             if verbose:
-                print(error_msg)
+                print("\nFull output:")
+                print(output[-1000:])
         
         return 0 if status == "Success" else 1
         
     except subprocess.TimeoutExpired:
-        result = VerificationResult("verus", "compositional", "Timeout", 0, 300.0, "Timeout after 5 minutes")
+        result = VerificationResult("verus", "verus_proofs", "Timeout", 0, 600.0, "Timeout after 10 minutes")
         write_csv([result], csv_path)
+        print("❌ Timeout after 10 minutes")
+        return 1
+    except FileNotFoundError:
+        error_msg = "verus command not found - install from https://github.com/verus-lang/verus"
+        result = VerificationResult("verus", "verus_proofs", "Error", 0, 0.0, error_msg)
+        write_csv([result], csv_path)
+        print(f"❌ {error_msg}")
         return 1
     except Exception as e:
-        result = VerificationResult("verus", "compositional", "Error", 0, 0.0, str(e))
+        result = VerificationResult("verus", "verus_proofs", "Error", 0, 0.0, str(e))
         write_csv([result], csv_path)
+        print(f"❌ Error: {e}")
         return 1
 
 

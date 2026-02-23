@@ -237,7 +237,7 @@ where
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                    KeyCode::Char('q') | KeyCode::Char('Q') => {
                     // Trigger passive-Affirm escape hatch
                     info!("User pressed 'q', cancelling game");
                     if let Err(e) = client.cancel_game().await {
@@ -256,6 +256,7 @@ where
                     cursor = input::move_cursor(cursor, key.code);
                 }
                 _ => {}
+                }
             }
         }
 
@@ -454,6 +455,7 @@ where
                     cursor = input::move_cursor(cursor, key.code);
                 }
                 _ => {}
+                }
             }
         }
 
