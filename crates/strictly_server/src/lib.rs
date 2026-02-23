@@ -24,6 +24,7 @@ mod profile_service;
 mod server;
 mod session;
 mod tui;
+mod verify;
 
 // Public API exports - Agent configuration
 pub use agent_config::{AgentConfig, ConfigError};
@@ -56,6 +57,9 @@ pub use session::GameSession;
 
 // Public API exports - TUI
 pub use tui::run_game_session;
+
+// Public API exports - Verification
+pub use verify::{run_all as run_verification_all, run_kani, run_verus, run_creusot};
 
 // Public API exports - Game types
 pub use games::tictactoe::{

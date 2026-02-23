@@ -82,4 +82,15 @@ pub enum Command {
         #[arg(long)]
         test_session: Option<String>,
     },
+    
+    /// Run formal verification (Kani, Verus, Creusot)
+    Verify {
+        /// Which tool to run: kani, verus, creusot, all
+        #[arg(short, long, default_value = "all")]
+        tool: String,
+        
+        /// Verbose output
+        #[arg(short, long)]
+        verbose: bool,
+    },
 }

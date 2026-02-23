@@ -48,9 +48,15 @@ async fn main() -> Result<()> {
             config,
             server_url,
             server_command,
+            test_play,
+            test_session,
         } => {
             init_logging();
-            run_agent(config, server_url, server_command).await
+            run_agent(config, server_url, server_command, test_play, test_session).await
+        }
+        Command::Verify { tool, verbose } => {
+            init_logging();
+            run_verify(&tool, verbose)
         }
     }
 }
@@ -62,80 +68,13 @@ fn init_logging() {
         .init();
 }
 
-async fn run_mcp_server() -> Result<()> {
-    tracing::info!("Starting MCP server");
-    let server = GameServer::new();
-    server.serve_stdio().await?;
-    Ok(())
-}
-
-async fn run_http_server(host: String, port: u16) -> Result<()> {
-    tracing::info!(host = %host, port = port, "Starting HTTP server");
-    let server = GameServer::new();
-    server.serve_http(&host, port).await?;
-    Ok(())
-}
-
-async fn run_lobby(
-    db_path: String,
-    agents_dir: Option<std::path::PathBuf>,
-    port: u16,
-) -> Result<()> {
-    use strictly_server::{AgentLibrary, GameRepository, LobbyController, ProfileService};
-    use ratatui::{Terminal, backend::CrosstermBackend};
-    use std::io;
-
-    // Setup terminal
-    crossterm::terminal::enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    crossterm::execute!(
-        stdout,
-        crossterm::terminal::EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture
-    )?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    // Setup services
-    let repository = GameRepository::new(&db_path)?;
-    let profile_service = ProfileService::new(repository.clone());
-    let agent_library = AgentLibrary::new(agents_dir);
-
-    // Run lobby
-    let mut controller = LobbyController::new(
-        profile_service,
-        agent_library,
-        repository,
-        port,
-    );
-
-    let result = controller.run(&mut terminal).await;
-
-    // Restore terminal
-    crossterm::terminal::disable_raw_mode()?;
-    crossterm::execute!(
-        terminal.backend_mut(),
-        crossterm::terminal::LeaveAlternateScreen,
-        crossterm::event::DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-
-    result
-}
-
-async fn run_agent(
-    _config: std::path::PathBuf,
-    _server_url: Option<String>,
-    _server_command: Option<String>,
-) -> Result<()> {
-    // TODO: Implement agent mode
-    anyhow::bail!("Agent mode not yet implemented")
-}
-
-
-            test_play,
-            test_session,
-        } => run_agent(config, server_url, server_command, test_play, test_session).await,
+fn run_verify(tool: &str, verbose: bool) -> Result<()> {
+    match tool {
+        "kani" => strictly_server::run_kani(verbose),
+        "verus" => strictly_server::run_verus(verbose),
+        "creusot" => strictly_server::run_creusot(verbose),
+        "all" => strictly_server::run_verification_all(verbose),
+        _ => anyhow::bail!("Unknown verification tool: {}", tool),
     }
 }
 

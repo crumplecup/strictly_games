@@ -16,6 +16,11 @@ clap = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 dotenvy = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+rmcp = { workspace = true }
 
 [features]
 # Empty marker feature for API tests

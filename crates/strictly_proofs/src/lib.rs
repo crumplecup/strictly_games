@@ -12,11 +12,15 @@
 
 #![warn(missing_docs)]
 
+// Kani proofs (run with: cargo kani)
 #[cfg(kani)]
 pub mod kani_proofs;
 
-#[cfg(not(kani))]
-pub mod verus_proofs;
+// Verus proofs (run with: verus --crate-type=lib src/lib.rs)
+// NOTE: verus_proofs module is NOT included in cargo builds
+// Verus has its own toolchain and doesn't go through cargo
+// The module exists in the filesystem but is not declared here
 
-#[cfg(all(not(kani), creusot))]
+// Creusot proofs (run with: cargo check)
+#[cfg(not(kani))]
 pub mod creusot_proofs;

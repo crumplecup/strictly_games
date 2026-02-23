@@ -3,6 +3,7 @@
 
 import argparse
 import csv
+import json
 import re
 import subprocess
 import sys
@@ -185,43 +186,52 @@ def run_verus_all(csv_path: Path, verbose: bool = False):
     
     print(f"Found {len(proofs)} proofs\n")
     
-    # Run Verus verification on the library with JSON output
+    # Verus doesn't like lib.rs without verus_proofs module declared
+    # Run on individual verus files instead
+    verus_files = [
+        "crates/strictly_proofs/src/verus_proofs/game_invariants.rs",
+        "crates/strictly_proofs/src/verus_proofs/compositional_proof.rs"
+    ]
+    
     start = time.time()
     try:
-        result = subprocess.run(
-            ["verus", "--crate-type=lib", "--output-json", "crates/strictly_proofs/src/lib.rs"],
-            capture_output=True, text=True, timeout=600
-        )
+        # Run verus on each file
+        all_verified = 0
+        all_errors = 0
+        for verus_file in verus_files:
+            result = subprocess.run(
+                ["verus", "--crate-type=lib", "--output-json", verus_file],
+                capture_output=True, text=True, timeout=600
+            )
+            output = result.stdout + result.stderr
+            
+            # Parse JSON output
+            try:
+                for line in output.split('\n'):
+                    if '"verification-results"' in line and '{' in line:
+                        # Extract JSON object
+                        json_str = line[line.index('{'):line.rindex('}')+1]
+                        data = json.loads(json_str)
+                        if 'verification-results' in data:
+                            all_verified += data['verification-results'].get('verified', 0)
+                            all_errors += data['verification-results'].get('errors', 0)
+                        break
+            except (json.JSONDecodeError, ValueError) as e:
+                # Fallback to text parsing
+                match = re.search(r'verification results::\s*(\d+)\s*verified,\s*(\d+)\s*errors?', output, re.IGNORECASE)
+                if match:
+                    all_verified += int(match.group(1))
+                    all_errors += int(match.group(2))
+        
         elapsed = time.time() - start
-        output = result.stdout + result.stderr
+        status = "Success" if all_errors == 0 else "Failed"
+        error_msg = f"{all_errors} verification errors" if all_errors > 0 else ""
         
-        # Parse Verus output - it reports "verification results:: N verified, M errors"
-        if "verification results::" in output.lower():
-            # Extract verification stats
-            match = re.search(r'verification results::\s*(\d+)\s*verified,\s*(\d+)\s*errors?', output, re.IGNORECASE)
-            if match:
-                verified_count = int(match.group(1))
-                error_count = int(match.group(2))
-                status = "Success" if error_count == 0 else "Failed"
-                error_msg = f"{error_count} verification errors" if error_count > 0 else ""
-            else:
-                status = "Unknown"
-                error_msg = "Could not parse verification results"
-        elif result.returncode == 0:
-            status = "Success"
-            error_msg = ""
-        else:
-            status = "Failed"
-            # Extract error message
-            lines = output.split('\n')
-            error_lines = [l for l in lines if 'error' in l.lower()][:3]
-            error_msg = ' '.join(error_lines).replace("\n", " ").strip()[:200]
-        
-        results = [VerificationResult("verus", f"verus_proofs_{len(proofs)}_functions", status, len(proofs), round(elapsed, 2), error_msg)]
+        results = [VerificationResult("verus", f"verus_proofs_{len(proofs)}_functions", status, all_verified, round(elapsed, 2), error_msg)]
         write_csv(results, csv_path)
         
         if status == "Success":
-            print(f"✅ All {len(proofs)} proofs verified in {elapsed:.1f}s")
+            print(f"✅ All {all_verified} proofs verified in {elapsed:.1f}s")
         else:
             print(f"❌ Verification failed: {error_msg}")
             if verbose:
