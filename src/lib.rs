@@ -49,6 +49,10 @@ mod tui;
 #[cfg(kani)]
 mod kani_proofs;
 
+// Verus proof harnesses (only compiled when running Verus)
+#[cfg(verus)]
+mod verus_proofs;
+
 // Crate-level exports - Agent configuration
 pub use agent_config::{AgentConfig, ConfigError};
 
