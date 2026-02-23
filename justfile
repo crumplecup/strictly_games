@@ -99,6 +99,11 @@ verify-all-tracked:
     @echo "Running verification trifecta..."
     python3 scripts/verify_tracked.py run-all
 
+# Generate verification dashboard from CSV
+verify-dashboard:
+    @echo "Generating verification dashboard..."
+    python3 scripts/verification_dashboard.py
+
 # Install Kani verifier (one-time setup)
 install-kani:
     @echo "Installing Kani Rust Verifier..."

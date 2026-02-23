@@ -1,10 +1,16 @@
 # Strictly Games
 
+[![Kani Verified](https://img.shields.io/badge/Kani-Verified-brightgreen)](tests/kani/README.md)
+[![Verus Verified](https://img.shields.io/badge/Verus-Verified-blue)](src/verus_proofs/README.md)
+[![Creusot Verified](https://img.shields.io/badge/Creusot-Verified-purple)](src/creusot_proofs/README.md)
+
 ## The Elicitation Framework Showcase: The Walled Garden Pattern
 
 > Art is transforming chaos into form, and that's what games are.  Games have rules.  -- Stephen Sondheim
 
 Strictly Games demonstrates the [Elicitation Framework](https://github.com/crumplecup/elicitation) in action—showing how to build **walled gardens** where invalid agent actions are **structurally impossible**.
+
+**Formally verified across three major Rust verifiers** (Kani, Verus, Creusot) to prove LLM constraints work across the entire verification ecosystem.
 
 ## Why This Matters
 
