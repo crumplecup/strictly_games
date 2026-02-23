@@ -1,0 +1,10 @@
+# Claude Sonnet 4.6 - Balanced intelligence and speed
+# Recommended for most use cases
+
+name = "Sonnet (Balanced)"
+server_command = ["cargo", "run", "--bin", "strictly_games"]
+llm_provider = "anthropic"
+llm_model = "claude-sonnet-4-6"
+llm_max_tokens = 150
+
+# API key is read from ANTHROPIC_API_KEY environment variable

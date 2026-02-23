@@ -1,0 +1,10 @@
+# Claude Opus 4.6 - Most capable AI agent
+# Best for complex reasoning and strategic play
+
+name = "Opus (Advanced)"
+server_command = ["cargo", "run", "--bin", "strictly_games"]
+llm_provider = "anthropic"
+llm_model = "claude-opus-4-6"
+llm_max_tokens = 150
+
+# API key is read from ANTHROPIC_API_KEY environment variable

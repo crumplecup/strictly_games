@@ -364,7 +364,7 @@ fn load_agent_config(
             config_path.display()
         );
         AgentConfig::new(
-            "Agent_1".to_string(),
+            "Haiku (Fast)".to_string(),
             vec![
                 "cargo".to_string(),
                 "run".to_string(),
