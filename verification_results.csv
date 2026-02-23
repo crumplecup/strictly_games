@@ -54,3 +54,4 @@ kani,verify_tictactoe_compositional,Success,16,1.11,2026-02-23T06:53:40.211951+0
 kani,winner_detects_column,Success,180,1.69,2026-02-23T06:53:41.908462+00:00,
 kani,winner_detects_diagonal,Success,180,1.62,2026-02-23T06:53:43.536097+00:00,
 kani,winner_detects_row,Success,180,1.66,2026-02-23T06:53:45.203522+00:00,
+verus,verus_proofs_4_functions,Success,4,0.67,2026-02-23T06:53:55.031823+00:00,
