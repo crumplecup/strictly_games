@@ -9,11 +9,7 @@ mod cli;
 use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
-use rmcp::ServiceExt;
-use strictly_games::{
-    AgentConfig, Game, GameAgent, GameServer, SessionManager, run_lobby as run_lobby_impl,
-};
-use tracing::{error, info, instrument};
+use strictly_server::{GameServer, run_game_session};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -24,30 +20,119 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Server => run_mcp_server().await,
-        Command::Http { port, host } => run_http_server(host, port).await,
+        Command::Server => {
+            init_logging();
+            run_mcp_server().await
+        }
+        Command::Http { port, host } => {
+            init_logging();
+            run_http_server(host, port).await
+        }
         Command::Tui {
-            server_url: _,
+            server_url,
             port,
             agent_config,
-        } => run_lobby("strictly_games.db".to_string(), None, port, agent_config).await,
+        } => {
+            // TUI has its own logging setup
+            strictly_server::tui::run(server_url, port, agent_config).await
+        }
         Command::Lobby {
             db_path,
             agents_dir,
             port,
         } => {
-            run_lobby(
-                db_path,
-                agents_dir,
-                port,
-                std::path::PathBuf::from("agent_config.toml"),
-            )
-            .await
+            // Lobby has its own logging setup
+            run_lobby(db_path, agents_dir, port).await
         }
         Command::Agent {
             config,
             server_url,
             server_command,
+        } => {
+            init_logging();
+            run_agent(config, server_url, server_command).await
+        }
+    }
+}
+
+fn init_logging() {
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+}
+
+async fn run_mcp_server() -> Result<()> {
+    tracing::info!("Starting MCP server");
+    let server = GameServer::new();
+    server.serve_stdio().await?;
+    Ok(())
+}
+
+async fn run_http_server(host: String, port: u16) -> Result<()> {
+    tracing::info!(host = %host, port = port, "Starting HTTP server");
+    let server = GameServer::new();
+    server.serve_http(&host, port).await?;
+    Ok(())
+}
+
+async fn run_lobby(
+    db_path: String,
+    agents_dir: Option<std::path::PathBuf>,
+    port: u16,
+) -> Result<()> {
+    use strictly_server::{AgentLibrary, GameRepository, LobbyController, ProfileService};
+    use ratatui::{Terminal, backend::CrosstermBackend};
+    use std::io;
+
+    // Setup terminal
+    crossterm::terminal::enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    crossterm::execute!(
+        stdout,
+        crossterm::terminal::EnterAlternateScreen,
+        crossterm::event::EnableMouseCapture
+    )?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Setup services
+    let repository = GameRepository::new(&db_path)?;
+    let profile_service = ProfileService::new(repository.clone());
+    let agent_library = AgentLibrary::new(agents_dir);
+
+    // Run lobby
+    let mut controller = LobbyController::new(
+        profile_service,
+        agent_library,
+        repository,
+        port,
+    );
+
+    let result = controller.run(&mut terminal).await;
+
+    // Restore terminal
+    crossterm::terminal::disable_raw_mode()?;
+    crossterm::execute!(
+        terminal.backend_mut(),
+        crossterm::terminal::LeaveAlternateScreen,
+        crossterm::event::DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    result
+}
+
+async fn run_agent(
+    _config: std::path::PathBuf,
+    _server_url: Option<String>,
+    _server_command: Option<String>,
+) -> Result<()> {
+    // TODO: Implement agent mode
+    anyhow::bail!("Agent mode not yet implemented")
+}
+
+
             test_play,
             test_session,
         } => run_agent(config, server_url, server_command, test_play, test_session).await,
