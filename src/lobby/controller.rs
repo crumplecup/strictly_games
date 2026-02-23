@@ -96,57 +96,57 @@ impl LobbyController {
             })?;
 
             // Poll for input with short timeout to keep the loop responsive.
-            if event::poll(Duration::from_millis(100))?
-                && let Event::Key(key) = event::read()?
-            {
-                // Skip key release events (crossterm fires both press and release).
-                if key.kind == KeyEventKind::Release {
-                    continue;
-                }
+            if event::poll(Duration::from_millis(100))? {
+                if let Event::Key(key) = event::read()? {
+                    // Skip key release events (crossterm fires both press and release).
+                    if key.kind == KeyEventKind::Release {
+                        continue;
+                    }
 
-                use crate::lobby::screen::Screen;
-                let transition = match &mut screen {
-                    ActiveScreen::ProfileSelect(s) => s.handle_key(key, &self.profile_service),
-                    ActiveScreen::MainLobby(s) => s.handle_key(key, &self.profile_service),
-                    ActiveScreen::AgentSelect(s) => s.handle_key(key, &self.profile_service),
-                    ActiveScreen::StatsView(s) => s.handle_key(key, &self.profile_service),
-                    ActiveScreen::InGame(s) => s.handle_key(key, &self.profile_service),
-                    ActiveScreen::Settings(s) => s.handle_key(key, &self.profile_service),
-                };
+                    use crate::lobby::screen::Screen;
+                    let transition = match &mut screen {
+                        ActiveScreen::ProfileSelect(s) => s.handle_key(key, &self.profile_service),
+                        ActiveScreen::MainLobby(s) => s.handle_key(key, &self.profile_service),
+                        ActiveScreen::AgentSelect(s) => s.handle_key(key, &self.profile_service),
+                        ActiveScreen::StatsView(s) => s.handle_key(key, &self.profile_service),
+                        ActiveScreen::InGame(s) => s.handle_key(key, &self.profile_service),
+                        ActiveScreen::Settings(s) => s.handle_key(key, &self.profile_service),
+                    };
 
-                // GoToInGame runs the actual game loop before any other transition.
-                if let ScreenTransition::GoToInGame { ref agent_name } = transition {
-                    let agent_name = agent_name.clone();
-                    match self
-                        .execute_game(terminal, &agent_name, self.settings.first_player)
-                        .await
-                    {
-                        Ok(next_screen) => {
-                            screen = next_screen;
-                            continue;
-                        }
-                        Err(e) => {
-                            tracing::error!(error = %e, "Game session failed");
-                            screen = match &self.current_user {
-                                Some(user) => {
-                                    ActiveScreen::MainLobby(MainLobbyScreen::new(user.clone()))
-                                }
-                                None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(
-                                    &self.profile_service,
-                                )),
-                            };
-                            continue;
+                    // GoToInGame runs the actual game loop before any other transition.
+                    if let ScreenTransition::GoToInGame { ref agent_name } = transition {
+                        let agent_name = agent_name.clone();
+                        match self
+                            .execute_game(terminal, &agent_name, self.settings.first_player)
+                            .await
+                        {
+                            Ok(next_screen) => {
+                                screen = next_screen;
+                                continue;
+                            }
+                            Err(e) => {
+                                tracing::error!(error = %e, "Game session failed");
+                                screen = match &self.current_user {
+                                    Some(user) => {
+                                        ActiveScreen::MainLobby(MainLobbyScreen::new(user.clone()))
+                                    }
+                                    None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(
+                                        &self.profile_service,
+                                    )),
+                                };
+                                continue;
+                            }
                         }
                     }
-                }
 
-                screen = match self.apply_transition(transition, screen) {
-                    Some(next) => next,
-                    None => {
-                        info!("Lobby quitting");
-                        return Ok(());
-                    }
-                };
+                    screen = match self.apply_transition(transition, screen) {
+                        Some(next) => next,
+                        None => {
+                            info!("Lobby quitting");
+                            return Ok(());
+                        }
+                    };
+                }
             }
 
             sleep(Duration::from_millis(10)).await;

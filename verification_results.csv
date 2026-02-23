@@ -5,3 +5,4 @@ creusot,all_7_proofs,Success,7,0.35,2026-02-23T04:26:19.041383+00:00,
 creusot,all_7_proofs,Success,7,0.33,2026-02-23T04:30:10.882158+00:00,
 verus,all_7_proofs,Success,7,0.35,2026-02-23T04:30:23.242948+00:00,
 verus,all_7_proofs,Failed,7,4.83,2026-02-23T04:31:44.993752+00:00,"`tracing_subscriber`  error: aborting due to 279 previous errors  Some errors have detailed explanations: E0422, E0425, E0432, E0433. For more information about an error, try `rustc --explain E0422`."
+verus,compositional_7_types,Success,7,0.71,2026-02-23T04:33:44.823726+00:00,

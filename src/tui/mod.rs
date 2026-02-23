@@ -214,10 +214,9 @@ where
 
         // Handle game over
         if game.is_over() {
-            if event::poll(Duration::from_millis(100))?
-                && let Event::Key(key) = event::read()?
-            {
-                match key.code {
+            if event::poll(Duration::from_millis(100))? {
+                if let Event::Key(key) = event::read()? {
+                    match key.code {
                     KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(()),
                     KeyCode::Char('r') | KeyCode::Char('R') => {
                         info!("Restarting game");
@@ -228,16 +227,16 @@ where
                     }
                     _ => {}
                 }
+                }
             }
             sleep(Duration::from_millis(100)).await;
             continue;
         }
 
         // Handle input
-        if event::poll(Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-        {
-            match key.code {
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                match key.code {
                 KeyCode::Char('q') | KeyCode::Char('Q') => {
                     // Trigger passive-Affirm escape hatch
                     info!("User pressed 'q', cancelling game");
@@ -432,10 +431,9 @@ where
         render_active_game(terminal, &game, &client, cursor)?;
 
         // Handle input.
-        if event::poll(Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-        {
-            match key.code {
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                match key.code {
                 KeyCode::Char('q') | KeyCode::Char('Q') => {
                     // Trigger passive-Affirm escape hatch
                     info!("User pressed 'q', cancelling game");
@@ -528,11 +526,12 @@ where
 
     // Wait for any keypress.
     loop {
-        if event::poll(Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            return Ok(game.clone());
+        if event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press {
+                    return Ok(game.clone());
+                }
+            }
         }
         sleep(Duration::from_millis(50)).await;
     }

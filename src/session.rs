@@ -240,19 +240,19 @@ impl GameSession {
     pub fn set_player_user_id(&mut self, player_id: &str, user_id: i32) -> Result<(), String> {
         debug!(player_id = %player_id, user_id = %user_id, "Linking player to user profile");
 
-        if let Some(ref mut player) = self.player_x
-            && player.id == player_id
-        {
-            player.user_id = Some(user_id);
-            info!(player_id = %player_id, user_id = %user_id, "Player X linked to profile");
-            return Ok(());
+        if let Some(ref mut player) = self.player_x {
+            if player.id == player_id {
+                player.user_id = Some(user_id);
+                info!(player_id = %player_id, user_id = %user_id, "Player X linked to profile");
+                return Ok(());
+            }
         }
-        if let Some(ref mut player) = self.player_o
-            && player.id == player_id
-        {
-            player.user_id = Some(user_id);
-            info!(player_id = %player_id, user_id = %user_id, "Player O linked to profile");
-            return Ok(());
+        if let Some(ref mut player) = self.player_o {
+            if player.id == player_id {
+                player.user_id = Some(user_id);
+                info!(player_id = %player_id, user_id = %user_id, "Player O linked to profile");
+                return Ok(());
+            }
         }
 
         warn!(player_id = %player_id, "Player not found for profile linking");
