@@ -30,23 +30,8 @@ pub enum Command {
         host: String,
     },
 
-    /// Run the terminal UI client
+    /// Run the terminal UI (lobby with profiles, agents, settings, statistics)
     Tui {
-        /// Game server URL (HTTP). If not provided, runs in standalone mode.
-        #[arg(long)]
-        server_url: Option<String>,
-
-        /// Port for standalone mode server
-        #[arg(long, default_value = "3000")]
-        port: u16,
-
-        /// Path to agent config for standalone mode
-        #[arg(long, default_value = "agent_config.toml")]
-        agent_config: std::path::PathBuf,
-    },
-
-    /// Run the lobby TUI (profile selection, agent selection, statistics)
-    Lobby {
         /// Path to the database file (created if it doesn't exist)
         #[arg(long, default_value = "strictly_games.db")]
         db_path: String,

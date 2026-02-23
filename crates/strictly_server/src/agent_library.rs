@@ -16,6 +16,12 @@ pub struct AgentLibrary {
 }
 
 impl AgentLibrary {
+    /// Creates an empty agent library.
+    #[instrument]
+    pub fn empty() -> Self {
+        Self { agents: Vec::new() }
+    }
+
     /// Scans `dir_path` for `*.toml` files and loads each as an [`AgentConfig`].
     ///
     /// Invalid or non-TOML files are skipped with a warning. Returns an error
@@ -31,6 +37,7 @@ impl AgentLibrary {
         info!(path = %path.display(), "Scanning directory for agent configs");
 
         if !path.exists() {
+            warn!(path = %path.display(), "Path does not exist");
             return Err(ConfigError::new(format!(
                 "Agent config directory not found: {}",
                 path.display()
@@ -38,13 +45,16 @@ impl AgentLibrary {
         }
 
         if !path.is_dir() {
+            warn!(path = %path.display(), "Path is not a directory");
             return Err(ConfigError::new(format!(
                 "Path is not a directory: {}",
                 path.display()
             )));
         }
 
+        debug!("Reading directory entries");
         let entries = std::fs::read_dir(path).map_err(|e| {
+            warn!(error = %e, "Failed to read directory");
             ConfigError::new(format!(
                 "Failed to read directory {}: {}",
                 path.display(),
@@ -129,13 +139,28 @@ impl AgentLibrary {
             return PathBuf::from(dir);
         }
 
+        // Try workspace structure first (crates/strictly_games/examples)
+        let workspace_path = PathBuf::from("crates/strictly_games/examples");
+        if workspace_path.exists() && workspace_path.is_dir() {
+            debug!(path = %workspace_path.display(), "Using workspace examples directory");
+            return workspace_path;
+        }
+
+        // Try local ./examples (when running from crate directory)
+        let local_path = PathBuf::from("examples");
+        if local_path.exists() && local_path.is_dir() {
+            debug!(path = %local_path.display(), "Using local examples directory");
+            return local_path;
+        }
+
+        // Fall back to XDG config
         if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
             let dir = PathBuf::from(xdg).join("strictly_games").join("agents");
             debug!(path = %dir.display(), "Using XDG_CONFIG_HOME path");
             return dir;
         }
 
-        debug!("Falling back to ./examples directory");
+        debug!("No config directory found, returning ./examples");
         PathBuf::from("examples")
     }
 
@@ -153,6 +178,10 @@ impl AgentLibrary {
     }
 
     /// Returns the number of loaded agents.
+    #[instrument(skip(self))]
+    pub fn count(&self) -> usize {
+        self.agents.len()
+    }
     #[instrument(skip(self))]
     pub fn len(&self) -> usize {
         self.agents.len()

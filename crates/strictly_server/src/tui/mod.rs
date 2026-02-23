@@ -14,6 +14,7 @@ use crossterm::{
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::{io, path::PathBuf};
+use tokio::process::Child;
 use tracing::{error, info, instrument};
 
 use crate::{
@@ -41,21 +42,20 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
     info!("Starting Strictly Games TUI");
 
     let session_id = "tui_session".to_string();
+    let first_player = FirstPlayer::default(); // Human goes first by default
 
     // Determine mode: standalone or remote
-    let (actual_server_url, _guards) = if let Some(url) = server_url {
+    let (actual_server_url, server_child, agent_child): (String, Option<Child>, Option<Child>) = if let Some(url) = server_url {
         // Remote mode: connect to existing server
         info!(server_url = %url, "Connecting to remote server");
-        (url, None)
+        (url, None, None)
     } else {
-        // Standalone mode: spawn server then agent (agent registers first, gets X).
-        info!(port, "Starting standalone mode");
+        // Standalone mode: spawn server, then register human and agent in configured order.
+        info!(port, first_player = %first_player.label(), "Starting standalone mode");
         let server = standalone::spawn_server(port).await?;
-        let agent = standalone::spawn_agent(port, agent_config).await?;
-        let guards = standalone::ProcessGuards::new(server, agent);
         let url = format!("http://localhost:{}", port);
-        info!(server_url = %url, "Standalone mode initialized");
-        (url, Some(guards))
+        info!(server_url = %url, "Standalone server ready");
+        (url, Some(server), None)
     };
 
     info!(server_url = %actual_server_url, session_id = %session_id, "Connecting to game server");
@@ -72,6 +72,16 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
                 return Err(e);
             }
         };
+
+    // For standalone mode with default FirstPlayer::Human, spawn agent AFTER human registers
+    // so human gets X and moves first
+    let _guards = if let (Some(server), None) = (server_child, agent_child) {
+        info!("Spawning agent after human registration (human plays X)");
+        let agent = standalone::spawn_agent(port, agent_config).await?;
+        Some(standalone::ProcessGuards::new(server, agent))
+    } else {
+        None
+    };
 
     // Setup terminal after server connection succeeds
     enable_raw_mode()?;

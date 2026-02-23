@@ -36,21 +36,17 @@ build:
 build-release:
     cargo build --release
 
-# Run the MCP server (stdio mode)
+# Run the default command (TUI lobby)
 run:
-    cargo run -- server
+    cargo run -- tui
 
 # Run the HTTP server
 run-http:
     cargo run -- http
 
-# Run the TUI client
+# Run the TUI lobby
 run-tui:
     cargo run -- tui
-
-# Run the lobby
-run-lobby:
-    cargo run -- lobby
 
 # Clean build artifacts
 clean:

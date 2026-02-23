@@ -30,19 +30,11 @@ async fn main() -> Result<()> {
             run_http_server(host, port).await
         }
         Command::Tui {
-            server_url,
-            port,
-            agent_config,
-        } => {
-            // TUI has its own logging setup
-            strictly_server::tui_run(server_url, port, agent_config).await
-        }
-        Command::Lobby {
             db_path,
             agents_dir,
             port,
         } => {
-            // Lobby has its own logging setup
+            // TUI (lobby) has its own logging setup
             let agent_config = std::path::PathBuf::from("agent_config.toml");
             run_lobby(db_path, agents_dir, port, agent_config).await
         }
@@ -230,6 +222,19 @@ async fn run_lobby(
     use ratatui::{Terminal, backend::CrosstermBackend};
     use std::io;
 
+    // Setup logging to file
+    let log_file = std::fs::File::create("strictly_games_lobby.log")?;
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug")),
+        )
+        .with_writer(std::sync::Arc::new(log_file))
+        .with_ansi(false)
+        .try_init();
+
+    info!("Starting lobby");
+
     // Setup terminal
     crossterm::terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -242,21 +247,35 @@ async fn run_lobby(
     let mut terminal = Terminal::new(backend)?;
 
     // Setup services
+    info!(db_path = %db_path, "Initializing game repository");
     let repository = GameRepository::new(db_path)?;
     let profile_service = ProfileService::new(repository.clone());
+    
+    info!(agents_dir = ?agents_dir, "Loading agent library");
     let agent_library = if let Some(dir) = agents_dir {
-        AgentLibrary::scan(dir).unwrap_or_else(|e| {
-            warn!("Failed to scan agent directory: {}, using empty library", e);
-            AgentLibrary::scan_default().unwrap_or_else(|_| {
-                panic!("Failed to load default agent library")
+        info!(path = %dir.display(), "Scanning custom agent directory");
+        AgentLibrary::scan(&dir).unwrap_or_else(|e| {
+            warn!(error = %e, "Failed to scan agent directory, trying default");
+            AgentLibrary::scan_default().unwrap_or_else(|e2| {
+                warn!(error = %e2, "Failed to load default agents, using empty library");
+                AgentLibrary::empty()
             })
         })
     } else {
-        AgentLibrary::scan_default().unwrap_or_else(|e| {
-            warn!("Failed to scan default agents: {}, using empty library", e);
-            panic!("No agent library available")
-        })
+        info!("No agents_dir specified, scanning default location");
+        match AgentLibrary::scan_default() {
+            Ok(lib) => {
+                info!(count = lib.count(), "Loaded agents from default location");
+                lib
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to scan default agents, using empty library");
+                AgentLibrary::empty()
+            }
+        }
     };
+    
+    info!(agent_count = agent_library.count(), "Agent library initialized");
 
     // Run lobby
     let mut controller = LobbyController::new(
