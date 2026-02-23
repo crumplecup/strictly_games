@@ -67,3 +67,5 @@ tempfile = "3"
 [features]
 # Empty marker feature for API tests (prevents accidental token usage)
 api = []
+# Marker feature for Kani formal verification
+verification = []
