@@ -53,6 +53,10 @@ mod kani_proofs;
 #[cfg(verus)]
 mod verus_proofs;
 
+// Creusot proof harnesses (only compiled when running Creusot)
+#[cfg(creusot)]
+mod creusot_proofs;
+
 // Crate-level exports - Agent configuration
 pub use agent_config::{AgentConfig, ConfigError};
 

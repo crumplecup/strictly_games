@@ -161,6 +161,27 @@ KANI: 20/20 passing
 - CI/CD integration (automated pipelines)
 - Audit trail (prove verification at specific dates)
 - Multi-verifier comparison (future: Kani + Verus + Creusot)
+
+## 🎯 Verification Trifecta
+
+Strictly Games showcases formal verification across **three verifiers**:
+
+### 1. Kani (Symbolic Execution) - ✅ Complete
+- 20+ proof harnesses in `src/kani_proofs/`
+- 200K+ verification checks
+- Bounded model checking with CBMC
+- Tracked with CSV timestamps
+
+### 2. Verus (Specification-Based) - ✅ Complete
+- Executable specifications in `src/verus_proofs/`
+- `ensures` clauses with Z3 SMT solver
+- See `src/verus_proofs/README.md` for setup
+
+### 3. Creusot (Deductive) - 🔲 Planned
+- `#[trusted]` annotations
+- Pattern from elicitation's 456 proofs
+
+**Result:** Demonstrates elicitation works with entire Rust formal verification ecosystem.
 cargo kani --features verification
 
 # Run specific harness
