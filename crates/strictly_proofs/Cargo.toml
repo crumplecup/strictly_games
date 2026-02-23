@@ -1,0 +1,20 @@
+[package]
+name = "strictly_proofs"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Formal verification harnesses for strictly_games (Kani, Verus, Creusot)"
+
+[dependencies]
+strictly_tictactoe = { workspace = true }
+elicitation = { workspace = true }
+
+[features]
+# Marker feature for verification
+verification = []
+
+[lib]
+name = "strictly_proofs"
+path = "src/lib.rs"

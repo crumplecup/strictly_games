@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/strictly_games",
     "crates/strictly_tictactoe",
+    "crates/strictly_proofs",
 ]
 
 [workspace.package]

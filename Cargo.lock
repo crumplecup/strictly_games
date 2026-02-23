@@ -3090,6 +3090,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "strictly_proofs"
+version = "0.1.0"
+dependencies = [
+ "elicitation",
+ "strictly_tictactoe",
+]
+
+[[package]]
 name = "strictly_tictactoe"
 version = "0.1.0"
 dependencies = [
