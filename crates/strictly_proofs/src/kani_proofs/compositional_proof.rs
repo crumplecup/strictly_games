@@ -12,6 +12,7 @@ use strictly_tictactoe::{Board, Player, Position, Square};
 /// - Trust: Rust's type system (enums are exhaustive)
 /// - Verify: Our types correctly implement Elicitation
 /// - Verify: Composition logic is sound
+#[cfg(kani)]
 #[kani::proof]
 fn verify_tictactoe_compositional() {
     // The compositional proof is witnessed by compilation:

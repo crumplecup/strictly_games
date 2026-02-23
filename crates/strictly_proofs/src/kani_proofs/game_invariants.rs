@@ -12,6 +12,7 @@ use strictly_tictactoe::{rules, Board, Player, Position, Square};
 ///
 /// Cloud: Trust Rust's exhaustive enum matching
 /// Verify: Our implementation of opponent logic
+#[cfg(kani)]
 #[kani::proof]
 fn player_opponent_is_involutive() {
     let player: Player = kani::any();
@@ -26,6 +27,7 @@ fn player_opponent_is_involutive() {
 /// Verifies opponent returns the other player.
 ///
 /// Property: p ≠ opponent(p)
+#[cfg(kani)]
 #[kani::proof]
 fn opponent_returns_other_player() {
     let player: Player = kani::any();
@@ -40,6 +42,7 @@ fn opponent_returns_other_player() {
 ///
 /// Cloud: Trust Rust's array bounds checking
 /// Verify: Our index mapping logic
+#[cfg(kani)]
 #[kani::proof]
 fn position_to_index_is_always_valid() {
     let pos: Position = kani::any();
@@ -52,6 +55,7 @@ fn position_to_index_is_always_valid() {
 /// Verifies Position round-trip: from_index(to_index(p)) = Some(p)
 ///
 /// Property: from_index is left-inverse of to_index
+#[cfg(kani)]
 #[kani::proof]
 fn position_roundtrip() {
     let pos: Position = kani::any();
@@ -67,6 +71,7 @@ fn position_roundtrip() {
 ///
 /// Cloud: Trust Vec initialization
 /// Verify: Our board initialization logic
+#[cfg(kani)]
 #[kani::proof]
 fn new_board_is_empty() {
     let board = Board::new();
@@ -78,6 +83,7 @@ fn new_board_is_empty() {
 /// Verifies setting a square marks it occupied.
 ///
 /// Property: set(b, p, Occupied(player)) ⟹ get(b', p) = Occupied(player)
+#[cfg(kani)]
 #[kani::proof]
 fn set_marks_occupied() {
     let player: Player = kani::any();
@@ -98,6 +104,7 @@ fn set_marks_occupied() {
 /// Verifies get/set round-trip.
 ///
 /// Property: set(b, p, s); get(b, p) = s
+#[cfg(kani)]
 #[kani::proof]
 fn get_set_roundtrip() {
     let square: Square = kani::any();
@@ -114,6 +121,7 @@ fn get_set_roundtrip() {
 ///
 /// Cloud: Trust our check_winner implementation
 /// Verify: Specific winning configuration is recognized
+#[cfg(kani)]
 #[kani::proof]
 fn winner_detects_row() {
     let player: Player = kani::any();
@@ -132,6 +140,7 @@ fn winner_detects_row() {
 }
 
 /// Verifies winner detection for columns.
+#[cfg(kani)]
 #[kani::proof]
 fn winner_detects_column() {
     let player: Player = kani::any();
@@ -150,6 +159,7 @@ fn winner_detects_column() {
 }
 
 /// Verifies winner detection for diagonals.
+#[cfg(kani)]
 #[kani::proof]
 fn winner_detects_diagonal() {
     let player: Player = kani::any();
@@ -170,6 +180,7 @@ fn winner_detects_diagonal() {
 /// Verifies no winner on empty board.
 ///
 /// Property: check_winner(Board::new()) = None
+#[cfg(kani)]
 #[kani::proof]
 fn no_winner_on_empty_board() {
     let board = Board::new();
@@ -181,6 +192,7 @@ fn no_winner_on_empty_board() {
 /// Verifies Square equality is well-defined.
 ///
 /// Property: Square implements PartialEq correctly
+#[cfg(kani)]
 #[kani::proof]
 fn square_equality() {
     let sq1: Square = kani::any();

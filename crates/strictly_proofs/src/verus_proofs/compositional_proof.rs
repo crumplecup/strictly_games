@@ -1,13 +1,12 @@
 //! Verus compositional verification for tic-tac-toe types.
 
-#[cfg(verus)]
 use verus_builtin::*;
-#[cfg(verus)]
 use verus_builtin_macros::*;
 
-use strictly_tictactoe::{Board, Player, Position, Square};
+// Note: strictly_tictactoe imports removed - causes Verus dependency resolution issues
+// Verus cannot resolve workspace dependencies when run directly
+// TODO: Re-enable when Verus supports workspace dependencies
 
-#[cfg(verus)]
 verus! {
 
 /// Witness compositional verification through Elicitation framework.

@@ -12,6 +12,7 @@
 
 #![warn(missing_docs)]
 
+#[cfg(kani)]
 pub mod kani_proofs;
 pub mod verus_proofs;
 pub mod creusot_proofs;

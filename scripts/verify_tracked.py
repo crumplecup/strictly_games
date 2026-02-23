@@ -31,7 +31,7 @@ def run_kani_harness(harness: str) -> VerificationResult:
     
     try:
         result = subprocess.run(
-            ["cargo", "kani", "--harness", harness],
+            ["cargo", "kani", "-p", "strictly_proofs", "--harness", harness],
             capture_output=True, text=True, timeout=600
         )
         elapsed = time.time() - start
@@ -67,7 +67,7 @@ def run_kani_harness(harness: str) -> VerificationResult:
 def list_kani_harnesses() -> list[str]:
     """List all Kani proof harnesses."""
     harnesses = []
-    kani_dir = Path("src/kani_proofs")
+    kani_dir = Path("crates/strictly_proofs/src/kani_proofs")
     if kani_dir.exists():
         for rs_file in kani_dir.glob("*.rs"):
             content = rs_file.read_text()
@@ -153,7 +153,7 @@ def show_status(csv_path: Path):
 def list_verus_proofs() -> list[str]:
     """List all Verus proof functions."""
     proofs = []
-    verus_dir = Path("src/verus_proofs")
+    verus_dir = Path("crates/strictly_proofs/src/verus_proofs")
     if verus_dir.exists():
         for rs_file in verus_dir.glob("*.rs"):
             content = rs_file.read_text()
@@ -165,7 +165,7 @@ def list_verus_proofs() -> list[str]:
 def list_creusot_proofs() -> list[str]:
     """List all Creusot proof functions."""
     proofs = []
-    creusot_dir = Path("src/creusot_proofs")
+    creusot_dir = Path("crates/strictly_proofs/src/creusot_proofs")
     if creusot_dir.exists():
         for rs_file in creusot_dir.glob("*.rs"):
             content = rs_file.read_text()
@@ -185,11 +185,11 @@ def run_verus_all(csv_path: Path, verbose: bool = False):
     
     print(f"Found {len(proofs)} proofs\n")
     
-    # Run Verus verification on the library
+    # Run Verus verification on the library with JSON output
     start = time.time()
     try:
         result = subprocess.run(
-            ["verus", "--crate-type=lib", "src/lib.rs", "--verify-module", "verus_proofs"],
+            ["verus", "--crate-type=lib", "--output-json", "crates/strictly_proofs/src/lib.rs"],
             capture_output=True, text=True, timeout=600
         )
         elapsed = time.time() - start
@@ -264,7 +264,7 @@ def run_creusot_all(csv_path: Path, verbose: bool = False):
     start = time.time()
     try:
         result = subprocess.run(
-            ["cargo", "check"],
+            ["cargo", "check", "-p", "strictly_proofs"],
             capture_output=True, text=True, timeout=300
         )
         elapsed = time.time() - start

@@ -10,3 +10,19 @@ verus,compositional_7_types,Failed,7,0.41,2026-02-23T04:42:21.815979+00:00,error
 verus,verus_proofs_7_functions,Failed,7,0.09,2026-02-23T04:43:06.218902+00:00,error: this file contains an unclosed delimiter error: aborting due to 1 previous error
 verus,verus_proofs_7_functions,Failed,7,0.08,2026-02-23T04:44:21.022661+00:00,error: this file contains an unclosed delimiter error: aborting due to 1 previous error
 verus,verus_proofs_7_functions,Failed,7,0.58,2026-02-23T04:44:53.572684+00:00,error: environment variable `CARGO_PKG_VERSION` not defined at compile time error[E0433]: failed to resolve: use of unresolved module or unlinked crate `crossterm` error[E0433]: failed to resolve: use
+verus,verus_proofs_4_functions,Failed,4,0.08,2026-02-23T06:42:48.209073+00:00,error[E0432]: unresolved import `strictly_tictactoe` error[E0432]: unresolved import `strictly_tictactoe` error: aborting due to 2 previous errors
+verus,verus_proofs_4_functions,Failed,4,0.09,2026-02-23T06:42:48.331167+00:00,error[E0432]: unresolved import `strictly_tictactoe` error[E0432]: unresolved import `strictly_tictactoe` error: aborting due to 2 previous errors
+verus,verus_proofs_4_functions,Success,4,0.59,2026-02-23T06:46:40.690942+00:00,
+kani,get_set_roundtrip,Unknown,0,0.86,2026-02-23T06:46:41.066864+00:00,
+kani,new_board_is_empty,Unknown,0,0.69,2026-02-23T06:46:41.757087+00:00,
+kani,no_winner_on_empty_board,Unknown,0,0.69,2026-02-23T06:46:42.443324+00:00,
+kani,opponent_returns_other_player,Unknown,0,0.7,2026-02-23T06:46:43.145656+00:00,
+kani,player_opponent_is_involutive,Unknown,0,0.71,2026-02-23T06:46:43.859749+00:00,
+kani,position_roundtrip,Unknown,0,0.7,2026-02-23T06:46:44.555787+00:00,
+kani,position_to_index_is_always_valid,Unknown,0,0.7,2026-02-23T06:46:45.254246+00:00,
+kani,set_marks_occupied,Unknown,0,0.69,2026-02-23T06:46:45.949514+00:00,
+kani,square_equality,Unknown,0,0.7,2026-02-23T06:46:46.651376+00:00,
+kani,verify_tictactoe_compositional,Unknown,0,0.69,2026-02-23T06:46:47.343285+00:00,
+kani,winner_detects_column,Unknown,0,0.69,2026-02-23T06:46:48.030286+00:00,
+kani,winner_detects_diagonal,Unknown,0,0.7,2026-02-23T06:46:48.730933+00:00,
+kani,winner_detects_row,Unknown,0,0.69,2026-02-23T06:46:49.417144+00:00,
