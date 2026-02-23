@@ -38,6 +38,7 @@
 //! - Framework proofs automatically compose through our types
 //! - Result: 291 + 13 = 304 total proofs covering the full stack
 
+use elicitation::Elicitation;
 use strictly_tictactoe::{Board, Player, Position, Square};
 
 /// Compositional proof: framework verification composes with game logic.
@@ -51,10 +52,12 @@ use strictly_tictactoe::{Board, Player, Position, Square};
 #[cfg(kani)]
 #[kani::proof]
 fn verify_tictactoe_compositional() {
-    // 1. Position, Player, Square, Board all derive Elicit
-    // 2. Elicit derive generates kani_proof() methods
-    // 3. Type system enforces Elicitation trait bounds
-    // 4. ∴ Framework's proofs compose through our types ∎
+    // CRITICAL: Call the framework-provided proof methods
+    // These witness that Elicitation's compositional verification holds
+    Player::kani_proof();
+    Position::kani_proof();
+    Square::kani_proof();
+    Board::kani_proof();
     
     // Verify basic properties hold
     let _player_x = Player::X;
@@ -70,6 +73,5 @@ fn verify_tictactoe_compositional() {
     // Verify board initialization
     assert!(_board.is_empty(Position::Center));
     
-    // Compositional verification complete
-    assert!(true, "Types verified by composition");
+    // ∴ Full verification stack proven by composition ∎
 }
