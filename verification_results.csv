@@ -26,3 +26,4 @@ kani,verify_tictactoe_compositional,Unknown,0,0.69,2026-02-23T06:46:47.343285+00
 kani,winner_detects_column,Unknown,0,0.69,2026-02-23T06:46:48.030286+00:00,
 kani,winner_detects_diagonal,Unknown,0,0.7,2026-02-23T06:46:48.730933+00:00,
 kani,winner_detects_row,Unknown,0,0.69,2026-02-23T06:46:49.417144+00:00,
+verus,verus_proofs_4_functions,Success,4,0.79,2026-02-23T06:49:29.014595+00:00,

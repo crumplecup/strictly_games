@@ -1,6 +1,21 @@
 //! Verus proofs for tic-tac-toe game invariants.
 //!
-//! Types are redefined here for Verus verification (Verus can't resolve workspace deps).
+//! ⚠️ **MIRROR PATTERN**: Types are duplicated from `strictly_tictactoe` crate.
+//! 
+//! **Maintenance Contract:**
+//! - When `Player`, `Position`, `Square`, or `Board` change in strictly_tictactoe,
+//!   the mirror definitions below MUST be updated manually.
+//! - Enum variants must match exactly
+//! - Method signatures must be equivalent (usize ↔ int, &self ↔ self)
+//! - Invariants and properties must align
+//!
+//! **Why this pattern:**
+//! Verus cannot resolve workspace dependencies when run with `verus --crate-type=lib`.
+//! This mirrors elicitation's `elicitation_verus` crate approach.
+//!
+//! **Detection:**
+//! TODO: Add static check comparing type structures (count variants, method names).
+//! For now: Run `just verify-verus-tracked` after ANY strictly_tictactoe changes.
 
 use verus_builtin::*;
 use verus_builtin_macros::*;
@@ -8,7 +23,11 @@ use vstd::prelude::*;
 
 verus! {
 
-// Type definitions (mirrored from strictly_tictactoe)
+// ============================================================================
+// MIRRORED TYPE DEFINITIONS
+// Source: strictly_tictactoe/src/{types.rs, position.rs}
+// Last synced: 2026-02-23
+// ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
@@ -80,7 +99,9 @@ impl Board {
     }
 }
 
-// Proofs
+// ============================================================================
+// VERIFICATION PROOFS
+// ============================================================================
 
 /// Verify opponent() is an involution: opponent(opponent(p)) = p
 pub proof fn verify_opponent_involutive(p: Player)
