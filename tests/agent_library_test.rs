@@ -11,7 +11,7 @@ fn make_agent_toml(dir: &TempDir, filename: &str, name: &str) {
         r#"name = "{name}"
 server_command = ["echo", "test"]
 llm_provider = "anthropic"
-llm_model = "claude-3-5-haiku-20241022"
+llm_model = "claude-haiku-4-5-20251001"
 llm_max_tokens = 50
 "#
     );

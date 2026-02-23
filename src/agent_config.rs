@@ -23,7 +23,7 @@ pub struct AgentConfig {
     #[serde(default = "default_provider")]
     llm_provider: LlmProvider,
 
-    /// LLM model name (e.g., "gpt-4", "claude-3-5-sonnet").
+    /// LLM model name (e.g., "gpt-4", "claude-sonnet-4-6", "claude-haiku-4-5-20251001").
     #[serde(default = "default_model")]
     llm_model: String,
 
@@ -43,7 +43,7 @@ fn default_provider() -> LlmProvider {
 
 #[instrument]
 fn default_model() -> String {
-    "claude-3-5-haiku-20241022".to_string()
+    "claude-haiku-4-5-20251001".to_string()
 }
 
 #[instrument]
