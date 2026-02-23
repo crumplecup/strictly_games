@@ -53,7 +53,7 @@ async fn main() -> Result<()> {
             test_play,
             test_session,
         } => {
-            init_logging();
+            // Agent sets up its own file logging
             run_agent(config, server_url, server_command, test_play, test_session).await
         }
         Command::Verify { tool, verbose } => {
@@ -517,7 +517,8 @@ fn initialize_agent_tracing() {
                 .with_thread_ids(true)
                 .with_ansi(false),
         )
-        .init();
+        .try_init()
+        .ok(); // Ignore error if already initialized
 
     info!("Agent tracing initialized, logging to agent.log");
 }
