@@ -5,7 +5,6 @@ use super::super::{Board, Square};
 /// Checks if the board is full (all squares occupied).
 ///
 /// A full board with no winner indicates a draw.
-
 pub fn is_full(board: &Board) -> bool {
     board.squares().iter().all(|s| *s != Square::Empty)
 }

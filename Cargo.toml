@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/strictly_games",
   "crates/strictly_tictactoe",
+  "crates/strictly_blackjack",
   "crates/strictly_proofs",
   "crates/strictly_server",
 ]
@@ -16,13 +17,17 @@ repository = "https://github.com/crumplecup/strictly_games"
 [workspace.dependencies]
 # Core game logic
 strictly_tictactoe = { path = "crates/strictly_tictactoe" }
+strictly_blackjack = { path = "crates/strictly_blackjack" }
 strictly_server = { path = "crates/strictly_server" }
 
 # Elicitation framework (local dev)
-elicitation = { version = "0.8.2", features = ["rand"] }
+elicitation = { path = "../elicitation/crates/elicitation/", features = [
+  "rand",
+] }
+# elicitation = { version = "0.8.2", features = ["rand"] }
 
 # Verification
-creusot-std = { version = "0.9.0" }
+creusot-std = { version = "0.10.0" }
 kani-verifier = { version = "0.67" }
 
 # Database
@@ -61,7 +66,7 @@ http-body-util = "0.1"
 reqwest = { version = "0.13.2", features = ["json"] }
 
 # MCP
-rmcp = { version = "0.16", features = [
+rmcp = { version = "1.1.0", features = [
   "server",
   "client",
   "transport-io",

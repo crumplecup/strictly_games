@@ -6,7 +6,7 @@
 
 use super::action::{Move, MoveError};
 use super::contracts::{execute_move, validate_move};
-use super::phases::Outcome;
+use super::outcome::Outcome;
 use strictly_tictactoe::{Board, Player, Position};
 use tracing::instrument;
 

@@ -194,17 +194,15 @@ impl RestGameClient {
         debug!(status = %status, body = %body, "Got MCP response");
 
         // Check for error in JSON-RPC response
-        if body.contains("\"error\"") {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-                if let Some(error_msg) = json
-                    .get("error")
-                    .and_then(|e| e.get("message"))
-                    .and_then(|m| m.as_str())
-                {
-                    self.last_error = Some(error_msg.to_string());
-                    anyhow::bail!("Move failed: {}", error_msg);
-                }
-            }
+        if body.contains("\"error\"")
+            && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
+            && let Some(error_msg) = json
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+        {
+            self.last_error = Some(error_msg.to_string());
+            anyhow::bail!("Move failed: {}", error_msg);
         }
 
         if !status.is_success() {

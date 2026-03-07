@@ -9,14 +9,13 @@ pub use strictly_tictactoe::{Board, Player, Position, Square, rules};
 // Application-specific wrappers
 pub mod action;
 pub mod contracts;
-pub mod phases;
+pub mod outcome;
 pub mod typestate;
 pub mod wrapper;
 
 // Re-export application types
-pub use action::{Move, MoveError};
-pub use phases::{Finished, InProgress, Outcome, Setup};
-pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
+pub use action::Move;
+pub use typestate::{GameFinished, GameInProgress, GameSetup};
 pub use wrapper::AnyGame;
 
 /// Alias for clarity in session management.

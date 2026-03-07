@@ -115,20 +115,9 @@ impl ClientHandler for GameAgent {
             tracing::info!(response_length = response.len(), "LLM response received");
 
             // Return as CreateMessageResult
-            Ok(CreateMessageResult {
-                model: config.llm_model().to_string(),
-                stop_reason: Some("endTurn".to_string()),
-                message: SamplingMessage {
-                    role: Role::Assistant,
-                    content: SamplingContent::Single(SamplingMessageContent::Text(
-                        RawTextContent {
-                            text: response,
-                            meta: None,
-                        },
-                    )),
-                    meta: None,
-                },
-            })
+            let message = SamplingMessage::assistant_text(response);
+            Ok(CreateMessageResult::new(message, config.llm_model().to_string())
+                .with_stop_reason(CreateMessageResult::STOP_REASON_END_TURN))
         }
     }
 
@@ -144,25 +133,11 @@ impl ClientHandler for GameAgent {
     #[instrument(skip(self))]
     fn get_info(&self) -> <RoleClient as rmcp::service::ServiceRole>::Info {
         tracing::debug!("Providing client info");
-        InitializeRequestParams {
-            protocol_version: ProtocolVersion::V_2025_06_18,
-            capabilities: ClientCapabilities {
-                sampling: None, // TODO: Enable when implementing LLM client
-                roots: None,
-                experimental: None,
-                elicitation: None,
-                extensions: None,
-                tasks: None,
-            },
-            client_info: Implementation {
-                name: self.config.name().clone(),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-                title: None,
-                description: Some("MCP game agent".to_string()),
-                icons: None,
-                website_url: None,
-            },
-            meta: None,
-        }
+        let capabilities = ClientCapabilities::default();
+        let client_info = Implementation::new(self.config.name().clone(), env!("CARGO_PKG_VERSION"))
+            .with_description("MCP game agent");
+
+        InitializeRequestParams::new(capabilities, client_info)
+            .with_protocol_version(ProtocolVersion::V_2025_06_18)
     }
 }

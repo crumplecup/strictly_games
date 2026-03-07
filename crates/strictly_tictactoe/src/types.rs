@@ -15,7 +15,6 @@ pub enum Player {
 
 impl Player {
     /// Returns the opponent player.
-    
     pub fn opponent(self) -> Self {
         match self {
             Player::X => Player::O,
@@ -43,7 +42,6 @@ pub struct Board {
 
 impl Board {
     /// Creates a new empty board.
-    
     pub fn new() -> Self {
         Self {
             squares: [Square::Empty; 9],
@@ -51,31 +49,26 @@ impl Board {
     }
 
     /// Gets the square at the given position.
-    
     pub fn get(&self, pos: super::Position) -> Square {
         self.squares[pos.to_index()]
     }
 
     /// Sets the square at the given position.
-    
     pub fn set(&mut self, pos: super::Position, square: Square) {
         self.squares[pos.to_index()] = square;
     }
 
     /// Checks if a square is empty.
-    
     pub fn is_empty(&self, pos: super::Position) -> bool {
         matches!(self.get(pos), Square::Empty)
     }
 
     /// Returns all squares as a slice.
-    
     pub fn squares(&self) -> &[Square; 9] {
         &self.squares
     }
 
     /// Formats the board as a human-readable string.
-    
     pub fn display(&self) -> String {
         use super::Position;
         let mut result = String::new();

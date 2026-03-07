@@ -9,7 +9,7 @@ mod cli;
 use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
-use strictly_server::{GameServer, run_game_session, AgentConfig, GameAgent, SessionManager, AnyGame, Board};
+use strictly_server::{AgentConfig, AnyGame, Board, GameAgent, GameServer, SessionManager};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing::{info, warn, error, instrument};
 
@@ -399,9 +399,8 @@ async fn test_play_game(
     info!(session_id, player_name = %config.name(), "test_play_game: Calling play_game tool");
 
     let result = peer
-        .call_tool(rmcp::model::CallToolRequestParams {
-            name: "play_game".into(),
-            arguments: Some(
+        .call_tool(
+            rmcp::model::CallToolRequestParams::new("play_game").with_arguments(
                 json!({
                     "session_id": session_id,
                     "player_name": config.name()
@@ -410,9 +409,7 @@ async fn test_play_game(
                 .unwrap()
                 .clone(),
             ),
-            task: None,
-            meta: None,
-        })
+        )
         .await?;
 
     info!(result = ?result, "test_play_game: play_game completed");

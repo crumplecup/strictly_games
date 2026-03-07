@@ -1,7 +1,6 @@
 //! Formal verification runner and tracking
 
 use std::process::Command;
-use std::path::Path;
 use anyhow::{Result, Context};
 use serde_json::Value;
 
@@ -42,7 +41,7 @@ pub fn run_kani(verbose: bool) -> Result<()> {
     println!("📊 Running Kani...");
     
     let output = Command::new("cargo")
-        .args(&["kani", "-p", "strictly_proofs"])
+        .args(["kani", "-p", "strictly_proofs"])
         .output()
         .context("Failed to run cargo kani")?;
     
@@ -72,19 +71,18 @@ pub fn run_verus(verbose: bool) -> Result<()> {
     
     for file in files {
         let output = Command::new("verus")
-            .args(&["--crate-type=lib", "--output-json", file])
+            .args(["--crate-type=lib", "--output-json", file])
             .output()
             .context("Failed to run verus")?;
         
         let stdout = String::from_utf8_lossy(&output.stdout);
         
         // Parse JSON output
-        if let Ok(json) = serde_json::from_str::<Value>(&stdout) {
-            if let Some(results) = json.get("verification-results") {
-                if let Some(verified) = results.get("verified").and_then(|v| v.as_u64()) {
-                    total_verified += verified;
-                }
-            }
+        if let Ok(json) = serde_json::from_str::<Value>(&stdout)
+            && let Some(results) = json.get("verification-results")
+            && let Some(verified) = results.get("verified").and_then(|v| v.as_u64())
+        {
+            total_verified += verified;
         }
         
         if verbose {
@@ -101,7 +99,7 @@ pub fn run_creusot(verbose: bool) -> Result<()> {
     println!("📊 Running Creusot...");
     
     let output = Command::new("cargo")
-        .args(&["check", "-p", "strictly_proofs"])
+        .args(["check", "-p", "strictly_proofs"])
         .output()
         .context("Failed to run cargo check")?;
     

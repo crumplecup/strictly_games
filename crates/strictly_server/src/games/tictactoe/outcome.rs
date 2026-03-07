@@ -1,21 +1,6 @@
-//! Phase marker types for typestate state machine.
-//!
-//! These types exist solely as type-level markers to encode
-//! game phase in the type system. They have no runtime representation.
+//! Game outcome type.
 
 use serde::{Deserialize, Serialize};
-
-/// Phase marker: Game is being set up (players not assigned).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Setup;
-
-/// Phase marker: Game is in progress.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct InProgress;
-
-/// Phase marker: Game has finished.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Finished;
 
 /// Outcome of a finished game.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

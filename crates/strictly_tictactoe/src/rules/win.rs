@@ -6,7 +6,6 @@ use super::super::{Board, Player, Position, Square};
 ///
 /// Returns `Some(player)` if the player has three in a row,
 /// `None` otherwise.
-
 pub fn check_winner(board: &Board) -> Option<Player> {
     const LINES: [[Position; 3]; 8] = [
         // Rows

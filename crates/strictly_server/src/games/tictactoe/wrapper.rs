@@ -1,10 +1,10 @@
 //! Serializable game wrapper for typestate phases.
 
 use super::action::Move;
-use super::phases::Outcome;
+use super::outcome::Outcome;
+use super::typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 use strictly_tictactoe::Position;
 use strictly_tictactoe::{Board, Player};
-use super::typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument, warn};
 

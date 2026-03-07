@@ -182,6 +182,8 @@ impl AgentLibrary {
     pub fn count(&self) -> usize {
         self.agents.len()
     }
+
+    /// Returns the number of loaded agents.
     #[instrument(skip(self))]
     pub fn len(&self) -> usize {
         self.agents.len()

@@ -79,13 +79,13 @@ impl ProfileSelectScreen {
     /// Confirms the selected profile and returns the selected user id.
     #[instrument(skip(self))]
     fn confirm_selection(&mut self) -> Option<i32> {
-        if let Some(idx) = self.list_state.selected() {
-            if let Some(user) = self.users.get(idx) {
-                let id = *user.id();
-                info!(user_id = id, display_name = %user.display_name(), "Profile selected");
-                self.selected_user_id = Some(id);
-                return Some(id);
-            }
+        if let Some(idx) = self.list_state.selected()
+            && let Some(user) = self.users.get(idx)
+        {
+            let id = *user.id();
+            info!(user_id = id, display_name = %user.display_name(), "Profile selected");
+            self.selected_user_id = Some(id);
+            return Some(id);
         }
         None
     }

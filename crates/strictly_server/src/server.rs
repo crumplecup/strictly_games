@@ -1,7 +1,9 @@
 //! MCP server setup and configuration.
 
+use crate::games::blackjack::{BasicAction, GameSetup};
 use crate::games::tictactoe::{Player, Position};
 use crate::session::{PlayerType, SessionManager};
+use elicitation::{ChoiceSet, ElicitServer, Elicitation};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
@@ -41,6 +43,13 @@ pub struct PlayGameRequest {
     pub session_id: String,
     /// Player name.
     pub player_name: String,
+}
+
+/// Request for playing blackjack with elicitation.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PlayBlackjackRequest {
+    /// Initial bankroll for the player.
+    pub initial_bankroll: u64,
 }
 
 /// Request for getting board state.
@@ -552,10 +561,10 @@ impl GameServer {
     /// 2. Use Position::elicit_valid_position() which internally filters
     ///    using Position::select_with_filter(|pos| board.is_empty(*pos))
     /// 3. Framework handles the prompt construction and response parsing
-    #[instrument(skip(self, peer), fields(session_id))]
+    #[instrument(skip(self, _peer), fields(session_id))]
     async fn elicit_position_filtered(
         &self,
-        peer: Peer<RoleServer>,
+        _peer: Peer<RoleServer>,
         session_id: &str,
     ) -> Result<Position, McpError> {
         // Get current board state for filtering
@@ -580,20 +589,254 @@ impl GameServer {
         Ok(position)
     }
 
+    /// Play a complete game of blackjack with elicitation.
+    #[instrument(skip(self, peer, req), fields(initial_bankroll = %req.initial_bankroll))]
+    #[tool(
+        description = "Play blackjack. You will be prompted for betting and actions (hit/stand) until the game ends."
+    )]
+    pub async fn play_blackjack(
+        &self,
+        peer: Peer<RoleServer>,
+        Parameters(req): Parameters<PlayBlackjackRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        info!(initial_bankroll = %req.initial_bankroll, "Starting blackjack game");
+
+        // Initialize game
+        let mut bankroll = req.initial_bankroll;
+        let mut result_messages = Vec::new();
+
+        // Game loop - play hands until bankroll is depleted or player quits
+        loop {
+            // Check if player has funds
+            if bankroll == 0 {
+                let message = format!(
+                    "💸 Game Over! You've run out of chips.\n\nFinal bankroll: ${}\n\n",
+                    bankroll
+                );
+                result_messages.push(message);
+                break;
+            }
+
+            // Display current bankroll
+            result_messages.push(format!("\n💰 Current bankroll: ${}\n", bankroll));
+
+            // Create new betting state
+            let game = GameSetup::new().start_betting(bankroll);
+
+            // Elicit bet amount
+            let bet = self.elicit_bet(peer.clone(), bankroll).await?;
+
+            result_messages.push(format!("Bet: ${}\n", bet));
+
+            // Place bet and deal cards
+            let mut game_result = game
+                .place_bet(bet)
+                .map_err(|e| McpError::invalid_params(format!("Invalid bet: {}", e), None))?;
+
+            // Show initial deal
+            match &game_result {
+                crate::games::blackjack::GameResult::PlayerTurn(player_game) => {
+                    result_messages.push(format!(
+                        "Your hand: {}\n",
+                        player_game.player_hands()[0].display()
+                    ));
+                    result_messages.push(format!(
+                        "Dealer shows: {}\n",
+                        player_game.dealer_hand().cards()[0]
+                    ));
+                }
+                crate::games::blackjack::GameResult::Finished(finished) => {
+                    // Immediate blackjack
+                    result_messages.push(format!(
+                        "🃏 Blackjack! Your hand: {}\n",
+                        finished.player_hands()[0].display()
+                    ));
+                    result_messages.push(self.format_game_result(finished));
+                    bankroll = finished.bankroll();
+                    continue;
+                }
+                _ => {}
+            }
+
+            // Player turn - elicit actions
+            while let crate::games::blackjack::GameResult::PlayerTurn(player_game) = game_result {
+                let action = self
+                    .elicit_blackjack_action(peer.clone(), &player_game)
+                    .await?;
+
+                result_messages.push(format!("Action: {:?}\n", action));
+
+                let player_action =
+                    crate::games::blackjack::PlayerAction::new(action, player_game.current_hand_index());
+
+                game_result = player_game
+                    .take_action(player_action)
+                    .map_err(|e| McpError::internal_error(format!("Action failed: {}", e), None))?;
+
+                // Show updated hand after action
+                if let crate::games::blackjack::GameResult::PlayerTurn(pg) = &game_result {
+                    result_messages.push(format!(
+                        "Your hand: {}\n",
+                        pg.player_hands()[pg.current_hand_index()].display()
+                    ));
+                }
+            }
+
+            // Dealer turn
+            if let crate::games::blackjack::GameResult::DealerTurn(dealer_game) = game_result {
+                result_messages.push("\n🎲 Dealer's turn...\n".to_string());
+                let finished = dealer_game.play_dealer_turn();
+                result_messages.push(self.format_game_result(&finished));
+                bankroll = finished.bankroll();
+            }
+
+            // Ask if player wants to continue
+            if !self.affirm_continue_blackjack(peer.clone()).await? {
+                result_messages.push("\n👋 Thanks for playing!\n".to_string());
+                break;
+            }
+        }
+
+        let final_message = result_messages.join("");
+        Ok(CallToolResult::success(vec![Content::text(final_message)]))
+    }
+
+    /// Elicit a bet amount within bankroll limits using ChoiceSet.
+    ///
+    /// Presents fixed bet denominations filtered by available bankroll.
+    #[instrument(skip(self, peer), fields(max_bet))]
+    async fn elicit_bet(&self, peer: Peer<RoleServer>, max_bet: u64) -> Result<u64, McpError> {
+        tracing::info!(max_bet, "Eliciting bet amount from agent");
+
+        // Fixed bet denominations ($1, $5, $10, $25, $50, $100, $500)
+        let bet_options = vec![1, 5, 10, 25, 50, 100, 500];
+
+        // Filter to only bets within bankroll (walled garden)
+        let valid_bets: Vec<u64> = bet_options
+            .into_iter()
+            .filter(|&bet| bet <= max_bet)
+            .collect();
+
+        if valid_bets.is_empty() {
+            return Err(McpError::internal_error("No valid bets available", None));
+        }
+
+        // Use ChoiceSet to trap agent in valid options
+        let server = ElicitServer::new(peer);
+        let bet = ChoiceSet::new(valid_bets)
+            .with_prompt("Choose your bet amount:")
+            .elicit(&server)
+            .await
+            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
+
+        tracing::info!(bet, "Agent selected bet");
+        Ok(bet)
+    }
+
+    /// Elicit a blackjack action (hit/stand) based on game state using ChoiceSet.
+    ///
+    /// Uses the walled garden pattern - only presents valid actions to the agent.
+    /// Agent cannot choose invalid actions.
+    #[instrument(skip(self, peer, game))]
+    async fn elicit_blackjack_action(
+        &self,
+        peer: Peer<RoleServer>,
+        game: &crate::games::blackjack::GamePlayerTurn,
+    ) -> Result<BasicAction, McpError> {
+        let hand = &game.player_hands()[game.current_hand_index()];
+        let hand_value = hand.value().best();
+
+        tracing::info!(hand_value, "Eliciting action from agent");
+
+        // Walled garden: Filter valid actions based on game state
+        // For Milestone 1 (Hit/Stand only), both are always valid unless bust
+        let valid_actions: Vec<BasicAction> = if hand.is_bust() {
+            // Hand is bust - no actions available (this shouldn't happen in practice)
+            vec![]
+        } else {
+            // Both Hit and Stand are valid
+            vec![BasicAction::Hit, BasicAction::Stand]
+        };
+
+        if valid_actions.is_empty() {
+            return Err(McpError::internal_error("No valid actions available", None));
+        }
+
+        // Use ChoiceSet to trap agent in valid options
+        let server = ElicitServer::new(peer);
+        let action = ChoiceSet::new(valid_actions)
+            .with_prompt(format!(
+                "Your hand: {} (value: {}). Choose your action:",
+                hand.display(),
+                hand_value
+            ))
+            .elicit(&server)
+            .await
+            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
+
+        tracing::info!(action = ?action, hand_value, "Agent selected action");
+        Ok(action)
+    }
+
+    /// Ask if player wants to continue playing using bool::elicit_checked (Affirm pattern).
+    #[instrument(skip(self, peer))]
+    async fn affirm_continue_blackjack(&self, peer: Peer<RoleServer>) -> Result<bool, McpError> {
+        tracing::info!("Eliciting continue decision from agent");
+
+        // Use Affirm pattern for yes/no question
+        let continue_playing = bool::elicit_checked(peer)
+            .await
+            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
+
+        tracing::info!(continue_playing, "Agent decision");
+        Ok(continue_playing)
+    }
+
+    /// Format game result for display.
+    fn format_game_result(&self, game: &crate::games::blackjack::GameFinished) -> String {
+        let mut result = String::new();
+
+        result.push_str(&format!(
+            "Dealer's hand: {}\n",
+            game.dealer_hand().display()
+        ));
+
+        for (i, (hand, outcome)) in game
+            .player_hands()
+            .iter()
+            .zip(game.outcomes())
+            .enumerate()
+        {
+            result.push_str(&format!("\nHand {}: {}\n", i + 1, hand.display()));
+            result.push_str(&format!("Outcome: {}\n", outcome));
+
+            let payout = outcome.calculate_payout(game.bets()[i]);
+            if payout > 0 {
+                result.push_str(&format!("Won: ${}\n", payout));
+            } else if payout < 0 {
+                result.push_str(&format!("Lost: ${}\n", payout.abs()));
+            } else {
+                result.push_str("Push\n");
+            }
+        }
+
+        result.push_str(&format!("\n💰 Bankroll: ${}\n", game.bankroll()));
+        result
+    }
+
     // Auto-generate elicitation tools for type-safe LLM interaction
     elicitation::elicit_tools! {
         Position,
         Player,
+        BasicAction,
     }
 }
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for GameServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some("Type-safe tic-tac-toe game server".into()),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        let capabilities = ServerCapabilities::builder().enable_tools().build();
+        ServerInfo::new(capabilities)
+            .with_instructions("Type-safe tic-tac-toe game server")
     }
 }

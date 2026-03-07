@@ -61,7 +61,6 @@ impl Position {
     }
 
     /// Parse from label or number (0-8).
-    
     pub fn from_label_or_number(s: &str) -> Option<Position> {
         // Try as number first (position index 0-8)
         if let Ok(num) = s.trim().parse::<usize>() {
@@ -77,7 +76,6 @@ impl Position {
     }
 
     /// Converts position to board index (0-8).
-    
     pub fn to_index(self) -> usize {
         match self {
             Position::TopLeft => 0,
@@ -93,13 +91,11 @@ impl Position {
     }
 
     /// Converts position to u8 (0-8).
-    
     pub fn to_u8(self) -> u8 {
         self.to_index() as u8
     }
 
     /// Creates position from board index.
-    
     pub fn from_index(index: usize) -> Option<Self> {
         match index {
             0 => Some(Position::TopLeft),

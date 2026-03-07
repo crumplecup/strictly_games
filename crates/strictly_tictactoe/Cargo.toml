@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "Pure tic-tac-toe game logic with formal verification support"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [dependencies]
 elicitation = { workspace = true }
 serde = { workspace = true }
@@ -15,6 +18,10 @@ strum = { workspace = true }
 tracing = { workspace = true }
 rmcp = { workspace = true }
 schemars = { workspace = true }
+
+# Proc macro support for verification code generation
+proc-macro2 = "1"
+quote = "1"
 
 [features]
 # Marker features for verification tools

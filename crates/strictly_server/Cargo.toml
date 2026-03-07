@@ -10,6 +10,7 @@ description = "Game server with MCP interface, REST API, and database persistenc
 [dependencies]
 # Core game types
 strictly_tictactoe = { workspace = true }
+strictly_blackjack = { workspace = true }
 
 # Elicitation framework
 elicitation = { workspace = true }
@@ -48,6 +49,10 @@ reqwest = { workspace = true }
 # MCP
 rmcp = { workspace = true }
 schemars = { workspace = true }
+
+# Proc macro support for verification code generation
+proc-macro2 = "1"
+quote = "1"
 
 # LLM clients
 async-openai = { workspace = true }

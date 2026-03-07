@@ -17,10 +17,7 @@ use std::{io, path::PathBuf};
 use tokio::process::Child;
 use tracing::{error, info, instrument};
 
-use crate::{
-    AgentLibrary, AnyGame, FirstPlayer, GameRepository, LobbyController, ProfileService,
-    TicTacToePlayer,
-};
+use crate::{AnyGame, FirstPlayer, TicTacToePlayer};
 
 use crate::games::tictactoe::Position;
 use rest_client::RestGameClient;
@@ -223,31 +220,31 @@ where
         })?;
 
         // Handle game over
-        if game.is_over() {
-            if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()? {
-                    match key.code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(()),
-                    KeyCode::Char('r') | KeyCode::Char('R') => {
-                        info!("Restarting game");
-                        if let Err(e) = client.restart_game().await {
-                            error!(error = %e, "Restart failed");
-                        }
-                        sleep(Duration::from_millis(200)).await; // Let server process
+        if game.is_over()
+            && event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(()),
+                KeyCode::Char('r') | KeyCode::Char('R') => {
+                    info!("Restarting game");
+                    if let Err(e) = client.restart_game().await {
+                        error!(error = %e, "Restart failed");
                     }
-                    _ => {}
+                    sleep(Duration::from_millis(200)).await; // Let server process
                 }
-                }
+                _ => {}
             }
             sleep(Duration::from_millis(100)).await;
             continue;
         }
 
         // Handle input
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') => {
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => {
                     // Trigger passive-Affirm escape hatch
                     info!("User pressed 'q', cancelling game");
                     if let Err(e) = client.cancel_game().await {
@@ -266,91 +263,11 @@ where
                     cursor = input::move_cursor(cursor, key.code);
                 }
                 _ => {}
-                }
             }
         }
 
         sleep(Duration::from_millis(50)).await;
     }
-}
-
-/// Run the lobby TUI (profile selection, agent selection, game stats).
-#[instrument(skip_all, fields(db_path = %db_path, port))]
-pub async fn run_lobby(
-    db_path: String,
-    agents_dir: Option<PathBuf>,
-    port: u16,
-    agent_config: PathBuf,
-) -> Result<()> {
-    // Set up logging to file so it doesn't interfere with TUI.
-    let log_file = std::fs::File::create("strictly_games_lobby.log")?;
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .with_writer(std::sync::Arc::new(log_file))
-        .with_ansi(false)
-        .try_init();
-
-    info!(db_path = %db_path, "Starting lobby");
-
-    // Run migrations and create repository.
-    {
-        use diesel::Connection;
-        use diesel::SqliteConnection;
-        use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-        const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
-        let mut conn = SqliteConnection::establish(&db_path)?;
-        conn.run_pending_migrations(MIGRATIONS)
-            .map_err(|e| anyhow::anyhow!("Migration failed: {}", e))?;
-        info!("Database migrations applied");
-    }
-
-    let repository = GameRepository::new(db_path)?;
-    let profile_service = ProfileService::new(repository);
-
-    // Load agent library from configured dir or default.
-    let agent_library = if let Some(dir) = agents_dir {
-        AgentLibrary::scan(dir)?
-    } else {
-        AgentLibrary::scan_default().unwrap_or_else(|_| {
-            // Fall back to examples directory gracefully.
-            AgentLibrary::scan("examples").unwrap_or_else(|e| {
-                // If there are truly no configs, this will be caught in the controller.
-                panic!("No agent configs found: {}", e)
-            })
-        })
-    };
-
-    info!(agent_count = agent_library.len(), "Agent library ready");
-
-    // Set up terminal.
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    // Run lobby controller.
-    let mut controller = LobbyController::new(profile_service, agent_library, agent_config, port);
-    let result = controller.run(&mut terminal).await;
-
-    // Restore terminal.
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-
-    if let Err(ref e) = result {
-        error!(error = ?e, "Lobby error");
-        eprintln!("Lobby error: {:?}", e);
-    }
-
-    result
 }
 
 /// Runs a complete game session from the lobby: spawns server + agent, plays
@@ -442,9 +359,10 @@ where
         render_active_game(terminal, &game, &client, cursor)?;
 
         // Handle input.
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key.code {
                 KeyCode::Char('q') | KeyCode::Char('Q') => {
                     // Trigger passive-Affirm escape hatch
                     info!("User pressed 'q', cancelling game");
@@ -465,7 +383,6 @@ where
                     cursor = input::move_cursor(cursor, key.code);
                 }
                 _ => {}
-                }
             }
         }
 
@@ -538,12 +455,11 @@ where
 
     // Wait for any keypress.
     loop {
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    return Ok(game.clone());
-                }
-            }
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            return Ok(game.clone());
         }
         sleep(Duration::from_millis(50)).await;
     }
