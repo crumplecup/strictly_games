@@ -21,7 +21,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
-use strictly_blackjack::Outcome;
+use strictly_blackjack::{Hand, Outcome};
 use tokio::time::{Duration, sleep};
 use tracing::{info, instrument, warn};
 
@@ -32,7 +32,8 @@ use crate::games::blackjack::{
 };
 use crate::tui::tui_communicator::TuiCommunicator;
 use crate::tui::typestate_widget::{
-    GameEvent, TypestateGraphWidget, blackjack_active, blackjack_edges, blackjack_nodes,
+    ChoiceHint, GameEvent, PhaseContext, TypestateGraphWidget,
+    blackjack_active, blackjack_edges, blackjack_nodes,
 };
 use elicitation::Elicitation as _;
 
@@ -92,7 +93,7 @@ where
     let mut last_outcome;
 
     loop {
-        event_log.push(GameEvent::phase_change("Lobby", "Betting"));
+        event_log.push(GameEvent::story(format!("🂠  New hand — {bankroll} chips")));
 
         let Some((hand_result, hand_outcome)) = run_single_hand(
             terminal,
@@ -195,18 +196,34 @@ where
     let (place_output, bet_proof) =
         execute_place_bet(betting, bet).map_err(anyhow::Error::msg)?;
 
-    event_log.push(GameEvent::proof("BetPlaced"));
+    event_log.push(GameEvent::story(format!("💰  Bet {bet} — cards dealt")));
 
     let finished = match place_output {
         // Natural blackjack / dealer natural — no player actions needed.
         PlaceBetOutput::Finished(f) => {
-            event_log.push(GameEvent::phase_change("Betting", "Finished"));
+            let reason = if f.dealer_hand().is_blackjack() && f.outcomes().iter().any(|o| o.is_loss()) {
+                "⚡  Dealer natural blackjack"
+            } else if f.player_hands().first().is_some_and(|h| h.is_blackjack()) {
+                "⚡  Natural blackjack — 3:2 payout!"
+            } else {
+                "⚡  Instant resolution"
+            };
+            event_log.push(GameEvent::story(reason));
             f
         }
         // Normal play — enter player action loop.
         PlaceBetOutput::PlayerTurn(pt) => {
             current_phase = "PlayerTurn".to_string();
-            event_log.push(GameEvent::phase_change("Betting", "PlayerTurn"));
+            // Push a story beat showing what was dealt.
+            let player_val = pt.player_hands().first()
+                .map(|h| h.value().best().to_string())
+                .unwrap_or_default();
+            let upcard = pt.dealer_hand().cards().first()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "?".to_string());
+            event_log.push(GameEvent::story(format!(
+                "🂠  You have {player_val} · Dealer shows {upcard}"
+            )));
             play_player_turn(
                 terminal,
                 pt,
@@ -224,7 +241,13 @@ where
     };
 
     let outcome = compute_outcome(&finished);
-    event_log.push(GameEvent::result(&format!("{outcome:?}")));
+    let outcome_story = match outcome {
+        BlackjackSessionOutcome::Win(b)  => format!("🎉  Won! Bankroll → {b}"),
+        BlackjackSessionOutcome::Loss(b) => format!("💸  Lost. Bankroll → {b}"),
+        BlackjackSessionOutcome::Push(b) => format!("🤝  Push. Bankroll → {b}"),
+        BlackjackSessionOutcome::Abandoned => "Session ended".to_string(),
+    };
+    event_log.push(GameEvent::result(outcome_story));
 
     Ok(Some((finished, outcome)))
 }
@@ -269,13 +292,29 @@ where
             }
         };
 
-        event_log.push(GameEvent::proof("LegalMove"));
+        event_log.push(GameEvent::story(format!(
+            "▸  {}",
+            match action { BasicAction::Hit => "Hit", BasicAction::Stand => "Stand" }
+        )));
+
+        // Capture hand value before state is consumed by execute_play_action.
+        let pre_action_hand_val = state
+            .player_hands()
+            .get(state.current_hand_index())
+            .map(|h: &Hand| h.value().best().to_string())
+            .unwrap_or_default();
 
         // ── execute_play_action (BetPlaced → BetPlaced | PlayerTurnComplete) ──
         match execute_play_action(state, action, current_proof)
             .map_err(anyhow::Error::msg)?
         {
             PlayActionResult::InProgress(next, proof) => {
+                // Show new hand value after hit.
+                let new_val = next.player_hands()
+                    .get(next.current_hand_index())
+                    .map(|h| h.value().best().to_string())
+                    .unwrap_or_default();
+                event_log.push(GameEvent::story(format!("   hand now {new_val}")));
                 state = next;
                 current_proof = proof;
             }
@@ -283,22 +322,33 @@ where
                 match output {
                     PlayActionOutput::Finished(f) => {
                         *current_phase = "Finished".to_string();
-                        event_log.push(GameEvent::phase_change("PlayerTurn", "Finished"));
-                        event_log.push(GameEvent::proof("PlayerTurnComplete"));
+                        // Check if bust.
+                        let bust = f.player_hands().first().is_some_and(|h| h.is_bust());
+                        if bust {
+                            event_log.push(GameEvent::story("   bust!".to_string()));
+                        }
                         return Ok(f);
                     }
                     PlayActionOutput::DealerTurn(dt) => {
                         *current_phase = "DealerTurn".to_string();
-                        event_log.push(GameEvent::phase_change("PlayerTurn", "DealerTurn"));
-                        event_log.push(GameEvent::proof("PlayerTurnComplete"));
+                        event_log.push(GameEvent::story(format!(
+                            "   stood at {pre_action_hand_val} — dealer's turn"
+                        )));
 
                         // ── execute_dealer_turn (PlayerTurnComplete → HandResolved) ──
                         let (finished, _resolved) =
                             execute_dealer_turn(dt, player_done_proof);
 
+                        // Narrate dealer result.
+                        let dealer_val = finished.dealer_hand().value().best();
+                        let dealer_story = if finished.dealer_hand().is_bust() {
+                            format!("🎲  Dealer bust ({dealer_val}) — you win!")
+                        } else {
+                            format!("🎲  Dealer stands at {dealer_val}")
+                        };
+                        event_log.push(GameEvent::story(dealer_story));
+
                         *current_phase = "Finished".to_string();
-                        event_log.push(GameEvent::phase_change("DealerTurn", "Finished"));
-                        event_log.push(GameEvent::proof("HandResolved"));
                         return Ok(finished);
                     }
                 }
@@ -396,6 +446,8 @@ fn render_blackjack<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    let ctx = build_phase_context(&phase);
+
     terminal.draw(|frame| {
         let area = frame.area();
 
@@ -424,6 +476,7 @@ where
 
         if show_typestate_graph && main_chunks.len() > 1 {
             TypestateGraphWidget::new(bj_nodes, bj_edges, active, event_log)
+                .with_context(&ctx)
                 .render(main_chunks[1], frame.buffer_mut());
         }
     })?;
@@ -483,6 +536,52 @@ where
         footer.render(inner, frame.buffer_mut());
     })?;
     Ok(())
+}
+
+/// Builds the [`PhaseContext`] callout from the current display phase.
+///
+/// Called once per render; the resulting context is passed to the typestate
+/// widget so it can show the narrative branch beneath the active node.
+fn build_phase_context(phase: &DisplayPhase<'_>) -> PhaseContext {
+    match phase {
+        DisplayPhase::Betting { state } => PhaseContext::info(format!(
+            "You have {} chips — enter your bet",
+            state.bankroll()
+        )),
+
+        DisplayPhase::PlayerTurn { state } => {
+            let hand = state
+                .player_hands()
+                .get(state.current_hand_index())
+                .map(|h| h.value().best().to_string())
+                .unwrap_or_else(|| "?".to_string());
+            let upcard = state
+                .dealer_hand()
+                .cards()
+                .first()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "?".to_string());
+            PhaseContext::with_choices(
+                format!("Your {hand} vs dealer {upcard}"),
+                vec![
+                    ChoiceHint { key: "1", label: "Hit",   desc: "draw another card" },
+                    ChoiceHint { key: "2", label: "Stand", desc: "hold, let dealer play" },
+                ],
+            )
+        }
+
+        DisplayPhase::Finished { state } => {
+            let any_win = state.outcomes().iter().any(|o| o.is_win());
+            let narrative = if any_win {
+                "Hand complete — you won this round".to_string()
+            } else if state.outcomes().iter().any(|o| o.is_loss()) {
+                "Hand complete — better luck next time".to_string()
+            } else {
+                "Hand complete — push, bet returned".to_string()
+            };
+            PhaseContext::info(narrative)
+        }
+    }
 }
 
 fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
