@@ -5,9 +5,11 @@
 //! in the existing raw mode context established by the ratatui game loop.
 
 use crossterm::{
+    cursor::MoveTo,
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     style::{Color, Print, ResetColor, SetForegroundColor},
+    terminal::{Clear, ClearType},
 };
 use elicitation::{
     ElicitCommunicator, ElicitError, ElicitErrorKind, ElicitResult, ElicitationStyle,
@@ -134,6 +136,11 @@ impl ElicitCommunicator for TuiCommunicator {
 
             let result = input.trim().to_string();
             tracing::debug!(response = %result, "TUI elicitation response received");
+
+            // Clear everything printed by this prompt so the next ratatui
+            // draw() gets the full terminal back without accumulated scroll.
+            execute!(stdout, Clear(ClearType::All), MoveTo(0, 0)).ok();
+
             Ok(result)
         }
     }
