@@ -13,6 +13,9 @@ use crate::ProfileService;
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::lobby::settings::LobbySettings;
 
+/// Number of settings items in the list.
+const SETTINGS_COUNT: usize = 2;
+
 /// State for the settings screen.
 #[derive(Debug)]
 pub struct SettingsScreen {
@@ -39,14 +42,40 @@ impl SettingsScreen {
         self.settings
     }
 
-    /// Toggles the "Who Goes First?" setting.
+    /// Moves selection up.
     #[instrument(skip(self))]
-    fn toggle_first_player(&mut self) {
-        self.settings.first_player = self.settings.first_player.toggle();
-        info!(
-            first_player = %self.settings.first_player.label(),
-            "Toggled first player setting"
-        );
+    fn select_prev(&mut self) {
+        let i = self.list_state.selected().unwrap_or(0);
+        self.list_state.select(Some(i.saturating_sub(1)));
+    }
+
+    /// Moves selection down.
+    #[instrument(skip(self))]
+    fn select_next(&mut self) {
+        let i = self.list_state.selected().unwrap_or(0);
+        self.list_state.select(Some((i + 1).min(SETTINGS_COUNT - 1)));
+    }
+
+    /// Toggles the currently selected setting.
+    #[instrument(skip(self))]
+    fn toggle_selected(&mut self) {
+        match self.list_state.selected().unwrap_or(0) {
+            0 => {
+                self.settings.first_player = self.settings.first_player.toggle();
+                info!(
+                    first_player = %self.settings.first_player.label(),
+                    "Toggled first player setting"
+                );
+            }
+            1 => {
+                self.settings.show_typestate_graph = !self.settings.show_typestate_graph;
+                info!(
+                    show_typestate_graph = self.settings.show_typestate_graph,
+                    "Toggled typestate graph setting"
+                );
+            }
+            _ => {}
+        }
     }
 }
 
@@ -73,11 +102,18 @@ impl Screen for SettingsScreen {
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
 
-        let first_player_label = format!(
-            "Who Goes First?    [ {} ]",
-            self.settings.first_player.label()
-        );
-        let items = vec![ListItem::new(first_player_label)];
+        let checkbox = |checked: bool| if checked { "[✓]" } else { "[ ]" };
+
+        let items = vec![
+            ListItem::new(format!(
+                "Who Goes First?    [ {} ]",
+                self.settings.first_player.label()
+            )),
+            ListItem::new(format!(
+                "Show Typestate Graph   {}",
+                checkbox(self.settings.show_typestate_graph)
+            )),
+        ];
 
         let list = List::new(items)
             .block(Block::default().borders(Borders::ALL).title("Preferences"))
@@ -91,7 +127,7 @@ impl Screen for SettingsScreen {
         let mut list_state = self.list_state;
         frame.render_stateful_widget(list, chunks[1], &mut list_state);
 
-        let help = Paragraph::new("←→ / Enter: Toggle | Esc: Back")
+        let help = Paragraph::new("↑↓: Navigate | ←→ / Enter / Space: Toggle | Esc: Back")
             .style(Style::default().fg(Color::DarkGray))
             .alignment(Alignment::Center)
             .block(Block::default().borders(Borders::ALL));
@@ -101,8 +137,16 @@ impl Screen for SettingsScreen {
     #[instrument(skip(self, key, _profile_service))]
     fn handle_key(&mut self, key: KeyEvent, _profile_service: &ProfileService) -> ScreenTransition {
         match key.code {
+            KeyCode::Up => {
+                self.select_prev();
+                ScreenTransition::Stay
+            }
+            KeyCode::Down => {
+                self.select_next();
+                ScreenTransition::Stay
+            }
             KeyCode::Enter | KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') => {
-                self.toggle_first_player();
+                self.toggle_selected();
                 ScreenTransition::Stay
             }
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {

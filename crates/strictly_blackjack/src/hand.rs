@@ -1,10 +1,11 @@
 //! Hand representation and value calculation for blackjack.
 
 use super::card::Card;
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
 /// Value of a blackjack hand (hard and soft totals).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct HandValue {
     hard: u8,
@@ -54,7 +55,7 @@ impl std::fmt::Display for HandValue {
 }
 
 /// A hand of cards in blackjack.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit)]
 pub struct Hand {
     cards: Vec<Card>,
 }

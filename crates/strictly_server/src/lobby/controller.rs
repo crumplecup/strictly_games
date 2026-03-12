@@ -10,11 +10,13 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::lobby::screen::ScreenTransition;
 use crate::lobby::screens::{
-    AgentSelectScreen, InGameScreen, MainLobbyScreen, ProfileSelectScreen, SettingsScreen,
-    StatsViewScreen,
+    AgentSelectScreen, GameSelectScreen, InGameScreen, MainLobbyScreen, ProfileSelectScreen,
+    SettingsScreen, StatsViewScreen,
 };
 use crate::lobby::settings::LobbySettings;
 use crate::run_game_session;
+use crate::tui::{BlackjackSessionOutcome, run_blackjack_session};
+use crate::lobby::settings::GameType;
 use crate::{
     AgentConfig, AgentLibrary, AnyGame, FirstPlayer, GameOutcome, ProfileService, TicTacToePlayer,
     User,
@@ -25,6 +27,7 @@ use crate::{
 enum ActiveScreen {
     ProfileSelect(ProfileSelectScreen),
     MainLobby(MainLobbyScreen),
+    GameSelect(GameSelectScreen),
     AgentSelect(AgentSelectScreen),
     StatsView(StatsViewScreen),
     InGame(InGameScreen),
@@ -88,6 +91,7 @@ impl LobbyController {
                 match &screen {
                     ActiveScreen::ProfileSelect(s) => s.render(f, &self.profile_service),
                     ActiveScreen::MainLobby(s) => s.render(f, &self.profile_service),
+                    ActiveScreen::GameSelect(s) => s.render(f, &self.profile_service),
                     ActiveScreen::AgentSelect(s) => s.render(f, &self.profile_service),
                     ActiveScreen::StatsView(s) => s.render(f, &self.profile_service),
                     ActiveScreen::InGame(s) => s.render(f, &self.profile_service),
@@ -108,6 +112,7 @@ impl LobbyController {
                 let transition = match &mut screen {
                     ActiveScreen::ProfileSelect(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::MainLobby(s) => s.handle_key(key, &self.profile_service),
+                    ActiveScreen::GameSelect(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::AgentSelect(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::StatsView(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::InGame(s) => s.handle_key(key, &self.profile_service),
@@ -118,7 +123,12 @@ impl LobbyController {
                 if let ScreenTransition::GoToInGame { ref agent_name } = transition {
                     let agent_name = agent_name.clone();
                     match self
-                        .execute_game(terminal, &agent_name, self.settings.first_player)
+                        .execute_game(
+                            terminal,
+                            &agent_name,
+                            self.settings.first_player,
+                            self.settings.show_typestate_graph,
+                        )
                         .await
                     {
                         Ok(next_screen) => {
@@ -128,9 +138,12 @@ impl LobbyController {
                         Err(e) => {
                             tracing::error!(error = %e, "Game session failed");
                             screen = match &self.current_user {
-                                Some(user) => {
-                                    ActiveScreen::MainLobby(MainLobbyScreen::new(user.clone()))
-                                }
+                                Some(user) => ActiveScreen::MainLobby(
+                                    MainLobbyScreen::with_game(
+                                        user.clone(),
+                                        self.settings.selected_game,
+                                    ),
+                                ),
                                 None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(
                                     &self.profile_service,
                                 )),
@@ -197,7 +210,34 @@ impl LobbyController {
                     },
                 };
                 info!(user_id = user.id(), "Navigating to MainLobby");
-                Some(ActiveScreen::MainLobby(MainLobbyScreen::new(user)))
+                Some(ActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                    user,
+                    self.settings.selected_game,
+                )))
+            }
+
+            ScreenTransition::GoToGameSelect => {
+                info!("Navigating to GameSelect");
+                Some(ActiveScreen::GameSelect(GameSelectScreen::new(
+                    self.settings.selected_game,
+                )))
+            }
+
+            ScreenTransition::GameSelected { game } => {
+                info!(game = %game.label(), "Game selected, returning to MainLobby");
+                self.settings.selected_game = game;
+                let user = match &self.current_user {
+                    Some(u) => u.clone(),
+                    None => {
+                        return Some(ActiveScreen::ProfileSelect(ProfileSelectScreen::new(
+                            &self.profile_service,
+                        )))
+                    }
+                };
+                Some(ActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                    user,
+                    self.settings.selected_game,
+                )))
             }
 
             ScreenTransition::GoToAgentSelect => {
@@ -277,38 +317,25 @@ impl LobbyController {
 
     /// Runs a full game session against the named agent and returns the next screen.
     ///
-    /// Looks up the agent config, spawns server + agent, runs the game loop, records
-    /// the result, and returns an [`ActiveScreen::MainLobby`] for the transition back.
+    /// Dispatches to the appropriate game loop based on the currently selected game type.
     #[instrument(skip(self, terminal))]
     async fn execute_game<B: Backend + std::io::Write>(
         &mut self,
         terminal: &mut Terminal<B>,
         agent_name: &str,
         first_player: FirstPlayer,
+        show_typestate_graph: bool,
     ) -> anyhow::Result<ActiveScreen>
     where
         <B as Backend>::Error: Send + Sync + 'static,
     {
-        info!(agent_name = %agent_name, first_player = %first_player.label(), "Executing game session");
-
-        let agent_config = match self.agent_library.get_by_name(agent_name) {
-            Some(c) => c.clone(),
-            None => {
-                warn!(agent_name = %agent_name, "Agent not found in library");
-                let screen = match &self.current_user {
-                    Some(u) => ActiveScreen::MainLobby(MainLobbyScreen::new(u.clone())),
-                    None => {
-                        ActiveScreen::ProfileSelect(ProfileSelectScreen::new(&self.profile_service))
-                    }
-                };
-                return Ok(screen);
-            }
-        };
-
-        let config_path = agent_config
-            .config_path()
-            .clone()
-            .unwrap_or_else(|| self.agent_config_path.clone());
+        info!(
+            agent_name = %agent_name,
+            first_player = %first_player.label(),
+            show_typestate_graph,
+            game = %self.settings.selected_game.label(),
+            "Executing game session"
+        );
 
         let player_name = self
             .current_user
@@ -316,50 +343,104 @@ impl LobbyController {
             .map(|u| u.display_name().clone())
             .unwrap_or_else(|| "Human".to_string());
 
-        info!(
-            config_path = %config_path.display(),
-            player_name = %player_name,
-            port = self.server_port,
-            "Launching game session"
-        );
-
-        let (final_game, human_mark) = run_game_session(
-            terminal,
-            config_path,
-            player_name.clone(),
-            *self.server_port(),
-            first_player,
-        )
-        .await?;
-
-        // Record the result if there is a logged-in user.
-        if let Some(user) = &self.current_user {
-            let outcome = determine_outcome(&final_game, human_mark);
-            let moves_count = final_game.history().len() as i32;
-            debug!(
-                user_id = user.id(),
-                outcome = ?outcome,
-                moves = moves_count,
-                "Recording game result"
-            );
-            if let Err(e) = self.profile_service.record_game_result(
-                *user.id(),
-                agent_name.to_string(),
-                "tictactoe".to_string(),
-                outcome,
-                moves_count,
-                "tui_session".to_string(),
-            ) {
-                tracing::warn!(error = %e, "Failed to record game result");
-            }
-        }
-
-        // Return to main lobby.
-        let screen = match &self.current_user {
-            Some(u) => ActiveScreen::MainLobby(MainLobbyScreen::new(u.clone())),
+        let lobby_screen = |u: &Option<crate::User>| match u {
+            Some(u) => ActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                u.clone(),
+                self.settings.selected_game,
+            )),
             None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(&self.profile_service)),
         };
-        Ok(screen)
+
+        match self.settings.selected_game {
+            // ── Blackjack ── local typestate game, no REST server ────────
+            GameType::Blackjack => {
+                let outcome = run_blackjack_session(
+                    terminal,
+                    player_name.clone(),
+                    1_000, // default starting bankroll
+                    show_typestate_graph,
+                )
+                .await?;
+
+                if let Some(user) = &self.current_user {
+                    let game_outcome = match outcome {
+                        BlackjackSessionOutcome::Win(_) => GameOutcome::Win,
+                        BlackjackSessionOutcome::Loss(_) => GameOutcome::Loss,
+                        BlackjackSessionOutcome::Push(_) | BlackjackSessionOutcome::Abandoned => {
+                            GameOutcome::Draw
+                        }
+                    };
+                    if let Err(e) = self.profile_service.record_game_result(
+                        *user.id(),
+                        agent_name.to_string(),
+                        self.settings.selected_game.id().to_string(),
+                        game_outcome,
+                        1, // one round = one move
+                        "tui_session".to_string(),
+                    ) {
+                        tracing::warn!(error = %e, "Failed to record blackjack result");
+                    }
+                }
+
+                Ok(lobby_screen(&self.current_user))
+            }
+
+            // ── TicTacToe ── REST-based networked game ───────────────────
+            GameType::TicTacToe => {
+                let agent_config = match self.agent_library.get_by_name(agent_name) {
+                    Some(c) => c.clone(),
+                    None => {
+                        warn!(agent_name = %agent_name, "Agent not found in library");
+                        return Ok(lobby_screen(&self.current_user));
+                    }
+                };
+
+                let config_path = agent_config
+                    .config_path()
+                    .clone()
+                    .unwrap_or_else(|| self.agent_config_path.clone());
+
+                info!(
+                    config_path = %config_path.display(),
+                    player_name = %player_name,
+                    port = self.server_port,
+                    "Launching TicTacToe session"
+                );
+
+                let (final_game, human_mark) = run_game_session(
+                    terminal,
+                    config_path,
+                    player_name.clone(),
+                    *self.server_port(),
+                    first_player,
+                    show_typestate_graph,
+                )
+                .await?;
+
+                if let Some(user) = &self.current_user {
+                    let game_outcome = determine_outcome(&final_game, human_mark);
+                    let moves_count = final_game.history().len() as i32;
+                    debug!(
+                        user_id = user.id(),
+                        outcome = ?game_outcome,
+                        moves = moves_count,
+                        "Recording TicTacToe result"
+                    );
+                    if let Err(e) = self.profile_service.record_game_result(
+                        *user.id(),
+                        agent_name.to_string(),
+                        self.settings.selected_game.id().to_string(),
+                        game_outcome,
+                        moves_count,
+                        "tui_session".to_string(),
+                    ) {
+                        tracing::warn!(error = %e, "Failed to record TicTacToe result");
+                    }
+                }
+
+                Ok(lobby_screen(&self.current_user))
+            }
+        }
     }
 }
 

@@ -41,13 +41,13 @@ pub use db::{
 };
 
 // Public API exports - Lobby
-pub use lobby::{FirstPlayer, LobbyController, LobbySettings, Screen, ScreenTransition};
+pub use lobby::{FirstPlayer, GameType, LobbyController, LobbySettings, Screen, ScreenTransition};
 
 // Public API exports - Profile service
 pub use profile_service::ProfileService;
 
 // Public API exports - LLM client
-pub use llm_client::LlmClient;
+pub use llm_client::{LlmClient, LlmConfig, LlmError, LlmProvider};
 
 // Public API exports - Server
 pub use server::GameServer;
@@ -65,6 +65,7 @@ pub use verify::{run_all as run_verification_all, run_kani, run_verus, run_creus
 pub use games::tictactoe::{
     AnyGame, Mark, Player, Position, Board, Square,
     GameSetup, GameInProgress, GameFinished,
+    GameResult, Move, MoveError, Outcome,
 };
 
 // Re-export for convenience

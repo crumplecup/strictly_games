@@ -1,10 +1,11 @@
 //! Deck of playing cards with shuffling and deal tracking.
 
 use super::card::{Card, Rank, Suit};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
 /// A standard 52-card deck.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit)]
 pub struct Deck {
     cards: Vec<Card>,
     dealt: usize,

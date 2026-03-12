@@ -4,6 +4,7 @@
 //! the player's intent and can be validated independently of execution.
 
 use strictly_tictactoe::{Player, Position};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -14,7 +15,7 @@ use tracing::instrument;
 /// - Serialized for replay
 /// - Logged for debugging
 /// - Reasoned about by contracts
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
 pub struct Move {
     /// The player making the move.
     pub player: Player,

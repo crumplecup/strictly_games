@@ -11,12 +11,14 @@ use ratatui::{
 use tracing::{debug, info, instrument};
 
 use crate::lobby::screen::{Screen, ScreenTransition};
+use crate::lobby::settings::GameType;
 use crate::{ProfileService, User};
 
 /// Menu options available in the main lobby.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LobbyOption {
     PlayGame,
+    SelectGame,
     ViewStats,
     ChangeProfile,
     Settings,
@@ -25,13 +27,14 @@ enum LobbyOption {
 
 impl LobbyOption {
     #[instrument]
-    fn label(self) -> &'static str {
+    fn label(self, selected_game: GameType) -> String {
         match self {
-            Self::PlayGame => "Play Game",
-            Self::ViewStats => "View Statistics",
-            Self::ChangeProfile => "Change Profile",
-            Self::Settings => "Settings",
-            Self::Quit => "Quit",
+            Self::PlayGame => "Play Game".to_string(),
+            Self::SelectGame => format!("Select Game  [ {} ]", selected_game.label()),
+            Self::ViewStats => "View Statistics".to_string(),
+            Self::ChangeProfile => "Change Profile".to_string(),
+            Self::Settings => "Settings".to_string(),
+            Self::Quit => "Quit".to_string(),
         }
     }
 
@@ -39,6 +42,7 @@ impl LobbyOption {
     fn all() -> &'static [LobbyOption] {
         &[
             Self::PlayGame,
+            Self::SelectGame,
             Self::ViewStats,
             Self::ChangeProfile,
             Self::Settings,
@@ -51,18 +55,20 @@ impl LobbyOption {
 #[derive(Debug, Getters)]
 pub struct MainLobbyScreen {
     current_user: User,
+    selected_game: GameType,
     list_state: ListState,
 }
 
 impl MainLobbyScreen {
-    /// Creates a new main lobby screen for the given user.
+    /// Creates a main lobby screen for the given user and game selection.
     #[instrument(skip(current_user))]
-    pub fn new(current_user: User) -> Self {
-        debug!(user_id = current_user.id(), "Initializing MainLobbyScreen");
+    pub fn with_game(current_user: User, selected_game: GameType) -> Self {
+        debug!(user_id = current_user.id(), game = %selected_game.label(), "Initializing MainLobbyScreen");
         let mut state = ListState::default();
         state.select(Some(0));
         Self {
             current_user,
+            selected_game,
             list_state: state,
         }
     }
@@ -141,7 +147,7 @@ impl Screen for MainLobbyScreen {
 
         let items: Vec<ListItem> = LobbyOption::all()
             .iter()
-            .map(|opt| ListItem::new(opt.label()))
+            .map(|opt| ListItem::new(opt.label(self.selected_game)))
             .collect();
 
         let menu = List::new(items)
@@ -179,6 +185,7 @@ impl Screen for MainLobbyScreen {
                 info!(option = ?option, "Lobby option selected");
                 match option {
                     LobbyOption::PlayGame => ScreenTransition::GoToAgentSelect,
+                    LobbyOption::SelectGame => ScreenTransition::GoToGameSelect,
                     LobbyOption::ViewStats => ScreenTransition::GoToStatsView,
                     LobbyOption::ChangeProfile => ScreenTransition::GoToProfileSelect,
                     LobbyOption::Settings => ScreenTransition::GoToSettings,

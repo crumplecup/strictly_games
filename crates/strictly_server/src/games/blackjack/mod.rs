@@ -6,4 +6,4 @@ mod typestate;
 
 // Local exports
 pub use action::{BasicAction, PlayerAction};
-pub use typestate::{GameFinished, GamePlayerTurn, GameResult, GameSetup};
+pub use typestate::{GameBetting, GameFinished, GamePlayerTurn, GameResult, GameSetup};

@@ -6,6 +6,7 @@
 use super::action::{ActionError, BasicAction, PlayerAction};
 use super::contracts::{execute_action, validate_action};
 use strictly_blackjack::{Deck, Hand, Outcome};
+use elicitation::{Elicit, Prompt, Select};
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -13,7 +14,7 @@ use tracing::instrument;
 // ─────────────────────────────────────────────────────────────
 
 /// Game in setup phase - ready to start.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Elicit)]
 pub struct GameSetup {
     deck: Deck,
 }
@@ -48,13 +49,18 @@ impl Default for GameSetup {
 // ─────────────────────────────────────────────────────────────
 
 /// Game in betting phase - player places bet.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Elicit)]
 pub struct GameBetting {
     deck: Deck,
     bankroll: u64,
 }
 
 impl GameBetting {
+    /// Returns the current bankroll (before any bet is placed).
+    pub fn bankroll(&self) -> u64 {
+        self.bankroll
+    }
+
     /// Places bet and deals initial cards (consumes betting, returns result).
     #[instrument(skip(self))]
     pub fn place_bet(mut self, bet: u64) -> Result<GameResult, ActionError> {
@@ -139,7 +145,7 @@ impl GameBetting {
 // ─────────────────────────────────────────────────────────────
 
 /// Game in player turn phase - player takes actions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Elicit)]
 pub struct GamePlayerTurn {
     pub(super) deck: Deck,
     pub(super) player_hands: Vec<Hand>,
@@ -212,7 +218,7 @@ impl GamePlayerTurn {
 // ─────────────────────────────────────────────────────────────
 
 /// Game in dealer turn phase - dealer plays by fixed rules.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Elicit)]
 pub struct GameDealerTurn {
     deck: Deck,
     player_hands: Vec<Hand>,
@@ -297,7 +303,7 @@ impl GameDealerTurn {
 // ─────────────────────────────────────────────────────────────
 
 /// Game finished - outcomes determined.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Elicit)]
 pub struct GameFinished {
     player_hands: Vec<Hand>,
     dealer_hand: Hand,
@@ -338,7 +344,7 @@ impl GameFinished {
 // ─────────────────────────────────────────────────────────────
 
 /// Result of a game transition.
-#[derive(Debug)]
+#[derive(Debug, Elicit)]
 pub enum GameResult {
     /// Game in player turn phase.
     PlayerTurn(GamePlayerTurn),

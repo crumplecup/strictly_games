@@ -3,6 +3,7 @@
 use crossterm::event::KeyEvent;
 use ratatui::Frame;
 
+use crate::lobby::settings::GameType;
 use crate::ProfileService;
 
 /// The result of handling an input event on a screen.
@@ -17,6 +18,13 @@ pub enum ScreenTransition {
     GoToProfileSelect,
     /// Navigate to the main lobby screen.
     GoToMainLobby,
+    /// Navigate to the game selection screen.
+    GoToGameSelect,
+    /// A game was chosen from the game selection screen; updates settings and returns to lobby.
+    GameSelected {
+        /// The game the user picked.
+        game: GameType,
+    },
     /// Navigate to the agent selection screen.
     GoToAgentSelect,
     /// Navigate to the statistics view for the current user.

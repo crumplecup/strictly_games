@@ -31,3 +31,14 @@ serde_json = { workspace = true }
 [features]
 # Empty marker feature for API tests
 api = []
+
+[dev-dependencies]
+diesel = { workspace = true }
+diesel_migrations = { workspace = true }
+tempfile = "3"
+dotenvy = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+rmcp = { workspace = true }

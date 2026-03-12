@@ -968,7 +968,7 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "elicitation"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anodized",
  "anyhow",
@@ -1007,16 +1007,17 @@ dependencies = [
 
 [[package]]
 name = "elicitation_derive"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
+ "toml 1.0.1+spec-1.1.0",
 ]
 
 [[package]]
 name = "elicitation_macros"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2954,9 +2955,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2cb14cb9278a12eae884c9f3c0cfeca2cc28f361211206424a1d7abed95f090"
+checksum = "ba6b9d2f0efe2258b23767f1f9e0054cfbcac9c2d6f81a031214143096d7864f"
 dependencies = [
  "async-trait",
  "base64",
@@ -2987,9 +2988,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp-macros"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02ea81d9482b07e1fe156ac7cf98b6823d51fb84531936a5e1cbb4eec31ad5"
+checksum = "ab9d95d7ed26ad8306352b0d5f05b593222b272790564589790d210aa15caa9e"
 dependencies = [
  "darling 0.23.0",
  "proc-macro2",
@@ -3447,6 +3448,8 @@ dependencies = [
  "axum",
  "clap",
  "crossterm",
+ "diesel",
+ "diesel_migrations",
  "dotenvy",
  "http-body-util",
  "hyper",
@@ -3455,6 +3458,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strictly_server",
+ "tempfile",
  "tokio",
  "tower",
  "tracing",
