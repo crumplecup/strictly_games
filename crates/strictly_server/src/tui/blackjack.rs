@@ -124,20 +124,11 @@ where
             &event_log,
         )?;
 
-        // Any key advances; Q is a passive escape.
-        if !wait_for_keypress().await? {
-            last_outcome = BlackjackSessionOutcome::Abandoned;
-            break;
-        }
-
-        if bankroll == 0 {
-            info!("Bankroll exhausted — ending session");
-            break;
-        }
-
-        // One active Affirm between rounds — same interface for human and agent.
-        if !prompt_play_again(&comm, bankroll).await? {
-            last_outcome = BlackjackSessionOutcome::Abandoned;
+        // Q = quit, any other key = play another hand.
+        if !wait_for_keypress().await? || bankroll == 0 {
+            if bankroll == 0 {
+                info!("Bankroll exhausted — ending session");
+            }
             break;
         }
     }
@@ -359,27 +350,6 @@ where
                     }
                 }
             }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Play-again prompt
-// ─────────────────────────────────────────────────────────────
-
-/// Asks the player if they want another hand using the Affirm paradigm.
-///
-/// Uses `bool::elicit(comm)` so the same interface works for both human
-/// players and AI agents — `false` (or a cancelled elicitation) means quit.
-#[instrument(skip_all, fields(bankroll))]
-async fn prompt_play_again(comm: &TuiCommunicator, bankroll: u64) -> Result<bool> {
-    info!(bankroll, "Asking player to affirm continuation");
-    match bool::elicit(comm).await {
-        Ok(affirmed) => Ok(affirmed),
-        Err(_) => {
-            // Cancelled elicitation (e.g. Q pressed) = passive quit.
-            warn!("Affirm elicitation cancelled — treating as quit");
-            Ok(false)
         }
     }
 }
