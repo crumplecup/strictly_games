@@ -7,6 +7,9 @@
 use elicitation::Elicitation;
 use strictly_tictactoe::{Board, Player, Position, Square};
 
+#[cfg(creusot)]
+use creusot_std::prelude::*;
+
 /// Witness compositional verification through Elicitation framework.
 ///
 /// Creusot uses #[trusted] axioms - verification happens at compile time.
