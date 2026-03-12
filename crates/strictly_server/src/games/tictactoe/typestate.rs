@@ -7,8 +7,8 @@
 use super::action::{Move, MoveError};
 use super::contracts::{execute_move, validate_move};
 use super::outcome::Outcome;
-use strictly_tictactoe::{Board, Player, Position};
 use elicitation::{Elicit, Prompt, Select};
+use strictly_tictactoe::{Board, Player, Position};
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────

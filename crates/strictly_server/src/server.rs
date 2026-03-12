@@ -577,7 +577,7 @@ impl GameServer {
 
         // Filter valid positions (empty squares)
         let valid_positions = Position::valid_moves(board);
-        
+
         if valid_positions.is_empty() {
             return Err(McpError::internal_error("No valid moves available", None));
         }
@@ -666,8 +666,10 @@ impl GameServer {
 
                 result_messages.push(format!("Action: {:?}\n", action));
 
-                let player_action =
-                    crate::games::blackjack::PlayerAction::new(action, player_game.current_hand_index());
+                let player_action = crate::games::blackjack::PlayerAction::new(
+                    action,
+                    player_game.current_hand_index(),
+                );
 
                 game_result = player_game
                     .take_action(player_action)
@@ -801,12 +803,7 @@ impl GameServer {
             game.dealer_hand().display()
         ));
 
-        for (i, (hand, outcome)) in game
-            .player_hands()
-            .iter()
-            .zip(game.outcomes())
-            .enumerate()
-        {
+        for (i, (hand, outcome)) in game.player_hands().iter().zip(game.outcomes()).enumerate() {
             result.push_str(&format!("\nHand {}: {}\n", i + 1, hand.display()));
             result.push_str(&format!("Outcome: {}\n", outcome));
 
@@ -836,7 +833,6 @@ impl GameServer {
 impl ServerHandler for GameServer {
     fn get_info(&self) -> ServerInfo {
         let capabilities = ServerCapabilities::builder().enable_tools().build();
-        ServerInfo::new(capabilities)
-            .with_instructions("Type-safe tic-tac-toe game server")
+        ServerInfo::new(capabilities).with_instructions("Type-safe tic-tac-toe game server")
     }
 }

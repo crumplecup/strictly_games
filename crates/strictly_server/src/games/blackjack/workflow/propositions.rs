@@ -6,31 +6,43 @@
 //! # Contract chain
 //!
 //! ```text
-//! True → (PlaceBetTool) → BetPlaced → (PlayActionTool) → HandComplete
+//! True → (PlaceBetTool) → BetPlaced → (PlayActionTool) → PlayerTurnComplete
 //!                                ↑                              |
 //!                          (loop while PlayerTurn)             ↓
-//!                                         (DealerTurnTool) → HandResolved
+//!                                         (DealerTurnTool) → PayoutSettled
+//! ```
+//!
+//! Financial sub-chain (inside the typestate layer):
+//!
+//! ```text
+//! BankrollLedger::debit() → BetDeducted → BankrollLedger::settle() → PayoutSettled
 //! ```
 
 use elicitation::contracts::Prop;
 
 /// Proposition: a bet has been placed and initial cards dealt.
 ///
-/// Established by [`PlaceBetTool`][super::tools::PlaceBetTool].
-/// Required by [`PlayActionTool`][super::tools::PlayActionTool].
+/// Established by [`execute_place_bet`][super::tools::execute_place_bet].
+/// Required by [`execute_play_action`][super::tools::execute_play_action].
 pub struct BetPlaced;
 impl Prop for BetPlaced {}
 
 /// Proposition: the player's turn is complete (stood, bust, or blackjack).
 ///
-/// Established by [`PlayActionTool`][super::tools::PlayActionTool] when the
-/// hand reaches a terminal player state.
-/// Required by [`DealerTurnTool`][super::tools::DealerTurnTool].
+/// Established by [`execute_play_action`][super::tools::execute_play_action]
+/// when the hand reaches a terminal player state.
+/// Required by [`execute_dealer_turn`][super::tools::execute_dealer_turn].
 pub struct PlayerTurnComplete;
 impl Prop for PlayerTurnComplete {}
 
-/// Proposition: the dealer has played and outcomes are resolved.
+/// Proposition: the hand's payout has been correctly settled.
 ///
-/// Established by [`DealerTurnTool`][super::tools::DealerTurnTool].
-pub struct HandResolved;
-impl Prop for HandResolved {}
+/// Established by [`execute_dealer_turn`][super::tools::execute_dealer_turn]
+/// and by instant-finish paths in
+/// [`execute_place_bet`][super::tools::execute_place_bet].
+///
+/// Carrying this token is proof that [`BankrollLedger::settle`] ran with
+/// a valid [`BetDeducted`][crate::games::blackjack::ledger::BetDeducted]
+/// proof — the compiler guarantees no double-deduction occurred.
+pub struct PayoutSettled;
+impl Prop for PayoutSettled {}

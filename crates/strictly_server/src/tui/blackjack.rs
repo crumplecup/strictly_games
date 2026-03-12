@@ -26,14 +26,14 @@ use tokio::time::{Duration, sleep};
 use tracing::{info, instrument, warn};
 
 use crate::games::blackjack::{
-    BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup,
-    PlaceBetOutput, PlayActionOutput, PlayActionResult,
-    execute_dealer_turn, execute_place_bet, execute_play_action,
+    BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup, PlaceBetOutput,
+    PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet,
+    execute_play_action,
 };
 use crate::tui::tui_communicator::TuiCommunicator;
 use crate::tui::typestate_widget::{
-    ChoiceHint, GameEvent, PhaseContext, TypestateGraphWidget,
-    blackjack_active, blackjack_edges, blackjack_nodes,
+    ChoiceHint, GameEvent, PhaseContext, TypestateGraphWidget, blackjack_active, blackjack_edges,
+    blackjack_nodes,
 };
 use elicitation::Elicitation as _;
 
@@ -58,6 +58,15 @@ enum DisplayPhase<'a> {
     Betting { state: &'a GameBetting },
     PlayerTurn { state: &'a GamePlayerTurn },
     Finished { state: &'a GameFinished },
+}
+
+/// Shared rendering context threaded through all render calls in a session.
+struct RenderCtx<'a, B: Backend> {
+    terminal: &'a mut Terminal<B>,
+    player_name: &'a str,
+    show_typestate_graph: bool,
+    bj_nodes: &'a [crate::tui::typestate_widget::NodeDef],
+    bj_edges: &'a [crate::tui::typestate_widget::EdgeDef],
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -95,17 +104,16 @@ where
     loop {
         event_log.push(GameEvent::story(format!("🂠  New hand — {bankroll} chips")));
 
-        let Some((hand_result, hand_outcome)) = run_single_hand(
+        let mut ctx = RenderCtx {
             terminal,
-            &player_name,
-            bankroll,
+            player_name: &player_name,
             show_typestate_graph,
-            &bj_nodes,
-            &bj_edges,
-            &comm,
-            &mut event_log,
-        )
-        .await?
+            bj_nodes: &bj_nodes,
+            bj_edges: &bj_edges,
+        };
+
+        let Some((hand_result, hand_outcome)) =
+            run_single_hand(&mut ctx, bankroll, &comm, &mut event_log).await?
         else {
             return Ok(BlackjackSessionOutcome::Abandoned);
         };
@@ -113,16 +121,14 @@ where
         bankroll = hand_result.bankroll();
         last_outcome = hand_outcome;
 
-        render_finish(
+        let mut ctx = RenderCtx {
             terminal,
-            &hand_result,
-            &player_name,
-            &last_outcome,
+            player_name: &player_name,
             show_typestate_graph,
-            &bj_nodes,
-            &bj_edges,
-            &event_log,
-        )?;
+            bj_nodes: &bj_nodes,
+            bj_edges: &bj_edges,
+        };
+        render_finish(&mut ctx, &hand_result, &last_outcome, &event_log)?;
 
         // Q = quit, any other key = play another hand.
         if !wait_for_keypress().await? || bankroll == 0 {
@@ -146,12 +152,8 @@ where
 /// abandoned the session mid-hand.
 #[instrument(skip_all, fields(bankroll))]
 async fn run_single_hand<B: Backend>(
-    terminal: &mut Terminal<B>,
-    player_name: &str,
+    ctx: &mut RenderCtx<'_, B>,
     bankroll: u64,
-    show_typestate_graph: bool,
-    bj_nodes: &[crate::tui::typestate_widget::NodeDef],
-    bj_edges: &[crate::tui::typestate_widget::EdgeDef],
     comm: &TuiCommunicator,
     event_log: &mut Vec<GameEvent>,
 ) -> Result<Option<(GameFinished, BlackjackSessionOutcome)>>
@@ -165,12 +167,8 @@ where
     let betting = game.start_betting(bankroll);
 
     render_blackjack(
-        terminal,
+        ctx,
         DisplayPhase::Betting { state: &betting },
-        player_name,
-        show_typestate_graph,
-        bj_nodes,
-        bj_edges,
         blackjack_active(&current_phase),
         event_log,
     )?;
@@ -190,56 +188,48 @@ where
     };
 
     // ── execute_place_bet (True → BetPlaced) ──────────────────
-    let (place_output, bet_proof) =
-        execute_place_bet(betting, bet).map_err(anyhow::Error::msg)?;
+    let (place_output, bet_proof) = execute_place_bet(betting, bet).map_err(anyhow::Error::msg)?;
 
     event_log.push(GameEvent::story(format!("💰  Bet {bet} — cards dealt")));
 
     let finished = match place_output {
         // Natural blackjack / dealer natural — no player actions needed.
         PlaceBetOutput::Finished(f) => {
-            let reason = if f.dealer_hand().is_blackjack() && f.outcomes().iter().any(|o| o.is_loss()) {
-                "⚡  Dealer natural blackjack"
-            } else if f.player_hands().first().is_some_and(|h| h.is_blackjack()) {
-                "⚡  Natural blackjack — 3:2 payout!"
-            } else {
-                "⚡  Instant resolution"
-            };
+            let reason =
+                if f.dealer_hand().is_blackjack() && f.outcomes().iter().any(|o| o.is_loss()) {
+                    "⚡  Dealer natural blackjack"
+                } else if f.player_hands().first().is_some_and(|h| h.is_blackjack()) {
+                    "⚡  Natural blackjack — 3:2 payout!"
+                } else {
+                    "⚡  Instant resolution"
+                };
             event_log.push(GameEvent::story(reason));
             f
         }
         // Normal play — enter player action loop.
         PlaceBetOutput::PlayerTurn(pt) => {
             current_phase = "PlayerTurn".to_string();
-            // Push a story beat showing what was dealt.
-            let player_val = pt.player_hands().first()
+            let player_val = pt
+                .player_hands()
+                .first()
                 .map(|h| h.value().best().to_string())
                 .unwrap_or_default();
-            let upcard = pt.dealer_hand().cards().first()
+            let upcard = pt
+                .dealer_hand()
+                .cards()
+                .first()
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| "?".to_string());
             event_log.push(GameEvent::story(format!(
                 "🂠  You have {player_val} · Dealer shows {upcard}"
             )));
-            play_player_turn(
-                terminal,
-                pt,
-                bet_proof,
-                comm,
-                player_name,
-                show_typestate_graph,
-                bj_nodes,
-                bj_edges,
-                &mut current_phase,
-                event_log,
-            )
-            .await?
+            play_player_turn(ctx, pt, bet_proof, comm, &mut current_phase, event_log).await?
         }
     };
 
     let outcome = compute_outcome(&finished);
     let outcome_story = match outcome {
-        BlackjackSessionOutcome::Win(b)  => format!("🎉  Won! Bankroll → {b}"),
+        BlackjackSessionOutcome::Win(b) => format!("🎉  Won! Bankroll → {b}"),
         BlackjackSessionOutcome::Loss(b) => format!("💸  Lost. Bankroll → {b}"),
         BlackjackSessionOutcome::Push(b) => format!("🤝  Push. Bankroll → {b}"),
         BlackjackSessionOutcome::Abandoned => "Session ended".to_string(),
@@ -250,19 +240,15 @@ where
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Player turn loop (BetPlaced → PlayerTurnComplete → HandResolved)
+//  Player turn loop (BetPlaced → PlayerTurnComplete → PayoutSettled)
 // ─────────────────────────────────────────────────────────────
 
 #[instrument(skip_all)]
 async fn play_player_turn<B: Backend>(
-    terminal: &mut Terminal<B>,
+    ctx: &mut RenderCtx<'_, B>,
     mut state: GamePlayerTurn,
     mut current_proof: Established<BetPlaced>,
     comm: &TuiCommunicator,
-    player_name: &str,
-    show_typestate_graph: bool,
-    bj_nodes: &[crate::tui::typestate_widget::NodeDef],
-    bj_edges: &[crate::tui::typestate_widget::EdgeDef],
     current_phase: &mut String,
     event_log: &mut Vec<GameEvent>,
 ) -> Result<GameFinished>
@@ -271,12 +257,8 @@ where
 {
     loop {
         render_blackjack(
-            terminal,
+            ctx,
             DisplayPhase::PlayerTurn { state: &state },
-            player_name,
-            show_typestate_graph,
-            bj_nodes,
-            bj_edges,
             blackjack_active(current_phase),
             event_log,
         )?;
@@ -291,7 +273,10 @@ where
 
         event_log.push(GameEvent::story(format!(
             "▸  {}",
-            match action { BasicAction::Hit => "Hit", BasicAction::Stand => "Stand" }
+            match action {
+                BasicAction::Hit => "Hit",
+                BasicAction::Stand => "Stand",
+            }
         )));
 
         // Capture hand value before state is consumed by execute_play_action.
@@ -302,12 +287,11 @@ where
             .unwrap_or_default();
 
         // ── execute_play_action (BetPlaced → BetPlaced | PlayerTurnComplete) ──
-        match execute_play_action(state, action, current_proof)
-            .map_err(anyhow::Error::msg)?
-        {
+        match execute_play_action(state, action, current_proof).map_err(anyhow::Error::msg)? {
             PlayActionResult::InProgress(next, proof) => {
                 // Show new hand value after hit.
-                let new_val = next.player_hands()
+                let new_val = next
+                    .player_hands()
                     .get(next.current_hand_index())
                     .map(|h| h.value().best().to_string())
                     .unwrap_or_default();
@@ -332,9 +316,8 @@ where
                             "   stood at {pre_action_hand_val} — dealer's turn"
                         )));
 
-                        // ── execute_dealer_turn (PlayerTurnComplete → HandResolved) ──
-                        let (finished, _resolved) =
-                            execute_dealer_turn(dt, player_done_proof);
+                        // ── execute_dealer_turn (PlayerTurnComplete → PayoutSettled) ──
+                        let (finished, _resolved) = execute_dealer_turn(dt, player_done_proof);
 
                         // Narrate dealer result.
                         let dealer_val = finished.dealer_hand().value().best();
@@ -378,24 +361,20 @@ fn compute_outcome(finished: &GameFinished) -> BlackjackSessionOutcome {
 
 #[instrument(skip_all)]
 fn render_blackjack<B: Backend>(
-    terminal: &mut Terminal<B>,
+    ctx: &mut RenderCtx<'_, B>,
     phase: DisplayPhase<'_>,
-    player_name: &str,
-    show_typestate_graph: bool,
-    bj_nodes: &[crate::tui::typestate_widget::NodeDef],
-    bj_edges: &[crate::tui::typestate_widget::EdgeDef],
     active: Option<usize>,
     event_log: &[GameEvent],
 ) -> Result<()>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
-    let ctx = build_phase_context(&phase);
+    let phase_ctx = build_phase_context(&phase);
 
-    terminal.draw(|frame| {
+    ctx.terminal.draw(|frame| {
         let area = frame.area();
 
-        let main_chunks = if show_typestate_graph {
+        let main_chunks = if ctx.show_typestate_graph {
             Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
@@ -409,7 +388,7 @@ where
 
         let game_block = Block::default()
             .borders(Borders::ALL)
-            .title(format!(" ♠ Blackjack — {} ♣ ", player_name))
+            .title(format!(" ♠ Blackjack — {} ♣ ", ctx.player_name))
             .style(Style::default().fg(Color::White));
 
         let game_inner = game_block.inner(main_chunks[0]);
@@ -418,9 +397,9 @@ where
         let content_lines = build_game_lines(&phase);
         Paragraph::new(content_lines).render(game_inner, frame.buffer_mut());
 
-        if show_typestate_graph && main_chunks.len() > 1 {
-            TypestateGraphWidget::new(bj_nodes, bj_edges, active, event_log)
-                .with_context(&ctx)
+        if ctx.show_typestate_graph && main_chunks.len() > 1 {
+            TypestateGraphWidget::new(ctx.bj_nodes, ctx.bj_edges, active, event_log)
+                .with_context(&phase_ctx)
                 .render(main_chunks[1], frame.buffer_mut());
         }
     })?;
@@ -429,33 +408,25 @@ where
 
 #[instrument(skip_all)]
 fn render_finish<B: Backend>(
-    terminal: &mut Terminal<B>,
+    ctx: &mut RenderCtx<'_, B>,
     finished: &GameFinished,
-    player_name: &str,
     outcome: &BlackjackSessionOutcome,
-    show_typestate_graph: bool,
-    bj_nodes: &[crate::tui::typestate_widget::NodeDef],
-    bj_edges: &[crate::tui::typestate_widget::EdgeDef],
     event_log: &[GameEvent],
 ) -> Result<()>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
     render_blackjack(
-        terminal,
+        ctx,
         DisplayPhase::Finished { state: finished },
-        player_name,
-        show_typestate_graph,
-        bj_nodes,
-        bj_edges,
         blackjack_active("Finished"),
         event_log,
     )?;
 
-    terminal.draw(|frame| {
+    ctx.terminal.draw(|frame| {
         let area = frame.area();
         let outcome_text = match outcome {
-            BlackjackSessionOutcome::Win(b)  => format!("🎉  You WIN! Bankroll: {b}"),
+            BlackjackSessionOutcome::Win(b) => format!("🎉  You WIN! Bankroll: {b}"),
             BlackjackSessionOutcome::Loss(b) => format!("💸  You lose. Bankroll: {b}"),
             BlackjackSessionOutcome::Push(b) => format!("🤝  Push. Bankroll: {b}"),
             BlackjackSessionOutcome::Abandoned => "Session ended.".to_string(),
@@ -463,7 +434,9 @@ where
         let footer = Paragraph::new(Line::from(vec![
             Span::styled(
                 &outcome_text,
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  — press any key to continue"),
         ]));
@@ -471,7 +444,12 @@ where
         let w = (area.width as usize).min(outcome_text.len() + 40) as u16;
         let x = area.x + area.width.saturating_sub(w) / 2;
         let y = area.y + area.height.saturating_sub(h) / 2;
-        let rect = ratatui::layout::Rect { x, y, width: w, height: h };
+        let rect = ratatui::layout::Rect {
+            x,
+            y,
+            width: w,
+            height: h,
+        };
         let block = Block::default()
             .borders(Borders::ALL)
             .style(Style::default().bg(Color::DarkGray).fg(Color::White));
@@ -508,8 +486,16 @@ fn build_phase_context(phase: &DisplayPhase<'_>) -> PhaseContext {
             PhaseContext::with_choices(
                 format!("Your {hand} vs dealer {upcard}"),
                 vec![
-                    ChoiceHint { key: "1", label: "Hit",   desc: "draw another card" },
-                    ChoiceHint { key: "2", label: "Stand", desc: "hold, let dealer play" },
+                    ChoiceHint {
+                        key: "1",
+                        label: "Hit",
+                        desc: "draw another card",
+                    },
+                    ChoiceHint {
+                        key: "2",
+                        label: "Stand",
+                        desc: "hold, let dealer play",
+                    },
                 ],
             )
         }
@@ -535,7 +521,9 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
         DisplayPhase::Betting { state } => {
             lines.push(Line::from(Span::styled(
                 "♦  Place your bet",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             )));
             lines.push(Line::from(""));
             lines.push(Line::from(format!(
@@ -659,14 +647,13 @@ async fn wait_for_keypress() -> Result<bool> {
 
     loop {
         sleep(Duration::from_millis(50)).await;
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(k) = event::read()? {
-                if k.code != KeyCode::Null {
-                    // Q anywhere is a passive escape.
-                    let quit = matches!(k.code, KeyCode::Char('q') | KeyCode::Char('Q'));
-                    return Ok(!quit);
-                }
-            }
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(k) = event::read()?
+            && k.code != KeyCode::Null
+        {
+            // Q anywhere is a passive escape.
+            let quit = matches!(k.code, KeyCode::Char('q') | KeyCode::Char('Q'));
+            return Ok(!quit);
         }
     }
 }

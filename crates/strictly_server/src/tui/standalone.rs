@@ -47,15 +47,15 @@ pub async fn spawn_server(port: u16) -> Result<Child> {
 
     info!(port, "Spawning HTTP game server");
     debug!(exe = %exe.display(), "Server executable path");
-    
+
     let mut server = Command::new(&exe)
         .arg("http")
         .arg("--port")
         .arg(port.to_string())
         .arg("--host")
         .arg("127.0.0.1")
-        .stdout(std::process::Stdio::piped())  // Capture stdout to see errors
-        .stderr(std::process::Stdio::piped())  // Capture stderr
+        .stdout(std::process::Stdio::piped()) // Capture stdout to see errors
+        .stderr(std::process::Stdio::piped()) // Capture stderr
         .spawn()
         .context("Failed to spawn server process")?;
 
@@ -63,7 +63,7 @@ pub async fn spawn_server(port: u16) -> Result<Child> {
 
     // Give server a moment to start and fail if it's going to
     sleep(Duration::from_millis(100)).await;
-    
+
     // Check if server already exited
     if let Ok(Some(status)) = server.try_wait() {
         // Server exited immediately - capture output

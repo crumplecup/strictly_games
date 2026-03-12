@@ -19,8 +19,7 @@ use tracing::instrument;
 use crate::games::blackjack::{BasicAction, GameFinished, GameSetup};
 
 use super::tools::{
-    PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet,
-    execute_play_action,
+    PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet, execute_play_action,
 };
 
 /// Outcome of a single hand of blackjack.
@@ -63,10 +62,14 @@ impl<C: ElicitCommunicator> BlackjackWorkflow<C> {
     /// ```text
     /// True → [elicit bet] → BetPlaced → [action loop] → PlayerTurnComplete
     ///                                                          ↓
-    ///                                               [dealer turn] → HandResolved
+    ///                                               [dealer turn] → PayoutSettled
     /// ```
     #[instrument(skip(self, setup))]
-    pub async fn run_hand(&self, setup: GameSetup, initial_bankroll: u64) -> ElicitResult<HandResult> {
+    pub async fn run_hand(
+        &self,
+        setup: GameSetup,
+        initial_bankroll: u64,
+    ) -> ElicitResult<HandResult> {
         let betting = setup.start_betting(initial_bankroll);
 
         // ── Step 1: elicit bet ────────────────────────────────────────────

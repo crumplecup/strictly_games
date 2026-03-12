@@ -42,7 +42,7 @@ fn deal_reduces_remaining() {
 /// Property: remaining(deck) = 0 ⟹ deal(deck) = None
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(53)]  // Need 52 deals + 1 final check
+#[kani::unwind(53)] // Need 52 deals + 1 final check
 fn exhausted_deck_returns_none() {
     let mut deck = Deck::new_shuffled();
 
@@ -348,9 +348,7 @@ fn cannot_split_different_ranks() {
 #[cfg(kani)]
 #[kani::proof]
 fn cannot_split_wrong_count() {
-    let hand = Hand::new(vec![
-        Card::new(Rank::King, Suit::Spades),
-    ]);
+    let hand = Hand::new(vec![Card::new(Rank::King, Suit::Spades)]);
 
     assert!(!hand.can_split(), "Single card cannot split");
 

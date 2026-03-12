@@ -53,7 +53,8 @@ impl SettingsScreen {
     #[instrument(skip(self))]
     fn select_next(&mut self) {
         let i = self.list_state.selected().unwrap_or(0);
-        self.list_state.select(Some((i + 1).min(SETTINGS_COUNT - 1)));
+        self.list_state
+            .select(Some((i + 1).min(SETTINGS_COUNT - 1)));
     }
 
     /// Toggles the currently selected setting.

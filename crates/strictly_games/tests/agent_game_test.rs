@@ -79,9 +79,7 @@ async fn test_agent_plays_game() {
         .expect("Failed to create args map");
 
     let result: rmcp::model::CallToolResult = peer
-        .call_tool(
-            rmcp::model::CallToolRequestParams::new("play_game").with_arguments(args_map),
-        )
+        .call_tool(rmcp::model::CallToolRequestParams::new("play_game").with_arguments(args_map))
         .await
         .expect("Failed to call play_game");
 

@@ -23,11 +23,7 @@ pub fn calculate_value(cards: &[Card]) -> HandValue {
     let soft_total = if ace_count > 0 {
         // Add 10 to convert one ace from 1 to 11
         let soft = hard_total.saturating_add(10);
-        if soft <= 21 {
-            Some(soft)
-        } else {
-            None
-        }
+        if soft <= 21 { Some(soft) } else { None }
     } else {
         None
     };

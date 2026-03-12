@@ -3,8 +3,8 @@
 use crossterm::event::KeyEvent;
 use ratatui::Frame;
 
-use crate::lobby::settings::GameType;
 use crate::ProfileService;
+use crate::lobby::settings::GameType;
 
 /// The result of handling an input event on a screen.
 ///

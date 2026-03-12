@@ -10,8 +10,8 @@ use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Command};
 use strictly_server::{AgentConfig, AnyGame, Board, GameAgent, GameServer, SessionManager};
+use tracing::{error, info, instrument, warn};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-use tracing::{info, warn, error, instrument};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
             init_logging();
             run_mcp_server().await
         }
-        Command::Http { port, host} => {
+        Command::Http { port, host } => {
             // HTTP server sets up its own file logging
             run_http_server(host, port).await
         }
@@ -153,7 +153,9 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                     if let Some(session) = sessions.get_session(&session_id) {
                         Json(session.game.clone())
                     } else {
-                        Json(AnyGame::Setup { board: Board::default() })
+                        Json(AnyGame::Setup {
+                            board: Board::default(),
+                        })
                     }
                 }
             }),
@@ -218,9 +220,9 @@ async fn run_lobby(
     port: u16,
     agent_config: std::path::PathBuf,
 ) -> Result<()> {
-    use strictly_server::{AgentLibrary, GameRepository, LobbyController, ProfileService};
     use ratatui::{Terminal, backend::CrosstermBackend};
     use std::io;
+    use strictly_server::{AgentLibrary, GameRepository, LobbyController, ProfileService};
 
     // Setup logging to file
     let log_file = std::fs::File::create("strictly_games_lobby.log")?;
@@ -250,7 +252,7 @@ async fn run_lobby(
     info!(db_path = %db_path, "Initializing game repository");
     let repository = GameRepository::new(db_path)?;
     let profile_service = ProfileService::new(repository.clone());
-    
+
     info!(agents_dir = ?agents_dir, "Loading agent library");
     let agent_library = if let Some(dir) = agents_dir {
         info!(path = %dir.display(), "Scanning custom agent directory");
@@ -274,16 +276,14 @@ async fn run_lobby(
             }
         }
     };
-    
-    info!(agent_count = agent_library.count(), "Agent library initialized");
+
+    info!(
+        agent_count = agent_library.count(),
+        "Agent library initialized"
+    );
 
     // Run lobby
-    let mut controller = LobbyController::new(
-        profile_service,
-        agent_library,
-        agent_config,
-        port,
-    );
+    let mut controller = LobbyController::new(profile_service, agent_library, agent_config, port);
 
     let result = controller.run(&mut terminal).await;
 

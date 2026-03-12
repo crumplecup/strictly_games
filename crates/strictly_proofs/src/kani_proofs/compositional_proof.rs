@@ -58,20 +58,20 @@ fn verify_tictactoe_compositional() {
     Position::kani_proof();
     Square::kani_proof();
     Board::kani_proof();
-    
+
     // Verify basic properties hold
     let _player_x = Player::X;
     let _player_o = Player::O;
     let _square_empty = Square::Empty;
     let _square_x = Square::Occupied(Player::X);
     let _board = Board::new();
-    
+
     // Verify opponent is well-defined
     assert!(matches!(_player_x.opponent(), Player::O));
     assert!(matches!(_player_o.opponent(), Player::X));
-    
+
     // Verify board initialization
     assert!(_board.is_empty(Position::Center));
-    
+
     // ∴ Full verification stack proven by composition ∎
 }

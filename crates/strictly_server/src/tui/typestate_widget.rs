@@ -70,15 +70,18 @@ pub struct PhaseContext {
 impl PhaseContext {
     /// Create a context with a narrative and no discrete choices.
     pub fn info(narrative: impl Into<String>) -> Self {
-        Self { narrative: narrative.into(), choices: Vec::new() }
+        Self {
+            narrative: narrative.into(),
+            choices: Vec::new(),
+        }
     }
 
     /// Create a context with a narrative and choices.
-    pub fn with_choices(
-        narrative: impl Into<String>,
-        choices: Vec<ChoiceHint>,
-    ) -> Self {
-        Self { narrative: narrative.into(), choices }
+    pub fn with_choices(narrative: impl Into<String>, choices: Vec<ChoiceHint>) -> Self {
+        Self {
+            narrative: narrative.into(),
+            choices,
+        }
     }
 }
 
@@ -98,7 +101,10 @@ pub struct GameEvent {
 impl GameEvent {
     /// A story beat — free-form plain-English narrative.
     pub fn story(text: impl Into<String>) -> Self {
-        Self { text: text.into(), color: Color::White }
+        Self {
+            text: text.into(),
+            color: Color::White,
+        }
     }
 
     /// A phase transition, shown subtly so story beats stand out.
@@ -119,7 +125,10 @@ impl GameEvent {
 
     /// Game concluded with a narrative outcome.
     pub fn result(text: impl Into<String>) -> Self {
-        Self { text: text.into(), color: Color::Magenta }
+        Self {
+            text: text.into(),
+            color: Color::Magenta,
+        }
     }
 }
 
@@ -130,10 +139,14 @@ impl GameEvent {
 /// Node definitions for the blackjack typestate graph (in display order).
 pub fn blackjack_nodes() -> Vec<NodeDef> {
     vec![
-        NodeDef { label: "Betting"    },
-        NodeDef { label: "PlayerTurn" },
-        NodeDef { label: "DealerTurn" },
-        NodeDef { label: "Finished"   },
+        NodeDef { label: "Betting" },
+        NodeDef {
+            label: "PlayerTurn",
+        },
+        NodeDef {
+            label: "DealerTurn",
+        },
+        NodeDef { label: "Finished" },
     ]
 }
 
@@ -150,11 +163,11 @@ pub fn blackjack_edges() -> Vec<EdgeDef> {
 #[instrument(level = "trace")]
 pub fn blackjack_active(phase: &str) -> Option<usize> {
     match phase {
-        "Betting"    => Some(0),
+        "Betting" => Some(0),
         "PlayerTurn" => Some(1),
         "DealerTurn" => Some(2),
-        "Finished"   => Some(3),
-        _            => None,
+        "Finished" => Some(3),
+        _ => None,
     }
 }
 
@@ -165,9 +178,13 @@ pub fn blackjack_active(phase: &str) -> Option<usize> {
 /// Node definitions for the tictactoe typestate graph (in display order).
 pub fn tictactoe_nodes() -> Vec<NodeDef> {
     vec![
-        NodeDef { label: "GameSetup"    },
-        NodeDef { label: "InProgress"   },
-        NodeDef { label: "GameFinished" },
+        NodeDef { label: "GameSetup" },
+        NodeDef {
+            label: "InProgress",
+        },
+        NodeDef {
+            label: "GameFinished",
+        },
     ]
 }
 
@@ -184,18 +201,18 @@ pub fn tictactoe_edges() -> Vec<EdgeDef> {
 #[instrument(skip(game))]
 pub fn tictactoe_active(game: &AnyGame) -> Option<usize> {
     match game {
-        AnyGame::Setup { .. }                                                       => Some(0),
-        AnyGame::InProgress { .. }                                                  => Some(1),
-        AnyGame::Won { .. } | AnyGame::Draw { .. } | AnyGame::Finished { .. }      => Some(2),
+        AnyGame::Setup { .. } => Some(0),
+        AnyGame::InProgress { .. } => Some(1),
+        AnyGame::Won { .. } | AnyGame::Draw { .. } | AnyGame::Finished { .. } => Some(2),
     }
 }
 
 /// Returns the phase name string for an `AnyGame` (used for event logging).
 pub fn tictactoe_phase_name(game: &AnyGame) -> &'static str {
     match game {
-        AnyGame::Setup { .. }      => "Setup",
+        AnyGame::Setup { .. } => "Setup",
         AnyGame::InProgress { .. } => "InProgress",
-        _                          => "Finished",
+        _ => "Finished",
     }
 }
 
@@ -230,7 +247,13 @@ impl<'a> TypestateGraphWidget<'a> {
         active: Option<usize>,
         events: &'a [GameEvent],
     ) -> Self {
-        Self { nodes, edges, active, events, context: None }
+        Self {
+            nodes,
+            edges,
+            active,
+            events,
+            context: None,
+        }
     }
 
     /// Attaches a live phase context that renders as a callout under the active node.
@@ -243,9 +266,7 @@ impl<'a> TypestateGraphWidget<'a> {
 impl Widget for TypestateGraphWidget<'_> {
     #[instrument(skip_all)]
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let outer = Block::default()
-            .borders(Borders::ALL)
-            .title(" Typestate ");
+        let outer = Block::default().borders(Borders::ALL).title(" Typestate ");
         let inner = outer.inner(area);
         outer.render(area, buf);
 
@@ -259,9 +280,7 @@ impl Widget for TypestateGraphWidget<'_> {
         let callout_lines = self.callout_height();
         let connector_rows: usize = if callout_lines > 0 { 1 } else { 0 };
         let needed_graph_h = (box_h + connector_rows + callout_lines + 1) as u16;
-        let graph_h = needed_graph_h
-            .max(5)
-            .min(inner.height.saturating_sub(3)); // leave at least 3 rows for the log
+        let graph_h = needed_graph_h.max(5).min(inner.height.saturating_sub(3)); // leave at least 3 rows for the log
         let log_h = inner.height.saturating_sub(graph_h);
 
         let chunks = Layout::default()
@@ -298,8 +317,7 @@ impl TypestateGraphWidget<'_> {
         };
 
         // Box width = label length + 4 (borders + padding).
-        let box_widths: Vec<usize> =
-            self.nodes.iter().map(|nd| nd.label.len() + 4).collect();
+        let box_widths: Vec<usize> = self.nodes.iter().map(|nd| nd.label.len() + 4).collect();
         let total_w = area.width as usize;
         let slot_w = (total_w / n).max(1);
 
@@ -374,7 +392,9 @@ impl TypestateGraphWidget<'_> {
 
             let (border_style, label_style) = if is_active {
                 (
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
                     Style::default()
                         .fg(Color::Black)
                         .bg(Color::Cyan)
@@ -407,23 +427,21 @@ impl TypestateGraphWidget<'_> {
         }
 
         // ── Draw callout ─────────────────────────────────────────
-        if needs_callout {
-            if let (Some(active_idx), Some(ctx)) = (self.active, self.context) {
-                let (bx_active, _) = positions[active_idx];
-                let bw_active = box_widths[active_idx] as u16;
-                let connector_x = bx_active + bw_active / 2;
-                let connector_y = node_row_y + box_h as u16;
+        if needs_callout && let (Some(active_idx), Some(ctx)) = (self.active, self.context) {
+            let (bx_active, _) = positions[active_idx];
+            let bw_active = box_widths[active_idx] as u16;
+            let connector_x = bx_active + bw_active / 2;
+            let connector_y = node_row_y + box_h as u16;
 
-                if connector_y < area.y + area.height {
-                    buf[(connector_x, connector_y)]
-                        .set_char('│')
-                        .set_style(Style::default().fg(Color::Cyan));
-                }
+            if connector_y < area.y + area.height {
+                buf[(connector_x, connector_y)]
+                    .set_char('│')
+                    .set_style(Style::default().fg(Color::Cyan));
+            }
 
-                let callout_y = connector_y + 1;
-                if callout_y < area.y + area.height {
-                    self.render_callout(ctx, area, callout_y, buf);
-                }
+            let callout_y = connector_y + 1;
+            if callout_y < area.y + area.height {
+                self.render_callout(ctx, area, callout_y, buf);
             }
         }
     }
@@ -433,7 +451,12 @@ impl TypestateGraphWidget<'_> {
         match (self.active, self.context) {
             (Some(_), Some(ctx)) if !ctx.narrative.is_empty() => {
                 // border top + narrative + blank + choices + border bottom
-                2 + 1 + if ctx.choices.is_empty() { 0 } else { ctx.choices.len() + 1 }
+                2 + 1
+                    + if ctx.choices.is_empty() {
+                        0
+                    } else {
+                        ctx.choices.len() + 1
+                    }
             }
             _ => 0,
         }
@@ -451,7 +474,9 @@ impl TypestateGraphWidget<'_> {
         let narrative_style = Style::default()
             .fg(Color::White)
             .add_modifier(Modifier::BOLD);
-        let choice_key_style = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+        let choice_key_style = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
         let choice_label_style = Style::default().fg(Color::Cyan);
         let choice_desc_style = Style::default().fg(Color::Gray);
 
@@ -492,8 +517,9 @@ impl TypestateGraphWidget<'_> {
                     choice.desc,
                     inner_w.saturating_sub(key_part.len() + label_part.len() + 2),
                 );
-                let _trailing =
-                    " ".repeat(inner_w.saturating_sub(2 + key_part.len() + label_part.len() + desc_part.len()));
+                let _trailing = " ".repeat(
+                    inner_w.saturating_sub(2 + key_part.len() + label_part.len() + desc_part.len()),
+                );
 
                 // Write left border.
                 buf[(cx, row)].set_char('│').set_style(border_style);
@@ -502,29 +528,43 @@ impl TypestateGraphWidget<'_> {
 
                 // [key]
                 for (j, ch) in key_part.chars().enumerate() {
-                    if col + j as u16 >= cx + cw { break; }
-                    buf[(col + j as u16, row)].set_char(ch).set_style(choice_key_style);
+                    if col + j as u16 >= cx + cw {
+                        break;
+                    }
+                    buf[(col + j as u16, row)]
+                        .set_char(ch)
+                        .set_style(choice_key_style);
                 }
                 col += key_part.len() as u16;
 
                 // label
                 for (j, ch) in label_part.chars().enumerate() {
-                    if col + j as u16 >= cx + cw { break; }
-                    buf[(col + j as u16, row)].set_char(ch).set_style(choice_label_style);
+                    if col + j as u16 >= cx + cw {
+                        break;
+                    }
+                    buf[(col + j as u16, row)]
+                        .set_char(ch)
+                        .set_style(choice_label_style);
                 }
                 col += label_part.len() as u16;
 
                 // desc
                 for (j, ch) in desc_part.chars().enumerate() {
-                    if col + j as u16 >= cx + cw { break; }
-                    buf[(col + j as u16, row)].set_char(ch).set_style(choice_desc_style);
+                    if col + j as u16 >= cx + cw {
+                        break;
+                    }
+                    buf[(col + j as u16, row)]
+                        .set_char(ch)
+                        .set_style(choice_desc_style);
                 }
                 col += desc_part.len() as u16;
 
                 // trailing spaces + right border
                 let right_x = cx + cw - 1;
                 for x in col..right_x {
-                    if x < cx + cw { buf[(x, row)].set_char(' ').set_style(border_style); }
+                    if x < cx + cw {
+                        buf[(x, row)].set_char(' ').set_style(border_style);
+                    }
                 }
                 if right_x < cx + cw {
                     buf[(right_x, row)].set_char('│').set_style(border_style);
@@ -586,7 +626,9 @@ impl TypestateGraphWidget<'_> {
 fn clip_str(s: &str, max_chars: usize) -> &str {
     let mut end = 0;
     for (i, (byte_pos, _)) in s.char_indices().enumerate() {
-        if i >= max_chars { break; }
+        if i >= max_chars {
+            break;
+        }
         end = byte_pos + s[byte_pos..].chars().next().map_or(0, |c| c.len_utf8());
     }
     &s[..end]

@@ -12,8 +12,8 @@ use crossterm::{
     terminal::{Clear, ClearType},
 };
 use elicitation::{
-    ElicitCommunicator, ElicitError, ElicitErrorKind, ElicitResult, ElicitationStyle,
-    ElicitationContext, StyleContext,
+    ElicitCommunicator, ElicitError, ElicitErrorKind, ElicitResult, ElicitationContext,
+    ElicitationStyle, StyleContext,
 };
 use std::io::{self, Write as _};
 use tracing::instrument;
@@ -101,12 +101,12 @@ impl ElicitCommunicator for TuiCommunicator {
 
             // Read input character by character (terminal is in raw mode).
             loop {
-                match event::read().map_err(|e| {
+                if let Event::Key(key) = event::read().map_err(|e| {
                     ElicitError::new(ElicitErrorKind::ParseError(format!(
                         "Event read error: {e}"
                     )))
                 })? {
-                    Event::Key(key) => match key.code {
+                    match key.code {
                         KeyCode::Enter => {
                             execute!(stdout, Print("\r\n")).ok();
                             break;
@@ -129,8 +129,7 @@ impl ElicitCommunicator for TuiCommunicator {
                             stdout.flush().ok();
                         }
                         _ => {}
-                    },
-                    _ => {}
+                    }
                 }
             }
 

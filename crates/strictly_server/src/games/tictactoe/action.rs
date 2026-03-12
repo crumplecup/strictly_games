@@ -3,9 +3,9 @@
 //! Moves are domain events, not side effects. They represent
 //! the player's intent and can be validated independently of execution.
 
-use strictly_tictactoe::{Player, Position};
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+use strictly_tictactoe::{Player, Position};
 use tracing::instrument;
 
 /// A move in tic-tac-toe: a player placing their mark at a position.

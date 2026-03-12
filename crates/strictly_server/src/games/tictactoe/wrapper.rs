@@ -3,9 +3,9 @@
 use super::action::Move;
 use super::outcome::Outcome;
 use super::typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
+use serde::{Deserialize, Serialize};
 use strictly_tictactoe::Position;
 use strictly_tictactoe::{Board, Player};
-use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument, warn};
 
 /// Serializable wrapper for Game<S> in any phase.

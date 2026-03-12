@@ -11,17 +11,17 @@
 //! |----------|-----|------|-------------|
 //! | [`execute_place_bet`] | `True` (implicit) | [`BetPlaced`] | Validates bet, deals initial cards |
 //! | [`execute_play_action`] | [`BetPlaced`] | [`PlayerTurnComplete`] or recycled [`BetPlaced`] | Applies one player action |
-//! | [`execute_dealer_turn`] | [`PlayerTurnComplete`] | [`HandResolved`] | Plays dealer and resolves outcomes |
+//! | [`execute_dealer_turn`] | [`PlayerTurnComplete`] | [`PayoutSettled`] | Plays dealer and settles payout via BankrollLedger |
 
 use elicitation::contracts::Established;
 use tracing::instrument;
 
 use crate::games::blackjack::{
-    ActionError, BasicAction, GameDealerTurn, GameFinished, GamePlayerTurn, GameResult,
-    PlayerAction, GameBetting,
+    ActionError, BasicAction, GameBetting, GameDealerTurn, GameFinished, GamePlayerTurn,
+    GameResult, PlayerAction,
 };
 
-use super::propositions::{BetPlaced, HandResolved, PlayerTurnComplete};
+use super::propositions::{BetPlaced, PayoutSettled, PlayerTurnComplete};
 
 // ── PlaceBetTool ─────────────────────────────────────────────────────────────
 
@@ -117,13 +117,13 @@ pub fn execute_play_action(
 /// Execute the dealer turn.
 ///
 /// **Pre:** [`PlayerTurnComplete`]
-/// **Post:** [`HandResolved`]
+/// **Post:** [`PayoutSettled`] — proof that `BankrollLedger::settle` ran with
+/// a valid `BetDeducted` token; the final bankroll is arithmetically correct.
 #[instrument(skip(dealer_turn, _pre))]
 pub fn execute_dealer_turn(
     dealer_turn: GameDealerTurn,
     _pre: Established<PlayerTurnComplete>,
-) -> (GameFinished, Established<HandResolved>) {
+) -> (GameFinished, Established<PayoutSettled>) {
     let finished = dealer_turn.play_dealer_turn();
     (finished, Established::assert())
 }
-

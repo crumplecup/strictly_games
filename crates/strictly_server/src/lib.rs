@@ -59,21 +59,19 @@ pub use session::{GameSession, SessionManager};
 pub use tui::{run as tui_run, run_game_session};
 
 // Public API exports - Verification
-pub use verify::{run_all as run_verification_all, run_kani, run_verus, run_creusot};
+pub use verify::{run_all as run_verification_all, run_creusot, run_kani, run_verus};
 
 // Public API exports - TicTacToe types
 pub use games::tictactoe::{
-    AnyGame, Mark, Player, Position, Board, Square,
-    GameSetup, GameInProgress, GameFinished,
-    GameResult, Move, MoveError, Outcome,
+    AnyGame, Board, GameFinished, GameInProgress, GameResult, GameSetup, Mark, Move, MoveError,
+    Outcome, Player, Position, Square,
 };
 
 // Public API exports - Blackjack types
 pub use games::blackjack::{
-    ActionError, BasicAction, PlayerAction,
-    GameBetting, GameDealerTurn, GamePlayerTurn,
-    GameResult as BlackjackResult, GameSetup as BlackjackSetup, GameFinished as BlackjackFinished,
-    BetPlaced, HandResolved, HandResult, PlayerTurnComplete, BlackjackWorkflow,
+    ActionError, BasicAction, BetPlaced, BlackjackWorkflow, GameBetting, GameDealerTurn,
+    GameFinished as BlackjackFinished, GamePlayerTurn, GameResult as BlackjackResult,
+    GameSetup as BlackjackSetup, HandResult, PayoutSettled, PlayerAction, PlayerTurnComplete,
 };
 
 // Re-export for convenience

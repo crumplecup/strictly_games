@@ -116,8 +116,10 @@ impl ClientHandler for GameAgent {
 
             // Return as CreateMessageResult
             let message = SamplingMessage::assistant_text(response);
-            Ok(CreateMessageResult::new(message, config.llm_model().to_string())
-                .with_stop_reason(CreateMessageResult::STOP_REASON_END_TURN))
+            Ok(
+                CreateMessageResult::new(message, config.llm_model().to_string())
+                    .with_stop_reason(CreateMessageResult::STOP_REASON_END_TURN),
+            )
         }
     }
 
@@ -134,8 +136,9 @@ impl ClientHandler for GameAgent {
     fn get_info(&self) -> <RoleClient as rmcp::service::ServiceRole>::Info {
         tracing::debug!("Providing client info");
         let capabilities = ClientCapabilities::default();
-        let client_info = Implementation::new(self.config.name().clone(), env!("CARGO_PKG_VERSION"))
-            .with_description("MCP game agent");
+        let client_info =
+            Implementation::new(self.config.name().clone(), env!("CARGO_PKG_VERSION"))
+                .with_description("MCP game agent");
 
         InitializeRequestParams::new(capabilities, client_info)
             .with_protocol_version(ProtocolVersion::V_2025_06_18)

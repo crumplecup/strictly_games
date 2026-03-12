@@ -51,18 +51,19 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
     let first_player = FirstPlayer::default(); // Human goes first by default
 
     // Determine mode: standalone or remote
-    let (actual_server_url, server_child, agent_child): (String, Option<Child>, Option<Child>) = if let Some(url) = server_url {
-        // Remote mode: connect to existing server
-        info!(server_url = %url, "Connecting to remote server");
-        (url, None, None)
-    } else {
-        // Standalone mode: spawn server, then register human and agent in configured order.
-        info!(port, first_player = %first_player.label(), "Starting standalone mode");
-        let server = standalone::spawn_server(port).await?;
-        let url = format!("http://localhost:{}", port);
-        info!(server_url = %url, "Standalone server ready");
-        (url, Some(server), None)
-    };
+    let (actual_server_url, server_child, agent_child): (String, Option<Child>, Option<Child>) =
+        if let Some(url) = server_url {
+            // Remote mode: connect to existing server
+            info!(server_url = %url, "Connecting to remote server");
+            (url, None, None)
+        } else {
+            // Standalone mode: spawn server, then register human and agent in configured order.
+            info!(port, first_player = %first_player.label(), "Starting standalone mode");
+            let server = standalone::spawn_server(port).await?;
+            let url = format!("http://localhost:{}", port);
+            info!(server_url = %url, "Standalone server ready");
+            (url, Some(server), None)
+        };
 
     info!(server_url = %actual_server_url, session_id = %session_id, "Connecting to game server");
 
@@ -152,7 +153,7 @@ where
                 event_log.push(GameEvent::phase_change(prev, current_phase));
             }
             if game.is_over() {
-                event_log.push(GameEvent::result(&game.status_string()));
+                event_log.push(GameEvent::result(game.status_string()));
             }
             prev_phase = Some(current_phase);
         }
@@ -410,7 +411,7 @@ where
                 event_log.push(GameEvent::phase_change(prev, current_phase));
             }
             if game.is_over() {
-                event_log.push(GameEvent::result(&game.status_string()));
+                event_log.push(GameEvent::result(game.status_string()));
             }
             prev_phase = Some(current_phase);
         }
@@ -422,11 +423,25 @@ where
 
         // Once game is over, render final state and wait for any keypress.
         if game.is_over() {
-            return render_game_over_and_wait(terminal, &game, cursor, &event_log, show_typestate_graph).await;
+            return render_game_over_and_wait(
+                terminal,
+                &game,
+                cursor,
+                &event_log,
+                show_typestate_graph,
+            )
+            .await;
         }
 
         // Render in-progress game.
-        render_active_game(terminal, &game, &client, cursor, &event_log, show_typestate_graph)?;
+        render_active_game(
+            terminal,
+            &game,
+            &client,
+            cursor,
+            &event_log,
+            show_typestate_graph,
+        )?;
 
         // Handle input.
         if event::poll(Duration::from_millis(100))?
@@ -498,10 +513,7 @@ where
         let board_area = if show_typestate_graph {
             let content = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(55),
-                    Constraint::Percentage(45),
-                ])
+                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
                 .split(outer[1]);
             f.render_widget(
                 TypestateGraphWidget::new(&ttt_nodes, &ttt_edges, active, event_log),
@@ -596,10 +608,7 @@ where
         let board_area = if show_typestate_graph {
             let content = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(55),
-                    Constraint::Percentage(45),
-                ])
+                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
                 .split(outer[1]);
             f.render_widget(
                 TypestateGraphWidget::new(&ttt_nodes, &ttt_edges, active, event_log),

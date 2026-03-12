@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 /// Basic actions available to the player (Milestone 1: Hit/Stand only).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 pub enum BasicAction {
     /// Take another card.
     Hit,
@@ -40,10 +42,7 @@ impl PlayerAction {
     /// Creates a new player action.
     #[instrument]
     pub fn new(action: BasicAction, hand_index: usize) -> Self {
-        Self {
-            action,
-            hand_index,
-        }
+        Self { action, hand_index }
     }
 
     /// Returns the action.

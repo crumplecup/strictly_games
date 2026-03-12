@@ -9,16 +9,16 @@
 //! ```text
 //! True → execute_place_bet → BetPlaced → execute_play_action (loop) → PlayerTurnComplete
 //!                                                                             ↓
-//!                                                              execute_dealer_turn → HandResolved
+//!                                                         execute_dealer_turn → PayoutSettled
 //! ```
 
 mod propositions;
+mod runner;
 mod tools;
-mod workflow;
 
-pub use propositions::{BetPlaced, HandResolved, PlayerTurnComplete};
+pub use propositions::{BetPlaced, PayoutSettled, PlayerTurnComplete};
+pub use runner::{BlackjackWorkflow, HandResult};
 pub use tools::{
     PlaceBetOutput, PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet,
     execute_play_action,
 };
-pub use workflow::{BlackjackWorkflow, HandResult};

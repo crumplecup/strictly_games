@@ -13,10 +13,10 @@ use crate::lobby::screens::{
     AgentSelectScreen, GameSelectScreen, InGameScreen, MainLobbyScreen, ProfileSelectScreen,
     SettingsScreen, StatsViewScreen,
 };
+use crate::lobby::settings::GameType;
 use crate::lobby::settings::LobbySettings;
 use crate::run_game_session;
 use crate::tui::{BlackjackSessionOutcome, run_blackjack_session};
-use crate::lobby::settings::GameType;
 use crate::{
     AgentConfig, AgentLibrary, AnyGame, FirstPlayer, GameOutcome, ProfileService, TicTacToePlayer,
     User,
@@ -138,12 +138,10 @@ impl LobbyController {
                         Err(e) => {
                             tracing::error!(error = %e, "Game session failed");
                             screen = match &self.current_user {
-                                Some(user) => ActiveScreen::MainLobby(
-                                    MainLobbyScreen::with_game(
-                                        user.clone(),
-                                        self.settings.selected_game,
-                                    ),
-                                ),
+                                Some(user) => ActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                                    user.clone(),
+                                    self.settings.selected_game,
+                                )),
                                 None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(
                                     &self.profile_service,
                                 )),
@@ -231,7 +229,7 @@ impl LobbyController {
                     None => {
                         return Some(ActiveScreen::ProfileSelect(ProfileSelectScreen::new(
                             &self.profile_service,
-                        )))
+                        )));
                     }
                 };
                 Some(ActiveScreen::MainLobby(MainLobbyScreen::with_game(

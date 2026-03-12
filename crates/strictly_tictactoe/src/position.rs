@@ -129,7 +129,11 @@ impl Position {
     /// Uses the elicitation Filter trait to provide dynamic, context-aware
     /// selection based on runtime board state.
     pub fn valid_moves(board: &Board) -> Vec<Position> {
-        Position::ALL.iter().copied().filter(|pos| board.is_empty(*pos)).collect()
+        Position::ALL
+            .iter()
+            .copied()
+            .filter(|pos| board.is_empty(*pos))
+            .collect()
     }
 }
 

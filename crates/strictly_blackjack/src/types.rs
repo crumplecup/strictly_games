@@ -56,11 +56,11 @@ impl Outcome {
     /// placement time — returns the total chips added back, never negative.
     pub fn gross_return(self, bet: u64) -> u64 {
         match self {
-            Outcome::Win => bet * 2,                 // original bet + 1× profit
+            Outcome::Win => bet * 2,                   // original bet + 1× profit
             Outcome::Blackjack => bet + (bet * 3) / 2, // original bet + 3:2 profit
-            Outcome::Push => bet,                    // original bet back
-            Outcome::Loss => 0,                      // nothing returned
-            Outcome::Surrender => bet / 2,           // half bet back
+            Outcome::Push => bet,                      // original bet back
+            Outcome::Loss => 0,                        // nothing returned
+            Outcome::Surrender => bet / 2,             // half bet back
         }
     }
 

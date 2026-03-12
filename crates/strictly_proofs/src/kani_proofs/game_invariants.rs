@@ -4,7 +4,7 @@
 //! - Trust: Rust's type system (enums, bounds checks)
 //! - Verify: Game semantics (opponent, position, winner detection)
 
-use strictly_tictactoe::{rules, Board, Player, Position, Square};
+use strictly_tictactoe::{Board, Player, Position, Square, rules};
 
 /// Verifies Player::opponent() is an involution.
 ///
@@ -16,11 +16,11 @@ use strictly_tictactoe::{rules, Board, Player, Position, Square};
 #[kani::proof]
 fn player_opponent_is_involutive() {
     let player: Player = kani::any();
-    
+
     // opponent(opponent(x)) = x
     let once = player.opponent();
     let twice = once.opponent();
-    
+
     assert_eq!(player, twice, "opponent is involutive");
 }
 
@@ -32,7 +32,7 @@ fn player_opponent_is_involutive() {
 fn opponent_returns_other_player() {
     let player: Player = kani::any();
     let other = player.opponent();
-    
+
     assert_ne!(player, other, "Opponent is different");
 }
 
@@ -47,7 +47,7 @@ fn opponent_returns_other_player() {
 fn position_to_index_is_always_valid() {
     let pos: Position = kani::any();
     let idx = pos.to_index();
-    
+
     // Index must be within 3x3 board
     assert!(idx < 9, "Index in bounds");
 }
@@ -61,7 +61,7 @@ fn position_roundtrip() {
     let pos: Position = kani::any();
     let idx = pos.to_index();
     let back = Position::from_index(idx);
-    
+
     assert_eq!(back, Some(pos), "Round-trip succeeds");
 }
 
@@ -76,7 +76,7 @@ fn position_roundtrip() {
 fn new_board_is_empty() {
     let board = Board::new();
     let pos: Position = kani::any();
-    
+
     assert!(board.is_empty(pos), "New board is empty everywhere");
 }
 
@@ -88,15 +88,15 @@ fn new_board_is_empty() {
 fn set_marks_occupied() {
     let player: Player = kani::any();
     let pos: Position = kani::any();
-    
+
     let mut board = Board::new();
-    
+
     // Should be empty before
     assert!(board.is_empty(pos), "Empty before placement");
-    
+
     // Set and verify
     board.set(pos, Square::Occupied(player));
-    
+
     assert!(!board.is_empty(pos), "Occupied after placement");
     assert_eq!(board.get(pos), Square::Occupied(player), "Correct player");
 }
@@ -109,11 +109,11 @@ fn set_marks_occupied() {
 fn get_set_roundtrip() {
     let square: Square = kani::any();
     let pos: Position = kani::any();
-    
+
     let mut board = Board::new();
     board.set(pos, square);
     let retrieved = board.get(pos);
-    
+
     assert_eq!(retrieved, square, "get/set round-trip");
 }
 
@@ -125,16 +125,16 @@ fn get_set_roundtrip() {
 #[kani::proof]
 fn winner_detects_row() {
     let player: Player = kani::any();
-    
+
     let mut board = Board::new();
-    
+
     // Fill top row
     board.set(Position::TopLeft, Square::Occupied(player));
     board.set(Position::TopCenter, Square::Occupied(player));
     board.set(Position::TopRight, Square::Occupied(player));
-    
+
     let winner = rules::check_winner(&board);
-    
+
     assert!(winner.is_some(), "Winner detected for complete row");
     assert_eq!(winner, Some(player), "Correct winner");
 }
@@ -144,16 +144,16 @@ fn winner_detects_row() {
 #[kani::proof]
 fn winner_detects_column() {
     let player: Player = kani::any();
-    
+
     let mut board = Board::new();
-    
+
     // Fill left column
     board.set(Position::TopLeft, Square::Occupied(player));
     board.set(Position::MiddleLeft, Square::Occupied(player));
     board.set(Position::BottomLeft, Square::Occupied(player));
-    
+
     let winner = rules::check_winner(&board);
-    
+
     assert!(winner.is_some(), "Winner detected for complete column");
     assert_eq!(winner, Some(player), "Correct winner");
 }
@@ -163,16 +163,16 @@ fn winner_detects_column() {
 #[kani::proof]
 fn winner_detects_diagonal() {
     let player: Player = kani::any();
-    
+
     let mut board = Board::new();
-    
+
     // Fill main diagonal
     board.set(Position::TopLeft, Square::Occupied(player));
     board.set(Position::Center, Square::Occupied(player));
     board.set(Position::BottomRight, Square::Occupied(player));
-    
+
     let winner = rules::check_winner(&board);
-    
+
     assert!(winner.is_some(), "Winner detected for complete diagonal");
     assert_eq!(winner, Some(player), "Correct winner");
 }
@@ -185,7 +185,7 @@ fn winner_detects_diagonal() {
 fn no_winner_on_empty_board() {
     let board = Board::new();
     let winner = rules::check_winner(&board);
-    
+
     assert_eq!(winner, None, "Empty board has no winner");
 }
 
@@ -197,10 +197,10 @@ fn no_winner_on_empty_board() {
 fn square_equality() {
     let sq1: Square = kani::any();
     let sq2: Square = kani::any();
-    
+
     // Equality is reflexive
     assert_eq!(sq1, sq1);
-    
+
     // Equality is symmetric
     if sq1 == sq2 {
         assert_eq!(sq2, sq1);
