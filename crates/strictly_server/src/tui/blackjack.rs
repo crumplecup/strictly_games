@@ -544,6 +544,29 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
         }
         DisplayPhase::Finished { state } => {
             let dealer_hand = state.dealer_hand();
+            let dealer_natural = dealer_hand.is_blackjack();
+            let player_natural = state
+                .player_hands()
+                .first()
+                .is_some_and(|h| h.is_blackjack());
+
+            // ── Context banner ─────────────────────────────────
+            let (banner, banner_color) = match (player_natural, dealer_natural) {
+                (true, true) => ("  ♦ Both have natural blackjack — Push!", Color::Yellow),
+                (true, false) => ("  ♠ Natural blackjack! 3:2 payout", Color::Green),
+                (false, true) => ("  ♦ Dealer natural blackjack", Color::Red),
+                (false, false) => ("", Color::White),
+            };
+            if !banner.is_empty() {
+                lines.push(Line::from(Span::styled(
+                    banner,
+                    Style::default()
+                        .fg(banner_color)
+                        .add_modifier(Modifier::BOLD),
+                )));
+                lines.push(Line::from(""));
+            }
+
             lines.push(Line::from(format!("  Dealer: {dealer_hand}")));
             lines.push(Line::from(""));
 
@@ -554,6 +577,7 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
                 .enumerate()
             {
                 let bet = state.bets().get(i).copied().unwrap_or(0);
+                let is_bust = hand.is_bust();
                 let color = if outcome.is_win() {
                     Color::Green
                 } else if outcome.is_loss() {
@@ -561,8 +585,13 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
                 } else {
                     Color::Yellow
                 };
+                let bust_note = if is_bust { "  BUST" } else { "" };
                 lines.push(Line::from(Span::styled(
-                    format!("  Hand {}: {}  [{outcome}]  (bet: {bet})", i + 1, hand),
+                    format!(
+                        "  Hand {}: {}  [{outcome}]{bust_note}  (bet: {bet})",
+                        i + 1,
+                        hand
+                    ),
                     Style::default().fg(color),
                 )));
             }
@@ -578,6 +607,13 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
 }
 
 async fn wait_for_keypress() -> Result<()> {
+    // Drain any events buffered during the previous input phase (e.g. the
+    // Enter key from the bet prompt) before we start watching for fresh input.
+    sleep(Duration::from_millis(100)).await;
+    while event::poll(std::time::Duration::ZERO)? {
+        let _ = event::read()?;
+    }
+
     loop {
         sleep(Duration::from_millis(50)).await;
         if event::poll(Duration::from_millis(100))? {
