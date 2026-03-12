@@ -20,6 +20,7 @@
 //! - **Trust**: Rust's ownership model, u64 overflow semantics, `Established::assert()`
 //! - **Verify**: Financial arithmetic, error preconditions, round-trip identities
 
+use elicitation::Elicitation;
 use strictly_blackjack::{ActionError, BankrollLedger, BetDeducted, Outcome, PayoutSettled};
 
 // ── Compositional proofs ──────────────────────────────────────────────────────

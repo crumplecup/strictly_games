@@ -65,6 +65,7 @@ pub fn run_verus(verbose: bool) -> Result<()> {
     let files = vec![
         "crates/strictly_proofs/src/verus_proofs/game_invariants.rs",
         "crates/strictly_proofs/src/verus_proofs/compositional_proof.rs",
+        "crates/strictly_proofs/src/verus_proofs/bankroll_financial.rs",
     ];
 
     let mut total_verified = 0;
