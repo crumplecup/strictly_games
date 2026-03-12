@@ -15,12 +15,16 @@
 
 mod card;
 mod deck;
+pub mod error;
 mod hand;
+pub mod ledger;
 pub mod rules;
 mod types;
 
 // Re-export core types
 pub use card::{Card, Rank, Suit};
 pub use deck::Deck;
+pub use error::ActionError;
 pub use hand::{Hand, HandValue};
+pub use ledger::{BankrollLedger, BetDeducted, PayoutSettled};
 pub use types::Outcome;

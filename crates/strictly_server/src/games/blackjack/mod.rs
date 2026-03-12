@@ -2,7 +2,6 @@
 
 mod action;
 mod contracts;
-pub mod ledger;
 mod typestate;
 pub mod workflow;
 

@@ -15,9 +15,8 @@
 //!     ▼
 //! BankrollLedger::debit()  ──────────► Established<BetDeducted>
 //!     │                                         │
-//!     │  (carried through GamePlayerTurn        │
-//!     │   and GameDealerTurn as game            │
-//!     │   state fields)                         │
+//!     │  (carried through game state            │
+//!     │   as proof fields)                      │
 //!     ▼                                         ▼
 //! BankrollLedger::settle(outcome, Established<BetDeducted>)
 //!     │
@@ -32,12 +31,12 @@
 //! audit trail entry — the compiler refuses to compile code that skips the
 //! debit step or attempts to settle twice (proof token is consumed on use).
 
+use elicitation::Elicit;
 use elicitation::contracts::{Established, Prop};
-use elicitation::{ElicitCommunicator, ElicitResult, Elicitation, Prompt, default_style};
-use strictly_blackjack::Outcome;
 use tracing::instrument;
 
-use super::action::ActionError;
+use crate::Outcome;
+use crate::error::ActionError;
 
 // ── Financial propositions ────────────────────────────────────────────────────
 
@@ -48,6 +47,7 @@ use super::action::ActionError;
 ///
 /// Carrying this token through game state means any code that reaches
 /// settlement *must* have gone through a validated debit first.
+#[derive(Debug, Clone, Elicit)]
 pub struct BetDeducted;
 impl Prop for BetDeducted {}
 
@@ -56,6 +56,7 @@ impl Prop for BetDeducted {}
 /// Established exclusively by [`BankrollLedger::settle`].
 /// Consuming `Established<BetDeducted>` guarantees settlement happened
 /// exactly once and that the gross-return arithmetic was applied.
+#[derive(Debug, Clone, Elicit)]
 pub struct PayoutSettled;
 impl Prop for PayoutSettled {}
 
@@ -65,14 +66,11 @@ impl Prop for PayoutSettled {}
 ///
 /// - Created by [`debit`][Self::debit]: validates and removes the bet once.
 /// - Consumed by [`settle`][Self::settle]: adds back the gross return.
-/// - Stored in [`GamePlayerTurn`][super::typestate::GamePlayerTurn] and
-///   [`GameDealerTurn`][super::typestate::GameDealerTurn] so it is present
-///   wherever the final bankroll needs to be calculated.
 ///
 /// The fields are private: the only way to create a valid ledger is through
 /// `debit`, and the only way to produce a final balance is through `settle`.
 /// Manual bankroll arithmetic is not possible from outside this module.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Elicit)]
 pub struct BankrollLedger {
     /// Bankroll after the bet was removed.  Settlement adds gross return here.
     post_bet_balance: u64,
@@ -140,50 +138,5 @@ impl BankrollLedger {
     /// The bet amount being wagered this hand.
     pub fn bet(&self) -> u64 {
         self.bet
-    }
-}
-
-// ── Elicitation impls ─────────────────────────────────────────────────────────
-
-// BetDeducted is a unit proposition — only one value exists.
-// An agent reconstructing game state can assert it without user interaction.
-default_style!(BetDeducted => BetDeductedStyle);
-
-impl Prompt for BetDeducted {
-    fn prompt() -> Option<&'static str> {
-        Some("BetDeducted proposition (proof that a bet was validly deducted)")
-    }
-}
-
-impl Elicitation for BetDeducted {
-    type Style = BetDeductedStyle;
-
-    async fn elicit<C: ElicitCommunicator>(_communicator: &C) -> ElicitResult<Self> {
-        tracing::debug!("Eliciting BetDeducted (unit proposition)");
-        Ok(BetDeducted)
-    }
-}
-
-// BankrollLedger elicitation: asks the communicator for post-bet balance and bet amount.
-// Used when an agent reconstructs game state for reasoning or replay.
-default_style!(BankrollLedger => BankrollLedgerStyle);
-
-impl Prompt for BankrollLedger {
-    fn prompt() -> Option<&'static str> {
-        Some("Bankroll ledger (post-bet balance and bet amount)")
-    }
-}
-
-impl Elicitation for BankrollLedger {
-    type Style = BankrollLedgerStyle;
-
-    async fn elicit<C: ElicitCommunicator>(communicator: &C) -> ElicitResult<Self> {
-        tracing::debug!("Eliciting BankrollLedger");
-        let post_bet_balance = u64::elicit(communicator).await?;
-        let bet = u64::elicit(communicator).await?;
-        Ok(Self {
-            post_bet_balance,
-            bet,
-        })
     }
 }

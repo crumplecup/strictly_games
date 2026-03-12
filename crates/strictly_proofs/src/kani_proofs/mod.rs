@@ -3,6 +3,7 @@
 //! This module contains proof harnesses demonstrating that the game
 //! implementation is formally verified through compositional reasoning.
 
+pub mod bankroll_financial;
 pub mod blackjack_compositional;
 pub mod blackjack_invariants;
 pub mod compositional_proof;

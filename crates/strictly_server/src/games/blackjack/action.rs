@@ -4,6 +4,9 @@ use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+// ActionError lives in strictly_blackjack (pure game logic, needed for formal verification)
+pub use strictly_blackjack::ActionError;
+
 /// Basic actions available to the player (Milestone 1: Hit/Stand only).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
@@ -55,29 +58,3 @@ impl PlayerAction {
         self.hand_index
     }
 }
-
-/// Errors that can occur when taking an action.
-#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-pub enum ActionError {
-    /// Hand is already bust.
-    #[display("Hand is already bust")]
-    HandBust,
-
-    /// Invalid hand index.
-    #[display("Invalid hand index: {}", _0)]
-    InvalidHandIndex(usize),
-
-    /// Insufficient funds for bet.
-    #[display("Insufficient funds: need {}, have {}", _0, _1)]
-    InsufficientFunds(u64, u64),
-
-    /// Invalid bet amount.
-    #[display("Invalid bet amount: {}", _0)]
-    InvalidBet(u64),
-
-    /// Deck exhausted.
-    #[display("No cards remaining in deck")]
-    DeckExhausted,
-}
-
-impl std::error::Error for ActionError {}
