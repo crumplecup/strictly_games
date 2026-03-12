@@ -27,7 +27,7 @@ elicitation = { path = "../elicitation/crates/elicitation/", features = [
 # elicitation = { version = "0.8.2", features = ["rand"] }
 
 # Verification
-creusot-std = { version = "0.10.0" }
+creusot-std = { path = "/home/erik/repos/creusot/creusot-std", version = "0.10.0" }
 kani-verifier = { version = "0.67" }
 
 # Database
