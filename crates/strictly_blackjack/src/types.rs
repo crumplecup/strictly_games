@@ -50,6 +50,20 @@ impl Outcome {
         }
     }
 
+    /// Gross amount returned to the player when the bet was pre-deducted.
+    ///
+    /// Use this when the bet has already been removed from the bankroll at
+    /// placement time — returns the total chips added back, never negative.
+    pub fn gross_return(self, bet: u64) -> u64 {
+        match self {
+            Outcome::Win => bet * 2,                 // original bet + 1× profit
+            Outcome::Blackjack => bet + (bet * 3) / 2, // original bet + 3:2 profit
+            Outcome::Push => bet,                    // original bet back
+            Outcome::Loss => 0,                      // nothing returned
+            Outcome::Surrender => bet / 2,           // half bet back
+        }
+    }
+
     /// Returns true if the player won or got blackjack.
     pub fn is_win(self) -> bool {
         matches!(self, Outcome::Win | Outcome::Blackjack)

@@ -252,12 +252,12 @@ impl GameDealerTurn {
         let dealer_bust = self.dealer_hand.is_bust();
 
         let mut outcomes = Vec::with_capacity(self.player_hands.len());
-        let mut total_payout = 0i64;
+        let mut total_return: u64 = 0;
 
         for (idx, hand) in self.player_hands.iter().enumerate() {
             let player_value = hand.value().best();
             let player_bust = hand.is_bust();
-            let bet = self.bets[idx] as i64;
+            let bet = self.bets[idx];
 
             let outcome = if player_bust {
                 // Player bust - always lose
@@ -276,17 +276,13 @@ impl GameDealerTurn {
                 Outcome::Push
             };
 
-            // Calculate payout
-            total_payout += outcome.calculate_payout(bet as u64);
+            // Bet was already deducted at placement; add back the gross return.
+            // Loss/Surrender → 0 returned, Push → bet back, Win → 2×, Blackjack → 2.5×
+            total_return += outcome.gross_return(bet);
             outcomes.push(outcome);
         }
 
-        // Update bankroll with payouts
-        let final_bankroll = if total_payout >= 0 {
-            self.bankroll + (total_payout as u64)
-        } else {
-            self.bankroll.saturating_sub((-total_payout) as u64)
-        };
+        let final_bankroll = self.bankroll + total_return;
 
         GameFinished {
             player_hands: self.player_hands,
