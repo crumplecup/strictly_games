@@ -123,14 +123,20 @@ where
             &bj_edges,
             &event_log,
         )?;
-        wait_for_keypress().await?;
+
+        // Any key advances; Q is a passive escape.
+        if !wait_for_keypress().await? {
+            last_outcome = BlackjackSessionOutcome::Abandoned;
+            break;
+        }
 
         if bankroll == 0 {
             info!("Bankroll exhausted — ending session");
             break;
         }
 
-        if !prompt_play_again(terminal, bankroll).await? {
+        // One active Affirm between rounds — same interface for human and agent.
+        if !prompt_play_again(&comm, bankroll).await? {
             last_outcome = BlackjackSessionOutcome::Abandoned;
             break;
         }
@@ -361,51 +367,19 @@ where
 //  Play-again prompt
 // ─────────────────────────────────────────────────────────────
 
-/// Displays a "play again?" overlay and waits for y/n.
+/// Asks the player if they want another hand using the Affirm paradigm.
 ///
-/// Returns `true` if the player wants another hand.
+/// Uses `bool::elicit(comm)` so the same interface works for both human
+/// players and AI agents — `false` (or a cancelled elicitation) means quit.
 #[instrument(skip_all, fields(bankroll))]
-async fn prompt_play_again<B: Backend>(
-    terminal: &mut Terminal<B>,
-    bankroll: u64,
-) -> Result<bool>
-where
-    <B as Backend>::Error: Send + Sync + 'static,
-{
-    terminal.draw(|frame| {
-        let area = frame.area();
-        let msg = format!(
-            "Bankroll: {bankroll}  — Play again? [y / n]"
-        );
-        let w = (area.width as usize).min(msg.len() + 6) as u16;
-        let h = 3u16;
-        let x = area.x + area.width.saturating_sub(w) / 2;
-        let y = area.y + area.height.saturating_sub(h) / 2;
-        let rect = ratatui::layout::Rect { x, y, width: w, height: h };
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().bg(Color::DarkGray).fg(Color::White));
-        let inner = block.inner(rect);
-        block.render(rect, frame.buffer_mut());
-        Paragraph::new(Line::from(Span::styled(
-            msg,
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-        )))
-        .render(inner, frame.buffer_mut());
-    })?;
-
-    loop {
-        sleep(Duration::from_millis(50)).await;
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(k) = event::read()? {
-                match k.code {
-                    KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => return Ok(true),
-                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('q') => {
-                        return Ok(false)
-                    }
-                    _ => {}
-                }
-            }
+async fn prompt_play_again(comm: &TuiCommunicator, bankroll: u64) -> Result<bool> {
+    info!(bankroll, "Asking player to affirm continuation");
+    match bool::elicit(comm).await {
+        Ok(affirmed) => Ok(affirmed),
+        Err(_) => {
+            // Cancelled elicitation (e.g. Q pressed) = passive quit.
+            warn!("Affirm elicitation cancelled — treating as quit");
+            Ok(false)
         }
     }
 }
@@ -705,7 +679,7 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
     lines
 }
 
-async fn wait_for_keypress() -> Result<()> {
+async fn wait_for_keypress() -> Result<bool> {
     // Drain any events buffered during the previous input phase (e.g. the
     // Enter key from the bet prompt) before we start watching for fresh input.
     sleep(Duration::from_millis(100)).await;
@@ -718,7 +692,9 @@ async fn wait_for_keypress() -> Result<()> {
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(k) = event::read()? {
                 if k.code != KeyCode::Null {
-                    return Ok(());
+                    // Q anywhere is a passive escape.
+                    let quit = matches!(k.code, KeyCode::Char('q') | KeyCode::Char('Q'));
+                    return Ok(!quit);
                 }
             }
         }
