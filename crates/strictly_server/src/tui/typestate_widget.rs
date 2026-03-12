@@ -253,8 +253,15 @@ impl Widget for TypestateGraphWidget<'_> {
             return;
         }
 
-        // 60% of height for the graph+callout, rest for the story log.
-        let graph_h = ((inner.height as u32 * 6 / 10) as u16).max(5);
+        // Compute graph height: node box (3) + connector (1) + callout + margin.
+        // This ensures the callout never bleeds into the story log area.
+        let box_h: usize = 3;
+        let callout_lines = self.callout_height();
+        let connector_rows: usize = if callout_lines > 0 { 1 } else { 0 };
+        let needed_graph_h = (box_h + connector_rows + callout_lines + 1) as u16;
+        let graph_h = needed_graph_h
+            .max(5)
+            .min(inner.height.saturating_sub(3)); // leave at least 3 rows for the log
         let log_h = inner.height.saturating_sub(graph_h);
 
         let chunks = Layout::default()

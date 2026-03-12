@@ -74,6 +74,10 @@ impl ElicitCommunicator for TuiCommunicator {
             let mut stdout = io::stdout();
             let mut input = String::new();
 
+            // In raw mode, \n alone moves down but doesn't return to column 0.
+            // Normalise all bare \n to \r\n so multi-line prompts stay flush-left.
+            let prompt = prompt.replace('\n', "\r\n");
+
             execute!(
                 stdout,
                 Print("\r\n"),
