@@ -37,6 +37,10 @@ pub struct EdgeDef {
     pub from: usize,
     /// Index of the target node.
     pub to: usize,
+    /// Optional short label rendered at the midpoint of the arc.
+    ///
+    /// Used on skip-forward edges (bypass paths) to name the transition.
+    pub label: Option<&'static str>,
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -153,9 +157,10 @@ pub fn blackjack_nodes() -> Vec<NodeDef> {
 /// Edge definitions for the blackjack typestate graph.
 pub fn blackjack_edges() -> Vec<EdgeDef> {
     vec![
-        EdgeDef { from: 0, to: 1 }, // place_bet → PlayerTurn
-        EdgeDef { from: 1, to: 2 }, // stand → DealerTurn
-        EdgeDef { from: 2, to: 3 }, // play_dealer_turn → Finished
+        EdgeDef { from: 0, to: 1, label: None }, // place_bet → PlayerTurn
+        EdgeDef { from: 1, to: 2, label: None }, // stand → DealerTurn
+        EdgeDef { from: 2, to: 3, label: None }, // play_dealer_turn → Finished
+        EdgeDef { from: 0, to: 3, label: Some("(natural)") }, // natural blackjack fast-finish
     ]
 }
 
@@ -191,9 +196,9 @@ pub fn tictactoe_nodes() -> Vec<NodeDef> {
 /// Edge definitions for the tictactoe typestate graph.
 pub fn tictactoe_edges() -> Vec<EdgeDef> {
     vec![
-        EdgeDef { from: 0, to: 1 }, // .start()
-        EdgeDef { from: 1, to: 2 }, // .make_move() → terminal
-        EdgeDef { from: 2, to: 0 }, // .restart()
+        EdgeDef { from: 0, to: 1, label: None }, // .start()
+        EdgeDef { from: 1, to: 2, label: None }, // .make_move() → terminal
+        EdgeDef { from: 2, to: 0, label: None }, // .restart()
     ]
 }
 
@@ -379,6 +384,60 @@ impl TypestateGraphWidget<'_> {
                     }
                     if mid_from < area.x + area.width {
                         buf[(mid_from, vert_y)].set_char('│').set_style(arrow_style);
+                    }
+                }
+            }
+        }
+
+        // ── Draw skip-forward edges (bypass paths, e.g. natural blackjack) ──
+        //
+        // Skip-forward edges have to > from + 1.  They are rendered as a
+        // yellow arc below the node row so they are visually distinct from
+        // the sequential arrows above.  An optional label is placed at the
+        // midpoint of the arc.
+        for edge in self.edges {
+            if edge.to > edge.from + 1 {
+                let arc_y = node_row_y + box_h as u16;
+                if arc_y >= area.y + area.height {
+                    continue;
+                }
+                let style = Style::default().fg(Color::Yellow);
+                let (bx_from, _) = positions[edge.from];
+                let (bx_to, _) = positions[edge.to];
+                let mid_from = bx_from + box_widths[edge.from] as u16 / 2;
+                let mid_to = bx_to + box_widths[edge.to] as u16 / 2;
+
+                // Vertical drops from box bottoms to arc level.
+                let vert_y = arc_y.saturating_sub(1);
+                if vert_y >= area.y {
+                    for cx in [mid_from, mid_to] {
+                        if cx < area.x + area.width {
+                            buf[(cx, vert_y)].set_char('│').set_style(style);
+                        }
+                    }
+                }
+
+                // Horizontal arc span.
+                for x in mid_from..mid_to {
+                    if x < area.x + area.width {
+                        buf[(x, arc_y)].set_char('─').set_style(style);
+                    }
+                }
+                // Arrowhead at destination.
+                if mid_to < area.x + area.width {
+                    buf[(mid_to, arc_y)].set_char('▶').set_style(style);
+                }
+
+                // Label at midpoint (overwrites some '─' chars).
+                if let Some(lbl) = edge.label {
+                    let lbl_len = lbl.len() as u16;
+                    let mid_x = (mid_from + mid_to) / 2;
+                    let lbl_x = mid_x.saturating_sub(lbl_len / 2);
+                    for (j, ch) in lbl.chars().enumerate() {
+                        let x = lbl_x + j as u16;
+                        if x < area.x + area.width {
+                            buf[(x, arc_y)].set_char(ch).set_style(style);
+                        }
                     }
                 }
             }

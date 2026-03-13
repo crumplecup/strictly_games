@@ -187,7 +187,7 @@ where
         break raw;
     };
 
-    // ── execute_place_bet (True → BetPlaced) ──────────────────
+    // ── execute_place_bet (True → BetPlaced | PayoutSettled) ──
     let place_output = execute_place_bet(betting, bet).map_err(anyhow::Error::msg)?;
 
     event_log.push(GameEvent::story(format!("💰  Bet {bet} — cards dealt")));
@@ -204,11 +204,17 @@ where
                     "⚡  Instant resolution"
                 };
             event_log.push(GameEvent::story(reason));
+            // Fast-finish: Betting jumped directly to Finished via natural path.
+            current_phase = "Finished".to_string();
+            event_log.push(GameEvent::phase_change("Betting", "Finished"));
+            event_log.push(GameEvent::proof("PayoutSettled"));
             f
         }
         // Normal play — enter player action loop.
         PlaceBetOutput::PlayerTurn(pt, bet_proof) => {
             current_phase = "PlayerTurn".to_string();
+            event_log.push(GameEvent::phase_change("Betting", "PlayerTurn"));
+            event_log.push(GameEvent::proof("BetPlaced"));
             let player_val = pt
                 .player_hands()
                 .first()
@@ -308,6 +314,8 @@ where
                         if bust {
                             event_log.push(GameEvent::story("   bust!".to_string()));
                         }
+                        event_log.push(GameEvent::phase_change("PlayerTurn", "Finished"));
+                        event_log.push(GameEvent::proof("PayoutSettled"));
                         return Ok(f);
                     }
                     PlayActionOutput::DealerTurn(dt) => {
@@ -315,6 +323,8 @@ where
                         event_log.push(GameEvent::story(format!(
                             "   stood at {pre_action_hand_val} — dealer's turn"
                         )));
+                        event_log.push(GameEvent::phase_change("PlayerTurn", "DealerTurn"));
+                        event_log.push(GameEvent::proof("PlayerTurnComplete"));
 
                         // ── execute_dealer_turn (PlayerTurnComplete → PayoutSettled) ──
                         let (finished, _resolved) = execute_dealer_turn(dt, player_done_proof);
@@ -327,6 +337,8 @@ where
                             format!("🎲  Dealer stands at {dealer_val}")
                         };
                         event_log.push(GameEvent::story(dealer_story));
+                        event_log.push(GameEvent::phase_change("DealerTurn", "Finished"));
+                        event_log.push(GameEvent::proof("PayoutSettled"));
 
                         *current_phase = "Finished".to_string();
                         return Ok(finished);
