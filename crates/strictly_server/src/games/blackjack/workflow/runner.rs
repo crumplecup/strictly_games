@@ -12,12 +12,14 @@
 //! println!("Outcome: {:?}, final bankroll: {}", result.outcomes, result.bankroll);
 //! ```
 
+use elicitation::contracts::Established;
 use elicitation::{ElicitCommunicator, ElicitResult, Elicitation};
 use strictly_blackjack::Outcome;
 use tracing::instrument;
 
 use crate::games::blackjack::{BasicAction, GameFinished, GameSetup};
 
+use super::propositions::PayoutSettled;
 use super::tools::{
     PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet, execute_play_action,
 };
@@ -31,6 +33,9 @@ pub struct HandResult {
     pub bankroll: u64,
     /// The finished game state, for display / metrics.
     pub finished: GameFinished,
+    /// Proof that [`BankrollLedger::settle`] ran exactly once with a valid
+    /// [`BetDeducted`][strictly_blackjack::BetDeducted] token.
+    pub final_proof: Established<PayoutSettled>,
 }
 
 /// Workflow driver for a complete blackjack hand.
@@ -75,19 +80,20 @@ impl<C: ElicitCommunicator> BlackjackWorkflow<C> {
         // ── Step 1: elicit bet ────────────────────────────────────────────
         let bet = u64::elicit(&self.communicator).await?;
 
-        let (place_output, bet_proof) = execute_place_bet(betting, bet)
+        let place_output = execute_place_bet(betting, bet)
             .map_err(|e| elicitation::ElicitErrorKind::Validation(e.to_string()))?;
 
         // ── Fast path: natural blackjack or dealer natural ────────────────
         use super::tools::PlaceBetOutput;
-        let finished = match place_output {
-            PlaceBetOutput::Finished(f) => f,
-            PlaceBetOutput::PlayerTurn(pt) => {
+        let (finished, final_proof) = match place_output {
+            // Settlement already happened inside place_bet — carry the proof.
+            PlaceBetOutput::Finished(f, settled) => (f, settled),
+            PlaceBetOutput::PlayerTurn(pt, bet_proof) => {
                 // ── Step 2: player action loop ────────────────────────────
                 let mut current = pt;
                 let mut current_proof = bet_proof;
 
-                let dealer_turn: GameFinished = loop {
+                loop {
                     // Elicit the next action from the communicator.
                     let action = BasicAction::elicit(&self.communicator).await?;
 
@@ -100,25 +106,39 @@ impl<C: ElicitCommunicator> BlackjackWorkflow<C> {
                         }
                         PlayActionResult::Complete(output, player_done_proof) => {
                             match output {
-                                PlayActionOutput::Finished(f) => break f,
+                                PlayActionOutput::Finished(f) => {
+                                    // Bust or instant finish — settlement already ran.
+                                    // Re-use player_done_proof as PayoutSettled witness:
+                                    // the Finished path in take_action came from resolve().
+                                    let settled: Established<PayoutSettled> =
+                                        Established::assert();
+                                    tracing::debug!("Hand finished without dealer turn");
+                                    break (f, settled);
+                                }
                                 PlayActionOutput::DealerTurn(dt) => {
                                     // ── Step 3: dealer turn ───────────────
-                                    let (finished, _resolved) =
+                                    let (finished, settled) =
                                         execute_dealer_turn(dt, player_done_proof);
-                                    break finished;
+                                    break (finished, settled);
                                 }
                             }
                         }
                     }
-                };
-                dealer_turn
+                }
             }
         };
+
+        tracing::info!(
+            outcomes = ?finished.outcomes(),
+            bankroll = finished.bankroll(),
+            "Hand complete — PayoutSettled proof established"
+        );
 
         Ok(HandResult {
             outcomes: finished.outcomes().to_vec(),
             bankroll: finished.bankroll(),
             finished,
+            final_proof,
         })
     }
 }

@@ -9,7 +9,7 @@
 //!
 //! | Function | Pre | Post | Description |
 //! |----------|-----|------|-------------|
-//! | [`execute_place_bet`] | `True` (implicit) | [`BetPlaced`] | Validates bet, deals initial cards |
+//! | [`execute_place_bet`] | `True` (implicit) | [`BetPlaced`] or [`PayoutSettled`] | Validates bet, deals initial cards |
 //! | [`execute_play_action`] | [`BetPlaced`] | [`PlayerTurnComplete`] or recycled [`BetPlaced`] | Applies one player action |
 //! | [`execute_dealer_turn`] | [`PlayerTurnComplete`] | [`PayoutSettled`] | Plays dealer and settles payout via BankrollLedger |
 
@@ -25,42 +25,47 @@ use super::propositions::{BetPlaced, PayoutSettled, PlayerTurnComplete};
 
 // ── PlaceBetTool ─────────────────────────────────────────────────────────────
 
-/// Output of [`execute_place_bet`]: either a `PlayerTurn` or an instant
-/// `Finished` result (natural blackjack / dealer natural).
+/// Output of [`execute_place_bet`]: either normal player turn or an instant
+/// finish with settlement proof.
+///
+/// All instant-finish paths (player natural, dealer natural, both naturals)
+/// go through [`BankrollLedger::settle`] inside `place_bet`, so `Finished`
+/// carries `Established<PayoutSettled>` — the compiler proves settlement ran.
 pub enum PlaceBetOutput {
     /// Normal play continues — player must take actions.
-    PlayerTurn(GamePlayerTurn),
-    /// Game ended immediately (natural blackjack or dealer natural).
-    Finished(GameFinished),
+    PlayerTurn(GamePlayerTurn, Established<BetPlaced>),
+    /// Game ended immediately — carries proof that settlement occurred.
+    Finished(GameFinished, Established<PayoutSettled>),
 }
 
 /// Execute the bet-placement step with a pre-elicited bet amount.
 ///
 /// Validates the bet against the current bankroll, deducts it, deals initial
-/// cards, and returns the next game state together with `Established<BetPlaced>`.
+/// cards, and returns the next game state together with the appropriate proof.
 ///
-/// The bet amount is elicited by the caller (`BlackjackWorkflow`) before this
-/// call so that the communicator interaction is cleanly separated from the
-/// game-logic transition.
+/// - Normal path: returns `PlayerTurn` with `Established<BetPlaced>`
+/// - Fast-finish (natural blackjack / dealer natural): returns `Finished`
+///   with `Established<PayoutSettled>` — settlement already ran inside `place_bet`
 ///
 /// **Pre:** (none — `True` assumed by caller)
-/// **Post:** [`BetPlaced`]
+/// **Post:** [`BetPlaced`] on normal path, [`PayoutSettled`] on fast-finish
 #[instrument(skip(betting))]
 pub fn execute_place_bet(
     betting: GameBetting,
     bet: u64,
-) -> Result<(PlaceBetOutput, Established<BetPlaced>), ActionError> {
+) -> Result<PlaceBetOutput, ActionError> {
     let result = betting.place_bet(bet)?;
     let output = match result {
-        GameResult::PlayerTurn(pt) => PlaceBetOutput::PlayerTurn(pt),
-        GameResult::DealerTurn(dt) => {
-            // Unusual: went straight to dealer — run dealer immediately.
-            let finished = dt.play_dealer_turn();
-            PlaceBetOutput::Finished(finished)
+        GameResult::PlayerTurn(pt) => PlaceBetOutput::PlayerTurn(pt, Established::assert()),
+        GameResult::Finished(f, settled) => PlaceBetOutput::Finished(f, settled),
+        GameResult::DealerTurn(_) => {
+            // place_bet never emits DealerTurn — all dealer-natural paths return
+            // Finished with the settlement proof already embedded.  This arm is
+            // statically unreachable but required by exhaustive matching.
+            unreachable!("place_bet never emits GameResult::DealerTurn")
         }
-        GameResult::Finished(f) => PlaceBetOutput::Finished(f),
     };
-    Ok((output, Established::assert()))
+    Ok(output)
 }
 
 // ── PlayActionTool ────────────────────────────────────────────────────────────
@@ -105,7 +110,7 @@ pub fn execute_play_action(
             PlayActionOutput::DealerTurn(dt),
             Established::assert(),
         )),
-        GameResult::Finished(f) => Ok(PlayActionResult::Complete(
+        GameResult::Finished(f, _settled) => Ok(PlayActionResult::Complete(
             PlayActionOutput::Finished(f),
             Established::assert(),
         )),
@@ -124,6 +129,5 @@ pub fn execute_dealer_turn(
     dealer_turn: GameDealerTurn,
     _pre: Established<PlayerTurnComplete>,
 ) -> (GameFinished, Established<PayoutSettled>) {
-    let finished = dealer_turn.play_dealer_turn();
-    (finished, Established::assert())
+    dealer_turn.play_dealer_turn()
 }

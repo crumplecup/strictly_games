@@ -645,7 +645,7 @@ impl GameServer {
                         player_game.dealer_hand().cards()[0]
                     ));
                 }
-                crate::games::blackjack::GameResult::Finished(finished) => {
+                crate::games::blackjack::GameResult::Finished(finished, _settled) => {
                     // Immediate blackjack
                     result_messages.push(format!(
                         "🃏 Blackjack! Your hand: {}\n",
@@ -687,7 +687,7 @@ impl GameServer {
             // Dealer turn
             if let crate::games::blackjack::GameResult::DealerTurn(dealer_game) = game_result {
                 result_messages.push("\n🎲 Dealer's turn...\n".to_string());
-                let finished = dealer_game.play_dealer_turn();
+                let (finished, _settled) = dealer_game.play_dealer_turn();
                 result_messages.push(self.format_game_result(&finished));
                 bankroll = finished.bankroll();
             }

@@ -37,12 +37,17 @@ impl Prop for PlayerTurnComplete {}
 
 /// Proposition: the hand's payout has been correctly settled.
 ///
-/// Established by [`execute_dealer_turn`][super::tools::execute_dealer_turn]
-/// and by instant-finish paths in
-/// [`execute_place_bet`][super::tools::execute_place_bet].
+/// This is the same type as [`strictly_blackjack::PayoutSettled`] — carrying
+/// this token proves [`BankrollLedger::settle`] ran with a valid
+/// [`BetDeducted`][strictly_blackjack::BetDeducted] proof.
 ///
-/// Carrying this token is proof that [`BankrollLedger::settle`] ran with
-/// a valid [`BetDeducted`][crate::games::blackjack::ledger::BetDeducted]
-/// proof — the compiler guarantees no double-deduction occurred.
-pub struct PayoutSettled;
-impl Prop for PayoutSettled {}
+/// Established by:
+/// - [`execute_dealer_turn`][super::tools::execute_dealer_turn] on the normal play path
+/// - [`execute_place_bet`][super::tools::execute_place_bet] on instant-finish paths
+///   (player natural, dealer natural, both naturals) — settlement runs inside
+///   [`GameBetting::place_bet`][crate::games::blackjack::GameBetting] before the
+///   proof is returned
+///
+/// The compiler guarantees no double-deduction occurred: the `BetDeducted`
+/// token is consumed (moved, not copied) exactly once by `settle`.
+pub use strictly_blackjack::PayoutSettled;

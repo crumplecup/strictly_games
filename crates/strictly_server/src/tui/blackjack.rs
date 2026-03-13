@@ -188,13 +188,13 @@ where
     };
 
     // ── execute_place_bet (True → BetPlaced) ──────────────────
-    let (place_output, bet_proof) = execute_place_bet(betting, bet).map_err(anyhow::Error::msg)?;
+    let place_output = execute_place_bet(betting, bet).map_err(anyhow::Error::msg)?;
 
     event_log.push(GameEvent::story(format!("💰  Bet {bet} — cards dealt")));
 
     let finished = match place_output {
         // Natural blackjack / dealer natural — no player actions needed.
-        PlaceBetOutput::Finished(f) => {
+        PlaceBetOutput::Finished(f, _settled) => {
             let reason =
                 if f.dealer_hand().is_blackjack() && f.outcomes().iter().any(|o| o.is_loss()) {
                     "⚡  Dealer natural blackjack"
@@ -207,7 +207,7 @@ where
             f
         }
         // Normal play — enter player action loop.
-        PlaceBetOutput::PlayerTurn(pt) => {
+        PlaceBetOutput::PlayerTurn(pt, bet_proof) => {
             current_phase = "PlayerTurn".to_string();
             let player_val = pt
                 .player_hands()

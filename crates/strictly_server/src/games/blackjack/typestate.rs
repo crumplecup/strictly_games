@@ -7,7 +7,7 @@ use super::action::{ActionError, BasicAction, PlayerAction};
 use super::contracts::{execute_action, validate_action};
 use elicitation::contracts::Established;
 use elicitation::{Elicit, Prompt, Select};
-use strictly_blackjack::{BankrollLedger, BetDeducted, Deck, Hand, Outcome};
+use strictly_blackjack::{BankrollLedger, BetDeducted, Deck, Hand, Outcome, PayoutSettled};
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -90,36 +90,45 @@ impl GameBetting {
         // Check for immediate blackjack — settle the ledger now.
         if player_hand.is_blackjack() {
             if dealer_hand.is_blackjack() {
-                let (bankroll, _settled) = ledger.settle(Outcome::Push, bet_deducted);
-                return Ok(GameResult::Finished(GameFinished {
-                    player_hands: vec![player_hand],
-                    dealer_hand,
-                    bets: vec![bet],
-                    outcomes: vec![Outcome::Push],
-                    bankroll,
-                }));
+                let (bankroll, settled) = ledger.settle(Outcome::Push, bet_deducted);
+                return Ok(GameResult::Finished(
+                    GameFinished {
+                        player_hands: vec![player_hand],
+                        dealer_hand,
+                        bets: vec![bet],
+                        outcomes: vec![Outcome::Push],
+                        bankroll,
+                    },
+                    settled,
+                ));
             } else {
-                let (bankroll, _settled) = ledger.settle(Outcome::Blackjack, bet_deducted);
-                return Ok(GameResult::Finished(GameFinished {
-                    player_hands: vec![player_hand],
-                    dealer_hand,
-                    bets: vec![bet],
-                    outcomes: vec![Outcome::Blackjack],
-                    bankroll,
-                }));
+                let (bankroll, settled) = ledger.settle(Outcome::Blackjack, bet_deducted);
+                return Ok(GameResult::Finished(
+                    GameFinished {
+                        player_hands: vec![player_hand],
+                        dealer_hand,
+                        bets: vec![bet],
+                        outcomes: vec![Outcome::Blackjack],
+                        bankroll,
+                    },
+                    settled,
+                ));
             }
         }
 
         // Dealer blackjack (player doesn't have it) — settle the ledger now.
         if dealer_hand.is_blackjack() {
-            let (bankroll, _settled) = ledger.settle(Outcome::Loss, bet_deducted);
-            return Ok(GameResult::Finished(GameFinished {
-                player_hands: vec![player_hand],
-                dealer_hand,
-                bets: vec![bet],
-                outcomes: vec![Outcome::Loss],
-                bankroll,
-            }));
+            let (bankroll, settled) = ledger.settle(Outcome::Loss, bet_deducted);
+            return Ok(GameResult::Finished(
+                GameFinished {
+                    player_hands: vec![player_hand],
+                    dealer_hand,
+                    bets: vec![bet],
+                    outcomes: vec![Outcome::Loss],
+                    bankroll,
+                },
+                settled,
+            ));
         }
 
         // Normal game — carry the ledger + proof through to dealer resolution.
@@ -259,7 +268,7 @@ impl std::fmt::Debug for GameDealerTurn {
 impl GameDealerTurn {
     /// Plays dealer turn and resolves game (consumes dealer turn, returns finished).
     #[instrument(skip(self))]
-    pub fn play_dealer_turn(mut self) -> GameFinished {
+    pub fn play_dealer_turn(mut self) -> (GameFinished, Established<PayoutSettled>) {
         // Dealer follows fixed rules: hit on 16 or less, stand on 17+
         // Use best value (soft if available)
         while self.dealer_hand.value().best() < 17 {
@@ -279,7 +288,7 @@ impl GameDealerTurn {
     /// Calls [`BankrollLedger::settle`] which consumes `Established<BetDeducted>`,
     /// proving that settlement occurs exactly once after a validated debit.
     #[instrument(skip(self))]
-    fn resolve(self) -> GameFinished {
+    fn resolve(self) -> (GameFinished, Established<PayoutSettled>) {
         let dealer_value = self.dealer_hand.value().best();
         let dealer_bust = self.dealer_hand.is_bust();
 
@@ -302,15 +311,18 @@ impl GameDealerTurn {
         // Settle via the ledger — consuming the BetDeducted proof guarantees
         // this path runs exactly once and uses gross_return arithmetic only.
         let primary_outcome = outcomes.first().copied().unwrap_or(Outcome::Loss);
-        let (final_bankroll, _settled) = self.ledger.settle(primary_outcome, self.bet_deducted);
+        let (final_bankroll, settled) = self.ledger.settle(primary_outcome, self.bet_deducted);
 
-        GameFinished {
-            player_hands: self.player_hands,
-            dealer_hand: self.dealer_hand,
-            bets: self.bets,
-            outcomes,
-            bankroll: final_bankroll,
-        }
+        (
+            GameFinished {
+                player_hands: self.player_hands,
+                dealer_hand: self.dealer_hand,
+                bets: self.bets,
+                outcomes,
+                bankroll: final_bankroll,
+            },
+            settled,
+        )
     }
 }
 
@@ -366,6 +378,7 @@ pub enum GameResult {
     PlayerTurn(GamePlayerTurn),
     /// Game in dealer turn phase.
     DealerTurn(GameDealerTurn),
-    /// Game finished.
-    Finished(GameFinished),
+    /// Game finished — carries proof that [`BankrollLedger::settle`] ran
+    /// exactly once with a valid [`BetDeducted`] token.
+    Finished(GameFinished, Established<PayoutSettled>),
 }
