@@ -44,13 +44,14 @@ fn verify_outcome_compositional() {
     Outcome::kani_proof();
 }
 
-/// Verifies the entire blackjack type hierarchy compositionally.
+/// Verifies the entire blackjack type hierarchy compositionally, with a
+/// real cross-type property as the capstone.
 ///
 /// This harness witnesses the proof chain:
 /// 1. Primitives (Rank, Suit) are verified by enum exhaustiveness
 /// 2. Card is verified by composition (Rank × Suit)
 /// 3. Outcome is verified by enum exhaustiveness
-/// 4. ∴ The entire type system is formally verified ∎
+/// 4. Capstone: any Card built from any Rank × Suit has value in 1..=11 ∎
 #[cfg(kani)]
 #[kani::proof]
 fn verify_blackjack_legos() {
@@ -62,9 +63,12 @@ fn verify_blackjack_legos() {
     // Layer 2: Composite types (verified by composition)
     Card::kani_proof();
 
-    // Tautology: If all parts verified, whole verified
-    assert!(
-        true,
-        "Blackjack compositional verification: all layers proven ⟹ entire ecosystem verified ∎"
-    );
+    // Capstone: cross-type property — any (Rank, Suit) produces a Card
+    // with a valid blackjack value.  This connects the structural proofs
+    // to the semantic layer rather than ending on a tautology.
+    let rank: Rank = kani::any();
+    let suit: Suit = kani::any();
+    let card = Card::new(rank, suit);
+    let v = card.value();
+    assert!(v >= 1 && v <= 11, "Any Card(Rank, Suit) has value in 1..=11 ∎");
 }

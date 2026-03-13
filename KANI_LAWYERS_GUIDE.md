@@ -39,7 +39,7 @@ stated range, with no exceptions."
 
 ## What was verified
 
-The proofs are organised into four categories. All 54 harnesses pass.
+The proofs are organised into four categories. All 62 harnesses pass.
 
 ---
 
@@ -80,17 +80,20 @@ and Kani proves the type system is sound.
 
 ### Category 2 — The deck and hand logic is correct
 
-**Harnesses:** `verify_new_deck_size`, `verify_deal_decrements_deck`,
-`verify_empty_deck_returns_none`, `verify_card_value_range`,
-`verify_ace_detection`, `verify_empty_hand_value`,
-`verify_two_card_hard_total`, `verify_ace_six_soft_total`,
-`verify_ace_ten_five_hard_total`, `verify_hand_value_bounds`,
-`verify_blackjack_implies_two_cards_and_21`,
-`verify_blackjack_ace_ten`, `verify_blackjack_ace_king`,
-`verify_three_card_21_not_blackjack`, `verify_bust_when_hard_over_21`,
-`verify_no_bust_when_at_most_21`, `verify_hand_at_21_not_bust`,
-`verify_can_split_same_rank`, `verify_cant_split_different_ranks`,
-`verify_cant_split_wrong_count`
+**Harnesses:** `deck_has_52_cards`, `deal_reduces_remaining`,
+`exhausted_deck_returns_none`, `deck_all_cards_unique`,
+`card_value_in_range`, `face_card_values_are_ten`, `ace_raw_value_is_eleven`,
+`ace_detection`, `empty_hand_zero_value`,
+`hand_value_no_aces`, `hand_value_single_ace_soft`,
+`hand_value_ace_busts_soft`, `hand_value_bounds`,
+`soft_hard_exact_relation`, `double_ace_value`,
+`ace_ace_nine_value`, `ace_ace_ten_soft_collapses`,
+`blackjack_requires_two_cards`, `blackjack_biconditional_converse`,
+`blackjack_ace_ten`, `blackjack_ace_king`,
+`three_card_21_not_blackjack`, `bust_detection`,
+`no_bust_under_21`, `exactly_21_not_bust`,
+`can_split_matching_ranks`, `cannot_split_different_ranks`,
+`cannot_split_wrong_count`, `handvalue_equality`, `card_equality`
 
 #### The deck
 
@@ -124,8 +127,29 @@ Property: ∀c ∈ Card, value(c) ∈ {1, 2, ..., 11}
 Result:   PROVED for all 52 possible cards ✓
 ```
 
-Note: Aces count as 11 in hand computation (soft) or 1 (hard). All
-number cards count at face value. Ten, Jack, Queen, King all count as 10.
+Note: Aces count as 11 at the rank level (adjusted to 1 in hard totals).
+Number cards count at face value. Ten, Jack, Queen, King all count as 10.
+
+**Face cards (Ten, Jack, Queen, King) all map to exactly 10 — for every suit.**
+
+```
+Property: ∀s ∈ Suit, value(Card(Ten|Jack|Queen|King, s)) = 10
+Result:   PROVED parametrically over all four suits ✓
+```
+
+This is a key point for counting systems: all four "ten-value" ranks are
+provably equivalent regardless of suit.
+
+**The deck has no duplicate cards.**
+
+```
+Property: ∀i ≠ j ∈ 0..52, dealt_card(i) ≠ dealt_card(j)
+Result:   PROVED — no (Rank × Suit) pair appears more than once ✓
+```
+
+The deck is constructed by iterating all 52 (Rank × Suit) combinations
+exactly once. Kani proves exhaustively that no two positions hold the
+same card — the same Ace of Spades cannot appear twice.
 
 **Ace detection is correct.**
 
@@ -167,6 +191,33 @@ Result:   PROVED ✓
 (An Ace + 10 + 5 with the Ace as 11 would be 26 — bust. So the Ace
 must count as 1, giving 16, and there is no soft total.)
 
+**The soft/hard exact relation — only one Ace can be promoted.**
+
+```
+Property: ∀h ∈ Hand, soft(h) = Some(s) ⟹ s = hard(h) + 10
+Result:   PROVED for all hands up to 7 cards ✓
+```
+
+When a soft total exists, it is *exactly* the hard total plus 10 — not
+approximately, not sometimes. This proves only one Ace is ever counted
+as 11; all others are counted as 1. The mathematics cannot silently
+count two Aces as 11 simultaneously, which would give an unearned advantage.
+
+**Ace raw value and hard total:**
+
+```
+Property: ∀s ∈ Suit, Card(Ace, s).rank_value() = 11     (card level)
+Property: value([A♠]).hard = 1,  value([A♠]).soft = Some(11)
+Result:   PROVED ✓
+```
+
+**Two-Ace hand:**
+
+```
+Property: value([A♠, A♥]) = HandValue { hard: 2, soft: Some(12) }
+Result:   PROVED ✓  (one Ace promoted to 11: 1+1+10=12)
+```
+
 **Hand value bounds — no overflow:**
 
 ```
@@ -183,13 +234,20 @@ A blackjack (natural) is specifically a two-card hand totalling 21. A
 three-card 21 is not a blackjack and pays at a different rate.
 
 ```
-Property: is_blackjack(h) ⟺ |h| = 2 ∧ value(h) = 21
-Result:   PROVED — it is a biconditional, not merely one direction ✓
+Forward:   is_blackjack(h) ⟹ |h| = 2 ∧ value(h) = 21        ✓
+Converse:  |h| = 2 ∧ value(h) = 21 ⟹ is_blackjack(h)        ✓
+Together:  is_blackjack(h) ⟺ |h| = 2 ∧ value(h) = 21
+Result:    PROVED as a true biconditional (both directions) ✓
 
 Property: is_blackjack([A, 10]) = true    ✓
 Property: is_blackjack([A, K])  = true    ✓  (King counts as 10)
 Property: |h| = 3 ∧ value(h) = 21 ⟹ ¬is_blackjack(h)    ✓
 ```
+
+Both directions are proven by separate harnesses:
+`blackjack_requires_two_cards` (forward) and
+`blackjack_biconditional_converse` (converse). No 2-card 21 can
+silently fail to be detected as blackjack.
 
 #### Bust detection
 
@@ -464,22 +522,21 @@ What is *not* in scope:
 
 | Category                    | Harnesses | Status      |
 |-----------------------------|-----------|-------------|
-| Type system / compositional | 6         | ✅ All pass |
-| Deck and hand logic         | 20        | ✅ All pass |
-| Financial settlement        | 13        | ✅ All pass |
-| Double-deduction safety     | 1         | ✅ Pass     |
-| Tic-tac-toe (bonus)         | 14        | ✅ All pass |
-| **Total**                   | **54**    | **54/54**   |
+| Type system / compositional | 5         | ✅ All pass |
+| Deck and hand logic         | 30        | ✅ All pass |
+| Financial settlement        | 14        | ✅ All pass |
+| Tic-tac-toe (bonus)         | 13        | ✅ All pass |
+| **Total**                   | **62**    | **62/62**   |
 
 ---
 
-## What "54/54 pass" means for confidence
+## What "62/62 pass" means for confidence
 
 A regulator reviewing a traditional gambling system asks for test logs,
 code reviews, and statistical audits. These are evidence of quality but
 not proofs of correctness. A sufficiently clever bug can evade all of them.
 
-Kani's 54/54 passing harnesses are a different class of evidence. For the
+Kani's 62/62 passing harnesses are a different class of evidence. For the
 properties stated — payout arithmetic, bet validation, double-deduction
 impossibility, hand value semantics, deck integrity — the proofs are
 **exhaustive over the input domain**. There is no input within the stated
