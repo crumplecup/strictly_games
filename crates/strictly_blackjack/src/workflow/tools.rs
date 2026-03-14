@@ -2,34 +2,30 @@
 //!
 //! Each free function carries explicit `Established<P>` precondition proofs
 //! and returns `Established<Q>` postcondition proofs.  The compiler enforces
-//! the correct call order — you cannot call `execute_play_action` without
-//! first having `Established<BetPlaced>`.
-//!
-//! # Function summary
+//! the correct call order.
 //!
 //! | Function | Pre | Post | Description |
-//! |----------|-----|------|-------------|
-//! | [`execute_place_bet`] | `True` (implicit) | [`BetPlaced`] or [`PayoutSettled`] | Validates bet, deals initial cards |
+//! |---|---|---|---|
+//! | [`execute_place_bet`] | `True` | [`BetPlaced`] or [`PayoutSettled`] | Validates bet, deals initial cards |
 //! | [`execute_play_action`] | [`BetPlaced`] | [`PlayerTurnComplete`] or recycled [`BetPlaced`] | Applies one player action |
-//! | [`execute_dealer_turn`] | [`PlayerTurnComplete`] | [`PayoutSettled`] | Plays dealer and settles payout via BankrollLedger |
+//! | [`execute_dealer_turn`] | [`PlayerTurnComplete`] | [`PayoutSettled`] | Plays dealer and settles payout |
 
 use elicitation::contracts::Established;
 use tracing::instrument;
 
-use crate::games::blackjack::{
+use crate::{
     ActionError, BasicAction, GameBetting, GameDealerTurn, GameFinished, GamePlayerTurn,
-    GameResult, PlayerAction,
+    GameResult, PayoutSettled, PlayerAction,
 };
 
-use super::propositions::{BetPlaced, PayoutSettled, PlayerTurnComplete};
+use super::propositions::{BetPlaced, PlayerTurnComplete};
 
-// ── PlaceBetTool ─────────────────────────────────────────────────────────────
+// ── PlaceBet ─────────────────────────────────────────────────────────────────
 
-/// Output of [`execute_place_bet`]: either normal player turn or an instant
-/// finish with settlement proof.
+/// Output of [`execute_place_bet`]: either normal player turn or instant finish.
 ///
-/// All instant-finish paths (player natural, dealer natural, both naturals)
-/// go through [`BankrollLedger::settle`] inside `place_bet`, so `Finished`
+/// All instant-finish paths (player natural, dealer natural, both naturals) go
+/// through [`crate::BankrollLedger::settle`] inside `place_bet`, so `Finished`
 /// carries `Established<PayoutSettled>` — the compiler proves settlement ran.
 pub enum PlaceBetOutput {
     /// Normal play continues — player must take actions.
@@ -38,37 +34,28 @@ pub enum PlaceBetOutput {
     Finished(GameFinished, Established<PayoutSettled>),
 }
 
-/// Execute the bet-placement step with a pre-elicited bet amount.
+/// Execute the bet-placement step.
 ///
 /// Validates the bet against the current bankroll, deducts it, deals initial
 /// cards, and returns the next game state together with the appropriate proof.
 ///
-/// - Normal path: returns `PlayerTurn` with `Established<BetPlaced>`
-/// - Fast-finish (natural blackjack / dealer natural): returns `Finished`
-///   with `Established<PayoutSettled>` — settlement already ran inside `place_bet`
-///
 /// **Pre:** (none — `True` assumed by caller)
 /// **Post:** [`BetPlaced`] on normal path, [`PayoutSettled`] on fast-finish
 #[instrument(skip(betting))]
-pub fn execute_place_bet(
-    betting: GameBetting,
-    bet: u64,
-) -> Result<PlaceBetOutput, ActionError> {
+pub fn execute_place_bet(betting: GameBetting, bet: u64) -> Result<PlaceBetOutput, ActionError> {
     let result = betting.place_bet(bet)?;
     let output = match result {
         GameResult::PlayerTurn(pt) => PlaceBetOutput::PlayerTurn(pt, Established::assert()),
         GameResult::Finished(f, settled) => PlaceBetOutput::Finished(f, settled),
         GameResult::DealerTurn(_) => {
-            // place_bet never emits DealerTurn — all dealer-natural paths return
-            // Finished with the settlement proof already embedded.  This arm is
-            // statically unreachable but required by exhaustive matching.
+            // place_bet never emits DealerTurn — statically unreachable.
             unreachable!("place_bet never emits GameResult::DealerTurn")
         }
     };
     Ok(output)
 }
 
-// ── PlayActionTool ────────────────────────────────────────────────────────────
+// ── PlayAction ────────────────────────────────────────────────────────────────
 
 /// Output of [`execute_play_action`] when the hand is over.
 pub enum PlayActionOutput {
@@ -88,8 +75,8 @@ pub enum PlayActionResult {
 
 /// Apply one player action.
 ///
-/// Returns either `InProgress` (hand continues, recycles `BetPlaced`) or
-/// `Complete` (player turn finished, establishes `PlayerTurnComplete`).
+/// Returns either `InProgress` (hand continues, recycles [`BetPlaced`]) or
+/// `Complete` (player turn finished, establishes [`PlayerTurnComplete`]).
 ///
 /// **Pre:** [`BetPlaced`]
 /// **Post:** [`PlayerTurnComplete`] on terminal action, [`BetPlaced`] on Hit
@@ -117,13 +104,13 @@ pub fn execute_play_action(
     }
 }
 
-// ── DealerTurnTool ────────────────────────────────────────────────────────────
+// ── DealerTurn ────────────────────────────────────────────────────────────────
 
 /// Execute the dealer turn.
 ///
 /// **Pre:** [`PlayerTurnComplete`]
-/// **Post:** [`PayoutSettled`] — proof that `BankrollLedger::settle` ran with
-/// a valid `BetDeducted` token; the final bankroll is arithmetically correct.
+/// **Post:** [`PayoutSettled`] — proof that [`crate::BankrollLedger::settle`]
+/// ran with a valid [`crate::BetDeducted`] token.
 #[instrument(skip(dealer_turn, _pre))]
 pub fn execute_dealer_turn(
     dealer_turn: GameDealerTurn,

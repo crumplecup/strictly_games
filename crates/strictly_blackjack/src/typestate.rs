@@ -1,20 +1,23 @@
 //! Phase-specific typestate structs for blackjack.
 //!
 //! Each phase is its own distinct type with phase-specific fields.
-//! This encodes invariants at compile time.
+//! This encodes invariants at compile time — you cannot call `execute_dealer_turn`
+//! without first having `Established<PlayerTurnComplete>`, etc.
 
-use super::action::{ActionError, BasicAction, PlayerAction};
-use super::contracts::{execute_action, validate_action};
 use elicitation::contracts::Established;
 use elicitation::{Elicit, Prompt, Select};
-use strictly_blackjack::{BankrollLedger, BetDeducted, Deck, Hand, Outcome, PayoutSettled};
 use tracing::instrument;
+
+use crate::{
+    ActionError, BankrollLedger, BasicAction, BetDeducted, Deck, Hand, Outcome, PayoutSettled,
+    PlayerAction, execute_action, validate_action,
+};
 
 // ─────────────────────────────────────────────────────────────
 //  Setup Phase
 // ─────────────────────────────────────────────────────────────
 
-/// Game in setup phase - ready to start.
+/// Game in setup phase — ready to start.
 #[derive(Debug, Clone, Elicit)]
 pub struct GameSetup {
     deck: Deck,
@@ -49,7 +52,7 @@ impl Default for GameSetup {
 //  Betting Phase
 // ─────────────────────────────────────────────────────────────
 
-/// Game in betting phase - player places bet.
+/// Game in betting phase — player places bet.
 #[derive(Debug, Clone, Elicit)]
 pub struct GameBetting {
     deck: Deck,
@@ -57,6 +60,14 @@ pub struct GameBetting {
 }
 
 impl GameBetting {
+    /// Creates a new betting phase with the given deck and bankroll.
+    ///
+    /// Primarily useful for formal verification harnesses where a deterministic
+    /// deck is required.
+    pub fn new(deck: Deck, bankroll: u64) -> Self {
+        Self { deck, bankroll }
+    }
+
     /// Returns the current bankroll (before any bet is placed).
     pub fn bankroll(&self) -> u64 {
         self.bankroll
@@ -65,10 +76,8 @@ impl GameBetting {
     /// Places bet and deals initial cards (consumes betting, returns result).
     #[instrument(skip(self))]
     pub fn place_bet(self, bet: u64) -> Result<GameResult, ActionError> {
-        // Debit establishes BetDeducted proof and validates bet in one step.
         let (ledger, bet_deducted) = BankrollLedger::debit(self.bankroll, bet)?;
 
-        // Deal initial cards (2 to player, 2 to dealer)
         let mut deck = self.deck;
         let mut player_hand = Hand::new(Vec::new());
         let mut dealer_hand = Hand::new(Vec::new());
@@ -79,7 +88,6 @@ impl GameBetting {
             } else {
                 return Err(ActionError::DeckExhausted);
             }
-
             if let Some(card) = deck.deal() {
                 dealer_hand.add_card(card);
             } else {
@@ -116,7 +124,7 @@ impl GameBetting {
             }
         }
 
-        // Dealer blackjack (player doesn't have it) — settle the ledger now.
+        // Dealer blackjack (player doesn't have it) — settle immediately.
         if dealer_hand.is_blackjack() {
             let (bankroll, settled) = ledger.settle(Outcome::Loss, bet_deducted);
             return Ok(GameResult::Finished(
@@ -148,18 +156,18 @@ impl GameBetting {
 //  PlayerTurn Phase
 // ─────────────────────────────────────────────────────────────
 
-/// Game in player turn phase - player takes actions.
+/// Game in player turn phase — player takes actions.
 #[derive(Clone, Elicit)]
 pub struct GamePlayerTurn {
-    pub(super) deck: Deck,
-    pub(super) player_hands: Vec<Hand>,
-    pub(super) current_hand_index: usize,
-    pub(super) dealer_hand: Hand,
-    pub(super) bets: Vec<u64>,
+    pub(crate) deck: Deck,
+    pub(crate) player_hands: Vec<Hand>,
+    pub(crate) current_hand_index: usize,
+    pub(crate) dealer_hand: Hand,
+    pub(crate) bets: Vec<u64>,
     /// Financial ledger proving the bet was deducted exactly once.
-    pub(super) ledger: BankrollLedger,
+    pub(crate) ledger: BankrollLedger,
     /// Proof token that the bet has been debited; consumed at settlement.
-    pub(super) bet_deducted: Established<BetDeducted>,
+    pub(crate) bet_deducted: Established<BetDeducted>,
 }
 
 impl std::fmt::Debug for GamePlayerTurn {
@@ -180,14 +188,10 @@ impl GamePlayerTurn {
     /// Takes an action, consuming self and transitioning to next state.
     #[instrument(skip(self))]
     pub fn take_action(self, action: PlayerAction) -> Result<GameResult, ActionError> {
-        // Validate action with contracts
         let proof = validate_action(&action, &self)?;
-
-        // Execute with proof (zero-cost, enforced by type system)
         let mut game = self;
         execute_action(&action, &mut game, proof)?;
 
-        // Check if current hand is complete (bust or stand)
         let current_hand = &game.player_hands[game.current_hand_index];
         let hand_complete = current_hand.is_bust() || action.action() == BasicAction::Stand;
 
@@ -204,7 +208,6 @@ impl GamePlayerTurn {
         self.current_hand_index += 1;
 
         if self.current_hand_index >= self.player_hands.len() {
-            // All hands complete - move to dealer turn, carrying the ledger.
             Ok(GameResult::DealerTurn(GameDealerTurn {
                 deck: self.deck,
                 player_hands: self.player_hands,
@@ -214,7 +217,6 @@ impl GamePlayerTurn {
                 bet_deducted: self.bet_deducted,
             }))
         } else {
-            // More hands to play
             Ok(GameResult::PlayerTurn(self))
         }
     }
@@ -224,7 +226,7 @@ impl GamePlayerTurn {
         &self.player_hands
     }
 
-    /// Returns the dealer's hand (only showing first card in real game).
+    /// Returns the dealer's hand.
     pub fn dealer_hand(&self) -> &Hand {
         &self.dealer_hand
     }
@@ -239,17 +241,17 @@ impl GamePlayerTurn {
 //  DealerTurn Phase
 // ─────────────────────────────────────────────────────────────
 
-/// Game in dealer turn phase - dealer plays by fixed rules.
+/// Game in dealer turn phase — dealer plays by fixed rules.
 #[derive(Clone, Elicit)]
 pub struct GameDealerTurn {
-    deck: Deck,
-    player_hands: Vec<Hand>,
-    dealer_hand: Hand,
-    bets: Vec<u64>,
+    pub(crate) deck: Deck,
+    pub(crate) player_hands: Vec<Hand>,
+    pub(crate) dealer_hand: Hand,
+    pub(crate) bets: Vec<u64>,
     /// Financial ledger threading the BetDeducted proof to settlement.
-    ledger: BankrollLedger,
+    pub(crate) ledger: BankrollLedger,
     /// Proof token: bet was deducted; required by BankrollLedger::settle.
-    bet_deducted: Established<BetDeducted>,
+    pub(crate) bet_deducted: Established<BetDeducted>,
 }
 
 impl std::fmt::Debug for GameDealerTurn {
@@ -269,17 +271,14 @@ impl GameDealerTurn {
     /// Plays dealer turn and resolves game (consumes dealer turn, returns finished).
     #[instrument(skip(self))]
     pub fn play_dealer_turn(mut self) -> (GameFinished, Established<PayoutSettled>) {
-        // Dealer follows fixed rules: hit on 16 or less, stand on 17+
-        // Use best value (soft if available)
+        // Dealer follows fixed rules: hit on 16 or less, stand on 17+.
         while self.dealer_hand.value().best() < 17 {
             if let Some(card) = self.deck.deal() {
                 self.dealer_hand.add_card(card);
             } else {
-                // Deck exhausted - dealer stands with current hand
                 break;
             }
         }
-
         self.resolve()
     }
 
@@ -293,7 +292,6 @@ impl GameDealerTurn {
         let dealer_bust = self.dealer_hand.is_bust();
 
         let mut outcomes = Vec::with_capacity(self.player_hands.len());
-
         for hand in self.player_hands.iter() {
             let player_value = hand.value().best();
             let outcome = if hand.is_bust() {
@@ -308,8 +306,6 @@ impl GameDealerTurn {
             outcomes.push(outcome);
         }
 
-        // Settle via the ledger — consuming the BetDeducted proof guarantees
-        // this path runs exactly once and uses gross_return arithmetic only.
         let primary_outcome = outcomes.first().copied().unwrap_or(Outcome::Loss);
         let (final_bankroll, settled) = self.ledger.settle(primary_outcome, self.bet_deducted);
 
@@ -330,7 +326,7 @@ impl GameDealerTurn {
 //  Finished Phase
 // ─────────────────────────────────────────────────────────────
 
-/// Game finished - outcomes determined.
+/// Game finished — outcomes determined.
 #[derive(Debug, Clone, Elicit)]
 pub struct GameFinished {
     player_hands: Vec<Hand>,
@@ -371,7 +367,7 @@ impl GameFinished {
 //  Result Type
 // ─────────────────────────────────────────────────────────────
 
-/// Result of a game transition.
+/// Result of a game transition — carries the game to the next phase.
 #[derive(Debug, Elicit)]
 pub enum GameResult {
     /// Game in player turn phase.

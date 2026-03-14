@@ -1,6 +1,6 @@
 //! MCP server setup and configuration.
 
-use crate::games::blackjack::{BasicAction, GameSetup};
+use strictly_blackjack::{BasicAction, GameSetup};
 use crate::games::tictactoe::{Player, Position};
 use crate::session::{PlayerType, SessionManager};
 use elicitation::{ChoiceSet, ElicitServer, Elicitation};
@@ -635,7 +635,7 @@ impl GameServer {
 
             // Show initial deal
             match &game_result {
-                crate::games::blackjack::GameResult::PlayerTurn(player_game) => {
+                strictly_blackjack::GameResult::PlayerTurn(player_game) => {
                     result_messages.push(format!(
                         "Your hand: {}\n",
                         player_game.player_hands()[0].display()
@@ -645,7 +645,7 @@ impl GameServer {
                         player_game.dealer_hand().cards()[0]
                     ));
                 }
-                crate::games::blackjack::GameResult::Finished(finished, _settled) => {
+                strictly_blackjack::GameResult::Finished(finished, _settled) => {
                     // Immediate blackjack
                     result_messages.push(format!(
                         "🃏 Blackjack! Your hand: {}\n",
@@ -659,14 +659,14 @@ impl GameServer {
             }
 
             // Player turn - elicit actions
-            while let crate::games::blackjack::GameResult::PlayerTurn(player_game) = game_result {
+            while let strictly_blackjack::GameResult::PlayerTurn(player_game) = game_result {
                 let action = self
                     .elicit_blackjack_action(peer.clone(), &player_game)
                     .await?;
 
                 result_messages.push(format!("Action: {:?}\n", action));
 
-                let player_action = crate::games::blackjack::PlayerAction::new(
+                let player_action = strictly_blackjack::PlayerAction::new(
                     action,
                     player_game.current_hand_index(),
                 );
@@ -676,7 +676,7 @@ impl GameServer {
                     .map_err(|e| McpError::internal_error(format!("Action failed: {}", e), None))?;
 
                 // Show updated hand after action
-                if let crate::games::blackjack::GameResult::PlayerTurn(pg) = &game_result {
+                if let strictly_blackjack::GameResult::PlayerTurn(pg) = &game_result {
                     result_messages.push(format!(
                         "Your hand: {}\n",
                         pg.player_hands()[pg.current_hand_index()].display()
@@ -685,7 +685,7 @@ impl GameServer {
             }
 
             // Dealer turn
-            if let crate::games::blackjack::GameResult::DealerTurn(dealer_game) = game_result {
+            if let strictly_blackjack::GameResult::DealerTurn(dealer_game) = game_result {
                 result_messages.push("\n🎲 Dealer's turn...\n".to_string());
                 let (finished, _settled) = dealer_game.play_dealer_turn();
                 result_messages.push(self.format_game_result(&finished));
@@ -743,7 +743,7 @@ impl GameServer {
     async fn elicit_blackjack_action(
         &self,
         peer: Peer<RoleServer>,
-        game: &crate::games::blackjack::GamePlayerTurn,
+        game: &strictly_blackjack::GamePlayerTurn,
     ) -> Result<BasicAction, McpError> {
         let hand = &game.player_hands()[game.current_hand_index()];
         let hand_value = hand.value().best();
@@ -795,7 +795,7 @@ impl GameServer {
     }
 
     /// Format game result for display.
-    fn format_game_result(&self, game: &crate::games::blackjack::GameFinished) -> String {
+    fn format_game_result(&self, game: &strictly_blackjack::GameFinished) -> String {
         let mut result = String::new();
 
         result.push_str(&format!(

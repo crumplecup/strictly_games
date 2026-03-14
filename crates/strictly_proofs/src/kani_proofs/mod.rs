@@ -6,5 +6,6 @@
 pub mod bankroll_financial;
 pub mod blackjack_compositional;
 pub mod blackjack_invariants;
+pub mod blackjack_scenarios;
 pub mod compositional_proof;
 pub mod game_invariants;

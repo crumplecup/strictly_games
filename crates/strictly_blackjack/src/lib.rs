@@ -1,30 +1,45 @@
 //! Strictly Blackjack - Pure game logic with formal verification
 //!
-//! This crate provides the core blackjack game types and rules with zero
-//! application dependencies. Designed for formal verification with Kani, Verus,
+//! This crate provides the core blackjack game types, rules, typestate machine,
+//! and workflow contracts. Designed for formal verification with Kani, Verus,
 //! and Creusot.
 //!
 //! ## Architecture
 //!
 //! - **Pure types**: Card, Rank, Suit, Deck, Hand
 //! - **Pure rules**: Hand value calculation, blackjack detection, bust detection
+//! - **Typestate**: GameSetup → GameBetting → GamePlayerTurn → GameDealerTurn → GameFinished
+//! - **Workflow**: Proof-carrying contract chain (BetPlaced → PlayerTurnComplete → PayoutSettled)
 //! - **Elicitation derives**: Generates verification harness methods
-//! - **Zero deps**: Only elicitation + serde
 
 #![warn(missing_docs)]
 
+mod action;
 mod card;
+mod contracts;
 mod deck;
 pub mod error;
 mod hand;
 pub mod ledger;
 pub mod rules;
+mod typestate;
 mod types;
+pub mod workflow;
 
-// Re-export core types
+// Core types
+pub use action::{BasicAction, PlayerAction};
 pub use card::{Card, Rank, Suit};
+pub use contracts::{LegalAction, NotBust, ValidAction, execute_action, validate_action};
 pub use deck::Deck;
 pub use error::ActionError;
 pub use hand::{Hand, HandValue};
 pub use ledger::{BankrollLedger, BetDeducted, PayoutSettled};
+pub use typestate::{
+    GameBetting, GameDealerTurn, GameFinished, GamePlayerTurn, GameResult, GameSetup,
+};
 pub use types::Outcome;
+// Workflow re-exports for convenience
+pub use workflow::{
+    BetPlaced, PlayerTurnComplete, PlaceBetOutput, PlayActionOutput, PlayActionResult,
+    execute_dealer_turn, execute_place_bet, execute_play_action,
+};

@@ -67,12 +67,13 @@ pub use games::tictactoe::{
     Outcome, Player, Position, Square,
 };
 
-// Public API exports - Blackjack types
-pub use games::blackjack::{
-    ActionError, BasicAction, BetPlaced, BlackjackWorkflow, GameBetting, GameDealerTurn,
+// Public API exports - Blackjack types (game logic from strictly_blackjack, workflow from server)
+pub use strictly_blackjack::{
+    ActionError, BasicAction, BetPlaced, GameBetting, GameDealerTurn,
     GameFinished as BlackjackFinished, GamePlayerTurn, GameResult as BlackjackResult,
-    GameSetup as BlackjackSetup, HandResult, PayoutSettled, PlayerAction, PlayerTurnComplete,
+    GameSetup as BlackjackSetup, PayoutSettled, PlayerAction, PlayerTurnComplete,
 };
+pub use games::blackjack::{BlackjackWorkflow, HandResult};
 
 // Re-export for convenience
 pub use strictly_tictactoe;

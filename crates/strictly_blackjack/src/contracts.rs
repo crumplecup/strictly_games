@@ -3,24 +3,24 @@
 //! Instead of runtime-only validation, we use the elicitation framework's
 //! contract system to carry proofs through the program.
 
-use super::action::{ActionError, BasicAction, PlayerAction};
-use super::typestate::GamePlayerTurn;
 use elicitation::contracts::{And, Established, Prop, both};
 use tracing::instrument;
+
+use crate::{ActionError, BasicAction, GamePlayerTurn, PlayerAction};
 
 // ─────────────────────────────────────────────────────────────
 //  Propositions (Type-Level Statements)
 // ─────────────────────────────────────────────────────────────
 
-/// Proposition: The action is valid for the current game state.
+/// Proposition: the action is valid for the current game state.
 pub struct ValidAction;
 impl Prop for ValidAction {}
 
-/// Proposition: The hand is not bust.
+/// Proposition: the hand is not bust.
 pub struct NotBust;
 impl Prop for NotBust {}
 
-/// Composite proposition: An action is legal (valid AND not bust).
+/// Composite proposition: an action is legal (valid AND not bust).
 pub type LegalAction = And<ValidAction, NotBust>;
 
 // ─────────────────────────────────────────────────────────────
@@ -33,17 +33,12 @@ pub fn validate_valid_action(
     action: &PlayerAction,
     game: &GamePlayerTurn,
 ) -> Result<Established<ValidAction>, ActionError> {
-    // Validate hand index
     if action.hand_index() >= game.player_hands.len() {
         return Err(ActionError::InvalidHandIndex(action.hand_index()));
     }
-
-    // Validate hand index matches current
     if action.hand_index() != game.current_hand_index {
         return Err(ActionError::InvalidHandIndex(action.hand_index()));
     }
-
-    // All basic actions (Hit/Stand) are always valid if hand index is correct
     Ok(Established::assert())
 }
 
@@ -54,7 +49,6 @@ pub fn validate_not_bust(
     game: &GamePlayerTurn,
 ) -> Result<Established<NotBust>, ActionError> {
     let hand = &game.player_hands[action.hand_index()];
-
     if hand.is_bust() {
         Err(ActionError::HandBust)
     } else {
@@ -91,7 +85,6 @@ pub fn execute_action(
 ) -> Result<(), ActionError> {
     match action.action() {
         BasicAction::Hit => {
-            // Deal card to current hand
             if let Some(card) = game.deck.deal() {
                 game.player_hands[action.hand_index()].add_card(card);
                 Ok(())
@@ -99,9 +92,6 @@ pub fn execute_action(
                 Err(ActionError::DeckExhausted)
             }
         }
-        BasicAction::Stand => {
-            // No state change - hand is marked complete by caller
-            Ok(())
-        }
+        BasicAction::Stand => Ok(()),
     }
 }

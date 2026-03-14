@@ -21,15 +21,13 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
-use strictly_blackjack::{Hand, Outcome};
-use tokio::time::{Duration, sleep};
-use tracing::{info, instrument, warn};
-
-use crate::games::blackjack::{
-    BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup, PlaceBetOutput,
-    PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet,
+use strictly_blackjack::{
+    BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup, Hand, Outcome,
+    PlaceBetOutput, PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet,
     execute_play_action,
 };
+use tokio::time::{Duration, sleep};
+use tracing::{info, instrument, warn};
 use crate::tui::tui_communicator::TuiCommunicator;
 use crate::tui::typestate_widget::{
     ChoiceHint, GameEvent, PhaseContext, TypestateGraphWidget, blackjack_active, blackjack_edges,
@@ -204,8 +202,6 @@ where
                     "⚡  Instant resolution"
                 };
             event_log.push(GameEvent::story(reason));
-            // Fast-finish: Betting jumped directly to Finished via natural path.
-            current_phase = "Finished".to_string();
             event_log.push(GameEvent::phase_change("Betting", "Finished"));
             event_log.push(GameEvent::proof("PayoutSettled"));
             f

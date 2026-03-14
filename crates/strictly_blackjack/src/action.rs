@@ -1,13 +1,10 @@
-//! Action types for blackjack.
+//! Player action types for blackjack.
 
 use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-// ActionError lives in strictly_blackjack (pure game logic, needed for formal verification)
-pub use strictly_blackjack::ActionError;
-
-/// Basic actions available to the player (Milestone 1: Hit/Stand only).
+/// Basic actions available to the player.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
@@ -19,7 +16,7 @@ pub enum BasicAction {
 }
 
 impl BasicAction {
-    /// Returns the label for this action.
+    /// Returns the display label for this action.
     pub fn label(self) -> &'static str {
         match self {
             BasicAction::Hit => "Hit",

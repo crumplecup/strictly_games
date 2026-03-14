@@ -1,17 +1,9 @@
-//! Blackjack game implementation with typestate state machine and contracts.
+//! Blackjack game — server orchestration layer.
+//!
+//! Game logic, typestate, and workflow contracts live in `strictly_blackjack`.
+//! This module provides the async `BlackjackWorkflow<C>` orchestrator that
+//! bridges the game logic with `ElicitCommunicator` for human and AI sessions.
 
-mod action;
-mod contracts;
-mod typestate;
 pub mod workflow;
 
-// Local exports
-pub use action::{ActionError, BasicAction, PlayerAction};
-pub use typestate::{
-    GameBetting, GameDealerTurn, GameFinished, GamePlayerTurn, GameResult, GameSetup,
-};
-pub use workflow::{
-    BetPlaced, BlackjackWorkflow, HandResult, PayoutSettled, PlaceBetOutput, PlayActionOutput,
-    PlayActionResult, PlayerTurnComplete, execute_dealer_turn, execute_place_bet,
-    execute_play_action,
-};
+pub use workflow::{BlackjackWorkflow, HandResult};

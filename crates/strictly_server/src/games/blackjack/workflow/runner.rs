@@ -14,15 +14,11 @@
 
 use elicitation::contracts::Established;
 use elicitation::{ElicitCommunicator, ElicitResult, Elicitation};
-use strictly_blackjack::Outcome;
-use tracing::instrument;
-
-use crate::games::blackjack::{BasicAction, GameFinished, GameSetup};
-
-use super::propositions::PayoutSettled;
-use super::tools::{
-    PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet, execute_play_action,
+use strictly_blackjack::{
+    BasicAction, GameFinished, GameSetup, Outcome, PayoutSettled, PlaceBetOutput, PlayActionOutput,
+    PlayActionResult, execute_dealer_turn, execute_place_bet, execute_play_action,
 };
+use tracing::instrument;
 
 /// Outcome of a single hand of blackjack.
 #[derive(Debug, Clone)]
@@ -84,7 +80,6 @@ impl<C: ElicitCommunicator> BlackjackWorkflow<C> {
             .map_err(|e| elicitation::ElicitErrorKind::Validation(e.to_string()))?;
 
         // ── Fast path: natural blackjack or dealer natural ────────────────
-        use super::tools::PlaceBetOutput;
         let (finished, final_proof) = match place_output {
             // Settlement already happened inside place_bet — carry the proof.
             PlaceBetOutput::Finished(f, settled) => (f, settled),
