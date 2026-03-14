@@ -168,7 +168,7 @@ pub struct BlackjackWorkflow<C: ElicitCommunicator> {
 ```
 
 `BlackjackWorkflow<TuiCommunicator>` is a human playing in the terminal.  
-`BlackjackWorkflow<AgentCommunicator>` is an LLM playing through MCP.
+`BlackjackWorkflow<C: ElicitCommunicator>` works equally for any communicator — including an MCP agent implementation.
 
 The proof chain is identical. The `execute_*` functions are identical. The only difference is what happens when `elicit()` is called — either a human types a response in raw mode, or an AI agent responds to a structured prompt over a tool-call protocol.
 
@@ -284,8 +284,8 @@ Because the game logic lives in pure functions (`execute_place_bet`, etc.) that 
 ├─────────────────────────────────────────────────────────────┤
 │                    ElicitCommunicator                         │
 │                                                              │
-│   TuiCommunicator          AgentCommunicator                 │
-│   (crossterm raw mode)     (MCP tool calls)                  │
+│   TuiCommunicator          (any ElicitCommunicator)            │
+│   (crossterm raw mode)     (e.g. MCP tool calls)              │
 │                                                              │
 │   Same elicit() calls. Different prompt rendering.           │
 │   Same proof chain. Different communication channel.         │
