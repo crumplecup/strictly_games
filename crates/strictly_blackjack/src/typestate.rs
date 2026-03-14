@@ -185,6 +185,18 @@ impl std::fmt::Debug for GamePlayerTurn {
 }
 
 impl GamePlayerTurn {
+    /// Takes an action targeting the current hand — convenience wrapper that
+    /// eliminates manual hand-index management.
+    ///
+    /// Equivalent to `take_action(PlayerAction::new(action, self.current_hand_index()))`.
+    /// Prefer this over `take_action` in single-hand play; use `take_action` directly
+    /// only when you need explicit hand targeting (e.g., future split scenarios).
+    #[instrument(skip(self))]
+    pub fn action_on_current(self, action: BasicAction) -> Result<GameResult, ActionError> {
+        let idx = self.current_hand_index;
+        self.take_action(PlayerAction::new(action, idx))
+    }
+
     /// Takes an action, consuming self and transitioning to next state.
     #[instrument(skip(self))]
     pub fn take_action(self, action: PlayerAction) -> Result<GameResult, ActionError> {

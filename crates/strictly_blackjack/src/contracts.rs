@@ -37,7 +37,10 @@ pub fn validate_valid_action(
         return Err(ActionError::InvalidHandIndex(action.hand_index()));
     }
     if action.hand_index() != game.current_hand_index {
-        return Err(ActionError::InvalidHandIndex(action.hand_index()));
+        return Err(ActionError::WrongHandTurn {
+            expected: game.current_hand_index,
+            got: action.hand_index(),
+        });
     }
     Ok(Established::assert())
 }
