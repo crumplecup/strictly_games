@@ -12,7 +12,7 @@ use crate::{
     ActionError, BankrollLedger, BasicAction, BetDeducted, Deck, Hand, Outcome, PayoutSettled,
     PlayerAction, execute_action, validate_action,
 };
-use crate::MAX_PLAYER_HANDS;
+use crate::{MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 
 // ─────────────────────────────────────────────────────────────
 //  Setup Phase
@@ -314,7 +314,13 @@ impl GameDealerTurn {
     #[instrument(skip(self))]
     pub fn play_dealer_turn(mut self) -> (GameFinished, Established<PayoutSettled>) {
         // Dealer follows fixed rules: hit on 16 or less, stand on 17+.
-        while self.dealer_hand.value().best() < 17 {
+        //
+        // Bounded for-loop (not while) so Kani can auto-determine the unwind
+        // limit from MAX_HAND_CARDS without needing #[kani::unwind].
+        for _ in 0..MAX_HAND_CARDS {
+            if self.dealer_hand.value().best() >= 17 {
+                break;
+            }
             if let Some(card) = self.deck.deal() {
                 self.dealer_hand.add_card(card);
             } else {
@@ -334,7 +340,11 @@ impl GameDealerTurn {
         let dealer_bust = self.dealer_hand.is_bust();
 
         let mut outcomes = [Outcome::default(); MAX_PLAYER_HANDS];
-        for i in 0..self.num_hands {
+        // Bounded by compile-time constant so Kani auto-determines loop bound.
+        for i in 0..MAX_PLAYER_HANDS {
+            if i >= self.num_hands {
+                break;
+            }
             let hand = &self.player_hands[i];
             let player_value = hand.value().best();
             outcomes[i] = if hand.is_bust() {

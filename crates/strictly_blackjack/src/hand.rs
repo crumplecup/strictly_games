@@ -143,8 +143,12 @@ impl Hand {
         let mut hard_total = 0u8;
         let mut ace_count = 0;
 
-        // Fixed-size slice: Kani can auto-determine loop bound = self.len ≤ MAX_HAND_CARDS.
-        for card in &self.cards[..self.len] {
+        // Bounded by MAX_HAND_CARDS constant so Kani auto-determines loop bound.
+        for i in 0..MAX_HAND_CARDS {
+            if i >= self.len {
+                break;
+            }
+            let card = &self.cards[i];
             if card.is_ace() {
                 ace_count += 1;
                 hard_total = hard_total.saturating_add(1);
@@ -214,8 +218,11 @@ impl Serialize for Hand {
     {
         use serde::ser::SerializeSeq;
         let mut seq = serializer.serialize_seq(Some(self.len))?;
-        for card in &self.cards[..self.len] {
-            seq.serialize_element(card)?;
+        for i in 0..MAX_HAND_CARDS {
+            if i >= self.len {
+                break;
+            }
+            seq.serialize_element(&self.cards[i])?;
         }
         seq.end()
     }
