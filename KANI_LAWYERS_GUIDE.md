@@ -47,7 +47,7 @@ The proofs are organised into five categories. All 69 harnesses pass.
 
 **Harnesses:** `verify_rank_compositional`, `verify_suit_compositional`,
 `verify_card_compositional`, `verify_outcome_compositional`,
-`verify_blackjack_legos`, `verify_bankroll_legos`
+`verify_blackjack_legos`
 
 Before any game logic runs, Kani verifies that the fundamental data types
 are internally consistent.
@@ -277,11 +277,11 @@ This is the most legally significant category. It covers the question:
 *does the player receive exactly the right amount of money for each
 outcome?*
 
-**Harnesses:** `verify_debit_arithmetic`, `verify_debit_zero_bet_rejected`,
-`verify_debit_overdraft_rejected`, `verify_settle_loss`,
-`verify_settle_push`, `verify_settle_win`, `verify_settle_blackjack`,
-`verify_settle_surrender`, `verify_win_roundtrip`, `verify_push_roundtrip`,
-`verify_loss_roundtrip`, `verify_surrender_roundtrip`,
+**Harnesses:** `verify_bankroll_legos`, `verify_debit_arithmetic`,
+`verify_debit_zero_bet_rejected`, `verify_debit_overdraft_rejected`,
+`verify_settle_loss`, `verify_settle_push`, `verify_settle_win`,
+`verify_settle_blackjack`, `verify_settle_surrender`, `verify_win_roundtrip`,
+`verify_push_roundtrip`, `verify_loss_roundtrip`, `verify_surrender_roundtrip`,
 `verify_no_double_deduction`
 
 #### The payout table
@@ -539,22 +539,28 @@ Property: Established<PayoutSettled> established ∎
 Result:   PROVED ✓
 ```
 
-#### Bankroll conservation (symbolic, all valid inputs)
+#### Bankroll conservation (concrete Win scenario)
 
-This is the most powerful scenario harness. Rather than checking one
-concrete (bankroll, bet) pair, it uses symbolic execution over **all
-valid inputs** — every bankroll in [101, 10,000] and every bet in [1, 100]:
+This harness proves the bankroll conservation law holds end-to-end through
+the full workflow for a concrete Win scenario: bankroll=1000, bet=100,
+player King+King=20 vs dealer Six+Ten+Two=18.
 
 ```
-∀ bankroll ∈ [101, 10_000], bet ∈ [1, 100], bet ≤ bankroll:
-  bankroll_after = bankroll_before − bet + gross_return(outcome, bet)
+bankroll_before = 1000, bet = 100, outcome = Win
+  → gross_return = bet × 2 = 200
+  → final_bankroll = (1000 − 100) + 200 = 1100
+  → final_bankroll = bankroll_before + bet ✓
 
 Result:   PROVED ✓
 ```
 
-This is the integration-layer counterpart to the unit-level `debit_then_settle_win`
-round-trip proof. Together they prove financial conservation at every layer
-of the stack.
+The harness uses a concrete deck rather than symbolic inputs because the
+per-outcome arithmetic is already proven symbolically by the round-trip
+harnesses in Category 3 (`verify_win_roundtrip`, etc.).  This harness
+proves something different: that the *workflow plumbing* correctly threads
+the `BetDeducted` / `PayoutSettled` proof tokens from `execute_place_bet`
+through to `execute_dealer_turn`, with the right numbers coming out the
+other end.
 
 ---
 

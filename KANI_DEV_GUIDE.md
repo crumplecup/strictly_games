@@ -372,10 +372,16 @@ Split rules: `can_split_matching_ranks`, `cannot_split_different_ranks`,
 
 ### Financial harnesses (`blackjack_invariants.rs`) — ~12–25s each
 
-`verify_bankroll_legos`, `verify_blackjack_legos`, `verify_debit_arithmetic`,
-`debit_overdraft_rejected`, `debit_zero_bet_rejected`, `no_double_deduction`,
-`outcome_compositional`, `push_roundtrip`, `settle_blackjack`, `settle_loss`,
-`settle_push`, `win` *(settle_win)*, `suit_compositional`, `surrender_roundtrip`
+### Financial harnesses (`blackjack_invariants.rs`) — ~12–25s each
+
+`verify_rank_compositional`, `verify_suit_compositional`,
+`verify_card_compositional`, `verify_outcome_compositional`,
+`verify_blackjack_legos`, `verify_bankroll_legos`,
+`verify_debit_arithmetic`, `verify_debit_overdraft_rejected`,
+`verify_debit_zero_bet_rejected`, `verify_no_double_deduction`,
+`verify_settle_blackjack`, `verify_settle_loss`, `verify_settle_push`,
+`verify_settle_surrender`, `verify_settle_win`, `verify_win_roundtrip`,
+`verify_push_roundtrip`, `verify_loss_roundtrip`, `verify_surrender_roundtrip`
 
 ### Scenario harnesses (`blackjack_scenarios.rs`) — ~30–140s each
 
@@ -387,6 +393,8 @@ Split rules: `can_split_matching_ranks`, `cannot_split_different_ranks`,
 ### Tic-tac-toe harnesses — ~1–25s each
 
 `position_roundtrip`, `position_to_index_is_always_valid`,
-`player_opponent_is_involutive`, `square_equality`, `set_marks_occupied`,
+`player_opponent_is_involutive`, `opponent_returns_other_player`,
+`square_equality`, `set_marks_occupied`, `get_set_roundtrip`,
+`new_board_is_empty`, `no_winner_on_empty_board`,
 `winner_detects_row`, `winner_detects_column`, `winner_detects_diagonal`,
-`verify_tictactoe_compositional`, `verify_win_roundtrip`
+`verify_tictactoe_compositional`
