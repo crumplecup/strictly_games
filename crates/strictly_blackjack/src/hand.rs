@@ -4,6 +4,20 @@ use super::card::Card;
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
+/// Maximum number of cards a hand can hold.
+///
+/// With a single 52-card deck, the longest possible non-busted hand is 11 cards:
+/// 4 Aces (4) + 4 Twos (8) + 3 Threes (9) = 21.  Any 12th card would bust.
+/// Using a fixed-size array lets Kani auto-determine loop bounds without
+/// per-harness `#[kani::unwind]` annotations.
+pub const MAX_HAND_CARDS: usize = 11;
+
+/// Maximum number of player hands (1 initial + up to 3 splits).
+///
+/// Standard blackjack allows splitting pairs up to 3 times, producing at most 4 hands.
+/// Fixed-size array lets Kani auto-determine loop bounds over player hands.
+pub const MAX_PLAYER_HANDS: usize = 4;
+
 /// Value of a blackjack hand (hard and soft totals).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
@@ -55,35 +69,70 @@ impl std::fmt::Display for HandValue {
 }
 
 /// A hand of cards in blackjack.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit)]
+///
+/// Backed by a fixed-size array of [`MAX_HAND_CARDS`] slots so that Kani can
+/// auto-determine loop bounds in [`Hand::value`] without manual
+/// `#[kani::unwind]` annotations on every verification harness.
+///
+/// Serializes / deserializes as a variable-length JSON array for wire
+/// compatibility with the original `Vec`-backed representation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
 pub struct Hand {
-    cards: Vec<Card>,
+    cards: [Card; MAX_HAND_CARDS],
+    len: usize,
 }
 
 impl Hand {
-    /// Creates a new empty hand.
-    pub fn new(cards: Vec<Card>) -> Self {
-        Self { cards }
+    /// Creates a hand pre-populated from a slice.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `cards.len() > MAX_HAND_CARDS`.
+    pub fn new(cards: &[Card]) -> Self {
+        assert!(
+            cards.len() <= MAX_HAND_CARDS,
+            "Hand::new: {} cards exceeds MAX_HAND_CARDS ({})",
+            cards.len(),
+            MAX_HAND_CARDS,
+        );
+        let mut arr = [Card::default(); MAX_HAND_CARDS];
+        arr[..cards.len()].copy_from_slice(cards);
+        Self { cards: arr, len: cards.len() }
+    }
+
+    /// Creates an empty hand.
+    pub fn empty() -> Self {
+        Self { cards: [Card::default(); MAX_HAND_CARDS], len: 0 }
     }
 
     /// Adds a card to the hand.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the hand is already at capacity ([`MAX_HAND_CARDS`]).
     pub fn add_card(&mut self, card: Card) {
-        self.cards.push(card);
+        assert!(
+            self.len < MAX_HAND_CARDS,
+            "Hand::add_card: hand is full ({} cards)",
+            MAX_HAND_CARDS,
+        );
+        self.cards[self.len] = card;
+        self.len += 1;
     }
 
-    /// Returns the cards in this hand.
+    /// Returns the cards in this hand as a slice.
     pub fn cards(&self) -> &[Card] {
-        &self.cards
+        &self.cards[..self.len]
     }
 
     /// Returns the number of cards in this hand.
     pub fn card_count(&self) -> usize {
-        self.cards.len()
+        self.len
     }
 
     /// Returns true if the hand is empty.
     pub fn is_empty(&self) -> bool {
-        self.cards.is_empty()
+        self.len == 0
     }
 
     /// Calculates the value of this hand.
@@ -94,8 +143,8 @@ impl Hand {
         let mut hard_total = 0u8;
         let mut ace_count = 0;
 
-        // Calculate hard total (all aces as 1)
-        for card in &self.cards {
+        // Fixed-size slice: Kani can auto-determine loop bound = self.len ≤ MAX_HAND_CARDS.
+        for card in &self.cards[..self.len] {
             if card.is_ace() {
                 ace_count += 1;
                 hard_total = hard_total.saturating_add(1);
@@ -106,7 +155,6 @@ impl Hand {
 
         // Try to use one ace as 11 (soft total)
         let soft_total = if ace_count > 0 {
-            // Add 10 to convert one ace from 1 to 11
             let soft = hard_total.saturating_add(10);
             if soft <= 21 { Some(soft) } else { None }
         } else {
@@ -123,21 +171,24 @@ impl Hand {
 
     /// Returns true if this is a blackjack (natural 21 with 2 cards).
     pub fn is_blackjack(&self) -> bool {
-        self.cards.len() == 2 && self.value().best() == 21
+        self.len == 2 && self.value().best() == 21
     }
 
     /// Returns true if this hand can be split (2 cards with same rank).
     pub fn can_split(&self) -> bool {
-        self.cards.len() == 2 && self.cards[0].rank() == self.cards[1].rank()
+        self.len == 2 && self.cards[0].rank() == self.cards[1].rank()
     }
 
     /// Formats the hand as a readable string showing all cards.
     pub fn display(&self) -> String {
-        if self.cards.is_empty() {
+        if self.len == 0 {
             return "Empty hand".to_string();
         }
 
-        let cards_str: Vec<String> = self.cards.iter().map(|c| c.to_string()).collect();
+        let cards_str: Vec<String> = self.cards[..self.len]
+            .iter()
+            .map(|c| c.to_string())
+            .collect();
         let value = self.value();
 
         format!("{} ({})", cards_str.join(" "), value)
@@ -146,12 +197,43 @@ impl Hand {
 
 impl Default for Hand {
     fn default() -> Self {
-        Self::new(Vec::new())
+        Self::empty()
     }
 }
 
 impl std::fmt::Display for Hand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.display())
+    }
+}
+
+impl Serialize for Hand {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeSeq;
+        let mut seq = serializer.serialize_seq(Some(self.len))?;
+        for card in &self.cards[..self.len] {
+            seq.serialize_element(card)?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Hand {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let cards: Vec<Card> = Vec::deserialize(deserializer)?;
+        if cards.len() > MAX_HAND_CARDS {
+            return Err(serde::de::Error::custom(format!(
+                "hand has {} cards, exceeds MAX_HAND_CARDS ({})",
+                cards.len(),
+                MAX_HAND_CARDS,
+            )));
+        }
+        Ok(Hand::new(&cards))
     }
 }

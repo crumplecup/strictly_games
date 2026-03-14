@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 
 /// Rank of a playing card.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Elicit,
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+    Elicit,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Rank {
     /// Ace (value 1 or 11).
+    #[default]
     Ace,
     /// Two (value 2).
     Two,
@@ -102,11 +104,13 @@ impl std::fmt::Display for Rank {
 
 /// Suit of a playing card.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Elicit,
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+    Elicit,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Suit {
     /// Hearts (♥).
+    #[default]
     Hearts,
     /// Diamonds (♦).
     Diamonds,
@@ -139,7 +143,8 @@ impl std::fmt::Display for Suit {
 
 /// A playing card with rank and suit.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, Elicit,
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+    Elicit,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct Card {

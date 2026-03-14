@@ -12,6 +12,7 @@ use crate::{
     ActionError, BankrollLedger, BasicAction, BetDeducted, Deck, Hand, Outcome, PayoutSettled,
     PlayerAction, execute_action, validate_action,
 };
+use crate::MAX_PLAYER_HANDS;
 
 // ─────────────────────────────────────────────────────────────
 //  Setup Phase
@@ -79,8 +80,8 @@ impl GameBetting {
         let (ledger, bet_deducted) = BankrollLedger::debit(self.bankroll, bet)?;
 
         let mut deck = self.deck;
-        let mut player_hand = Hand::new(Vec::new());
-        let mut dealer_hand = Hand::new(Vec::new());
+        let mut player_hand = Hand::empty();
+        let mut dealer_hand = Hand::empty();
 
         for _ in 0..2 {
             if let Some(card) = deck.deal() {
@@ -97,26 +98,37 @@ impl GameBetting {
 
         // Check for immediate blackjack — settle the ledger now.
         if player_hand.is_blackjack() {
+            let mut player_hands = [Hand::empty(); MAX_PLAYER_HANDS];
+            player_hands[0] = player_hand;
+            let mut bets_arr = [0u64; MAX_PLAYER_HANDS];
+            bets_arr[0] = bet;
+
             if dealer_hand.is_blackjack() {
                 let (bankroll, settled) = ledger.settle(Outcome::Push, bet_deducted);
+                let mut outcomes = [Outcome::default(); MAX_PLAYER_HANDS];
+                outcomes[0] = Outcome::Push;
                 return Ok(GameResult::Finished(
                     GameFinished {
-                        player_hands: vec![player_hand],
+                        player_hands,
+                        num_hands: 1,
                         dealer_hand,
-                        bets: vec![bet],
-                        outcomes: vec![Outcome::Push],
+                        bets: bets_arr,
+                        outcomes,
                         bankroll,
                     },
                     settled,
                 ));
             } else {
                 let (bankroll, settled) = ledger.settle(Outcome::Blackjack, bet_deducted);
+                let mut outcomes = [Outcome::default(); MAX_PLAYER_HANDS];
+                outcomes[0] = Outcome::Blackjack;
                 return Ok(GameResult::Finished(
                     GameFinished {
-                        player_hands: vec![player_hand],
+                        player_hands,
+                        num_hands: 1,
                         dealer_hand,
-                        bets: vec![bet],
-                        outcomes: vec![Outcome::Blackjack],
+                        bets: bets_arr,
+                        outcomes,
                         bankroll,
                     },
                     settled,
@@ -127,12 +139,19 @@ impl GameBetting {
         // Dealer blackjack (player doesn't have it) — settle immediately.
         if dealer_hand.is_blackjack() {
             let (bankroll, settled) = ledger.settle(Outcome::Loss, bet_deducted);
+            let mut player_hands = [Hand::empty(); MAX_PLAYER_HANDS];
+            player_hands[0] = player_hand;
+            let mut bets_arr = [0u64; MAX_PLAYER_HANDS];
+            bets_arr[0] = bet;
+            let mut outcomes = [Outcome::default(); MAX_PLAYER_HANDS];
+            outcomes[0] = Outcome::Loss;
             return Ok(GameResult::Finished(
                 GameFinished {
-                    player_hands: vec![player_hand],
+                    player_hands,
+                    num_hands: 1,
                     dealer_hand,
-                    bets: vec![bet],
-                    outcomes: vec![Outcome::Loss],
+                    bets: bets_arr,
+                    outcomes,
                     bankroll,
                 },
                 settled,
@@ -140,12 +159,17 @@ impl GameBetting {
         }
 
         // Normal game — carry the ledger + proof through to dealer resolution.
+        let mut player_hands = [Hand::empty(); MAX_PLAYER_HANDS];
+        player_hands[0] = player_hand;
+        let mut bets_arr = [0u64; MAX_PLAYER_HANDS];
+        bets_arr[0] = bet;
         Ok(GameResult::PlayerTurn(GamePlayerTurn {
             deck,
-            player_hands: vec![player_hand],
+            player_hands,
+            num_hands: 1,
             current_hand_index: 0,
             dealer_hand,
-            bets: vec![bet],
+            bets: bets_arr,
             ledger,
             bet_deducted,
         }))
@@ -160,10 +184,11 @@ impl GameBetting {
 #[derive(Clone, Elicit)]
 pub struct GamePlayerTurn {
     pub(crate) deck: Deck,
-    pub(crate) player_hands: Vec<Hand>,
+    pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
+    pub(crate) num_hands: usize,
     pub(crate) current_hand_index: usize,
     pub(crate) dealer_hand: Hand,
-    pub(crate) bets: Vec<u64>,
+    pub(crate) bets: [u64; MAX_PLAYER_HANDS],
     /// Financial ledger proving the bet was deducted exactly once.
     pub(crate) ledger: BankrollLedger,
     /// Proof token that the bet has been debited; consumed at settlement.
@@ -172,11 +197,13 @@ pub struct GamePlayerTurn {
 
 impl std::fmt::Debug for GamePlayerTurn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let active_hands = &self.player_hands[..self.num_hands];
+        let active_bets = &self.bets[..self.num_hands];
         f.debug_struct("GamePlayerTurn")
-            .field("player_hands", &self.player_hands)
+            .field("player_hands", &active_hands)
             .field("current_hand_index", &self.current_hand_index)
             .field("dealer_hand", &self.dealer_hand)
-            .field("bets", &self.bets)
+            .field("bets", &active_bets)
             .field("ledger_balance", &self.ledger.post_bet_balance())
             .field("bet", &self.ledger.bet())
             .field("bet_deducted", &"<proof token>")
@@ -206,7 +233,6 @@ impl GamePlayerTurn {
 
         let current_hand = &game.player_hands[game.current_hand_index];
         let hand_complete = current_hand.is_bust() || action.action() == BasicAction::Stand;
-
         if hand_complete {
             game.advance_hand()
         } else {
@@ -219,10 +245,11 @@ impl GamePlayerTurn {
     fn advance_hand(mut self) -> Result<GameResult, ActionError> {
         self.current_hand_index += 1;
 
-        if self.current_hand_index >= self.player_hands.len() {
+        if self.current_hand_index >= self.num_hands {
             Ok(GameResult::DealerTurn(GameDealerTurn {
                 deck: self.deck,
                 player_hands: self.player_hands,
+                num_hands: self.num_hands,
                 dealer_hand: self.dealer_hand,
                 bets: self.bets,
                 ledger: self.ledger,
@@ -233,9 +260,9 @@ impl GamePlayerTurn {
         }
     }
 
-    /// Returns all player hands.
+    /// Returns all active player hands.
     pub fn player_hands(&self) -> &[Hand] {
-        &self.player_hands
+        &self.player_hands[..self.num_hands]
     }
 
     /// Returns the dealer's hand.
@@ -257,9 +284,10 @@ impl GamePlayerTurn {
 #[derive(Clone, Elicit)]
 pub struct GameDealerTurn {
     pub(crate) deck: Deck,
-    pub(crate) player_hands: Vec<Hand>,
+    pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
+    pub(crate) num_hands: usize,
     pub(crate) dealer_hand: Hand,
-    pub(crate) bets: Vec<u64>,
+    pub(crate) bets: [u64; MAX_PLAYER_HANDS],
     /// Financial ledger threading the BetDeducted proof to settlement.
     pub(crate) ledger: BankrollLedger,
     /// Proof token: bet was deducted; required by BankrollLedger::settle.
@@ -268,10 +296,12 @@ pub struct GameDealerTurn {
 
 impl std::fmt::Debug for GameDealerTurn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let active_hands = &self.player_hands[..self.num_hands];
+        let active_bets = &self.bets[..self.num_hands];
         f.debug_struct("GameDealerTurn")
-            .field("player_hands", &self.player_hands)
+            .field("player_hands", &active_hands)
             .field("dealer_hand", &self.dealer_hand)
-            .field("bets", &self.bets)
+            .field("bets", &active_bets)
             .field("ledger_balance", &self.ledger.post_bet_balance())
             .field("bet", &self.ledger.bet())
             .field("bet_deducted", &"<proof token>")
@@ -303,10 +333,11 @@ impl GameDealerTurn {
         let dealer_value = self.dealer_hand.value().best();
         let dealer_bust = self.dealer_hand.is_bust();
 
-        let mut outcomes = Vec::with_capacity(self.player_hands.len());
-        for hand in self.player_hands.iter() {
+        let mut outcomes = [Outcome::default(); MAX_PLAYER_HANDS];
+        for i in 0..self.num_hands {
+            let hand = &self.player_hands[i];
             let player_value = hand.value().best();
-            let outcome = if hand.is_bust() {
+            outcomes[i] = if hand.is_bust() {
                 Outcome::Loss
             } else if dealer_bust || player_value > dealer_value {
                 Outcome::Win
@@ -315,15 +346,15 @@ impl GameDealerTurn {
             } else {
                 Outcome::Push
             };
-            outcomes.push(outcome);
         }
 
-        let primary_outcome = outcomes.first().copied().unwrap_or(Outcome::Loss);
+        let primary_outcome = outcomes[0];
         let (final_bankroll, settled) = self.ledger.settle(primary_outcome, self.bet_deducted);
 
         (
             GameFinished {
                 player_hands: self.player_hands,
+                num_hands: self.num_hands,
                 dealer_hand: self.dealer_hand,
                 bets: self.bets,
                 outcomes,
@@ -341,17 +372,18 @@ impl GameDealerTurn {
 /// Game finished — outcomes determined.
 #[derive(Debug, Clone, Elicit)]
 pub struct GameFinished {
-    player_hands: Vec<Hand>,
+    player_hands: [Hand; MAX_PLAYER_HANDS],
+    num_hands: usize,
     dealer_hand: Hand,
-    bets: Vec<u64>,
-    outcomes: Vec<Outcome>,
+    bets: [u64; MAX_PLAYER_HANDS],
+    outcomes: [Outcome; MAX_PLAYER_HANDS],
     bankroll: u64,
 }
 
 impl GameFinished {
-    /// Returns player hands.
+    /// Returns active player hands.
     pub fn player_hands(&self) -> &[Hand] {
-        &self.player_hands
+        &self.player_hands[..self.num_hands]
     }
 
     /// Returns dealer hand.
@@ -359,14 +391,14 @@ impl GameFinished {
         &self.dealer_hand
     }
 
-    /// Returns bets for each hand.
+    /// Returns bets for each active hand.
     pub fn bets(&self) -> &[u64] {
-        &self.bets
+        &self.bets[..self.num_hands]
     }
 
-    /// Returns outcomes for each hand.
+    /// Returns outcomes for each active hand.
     pub fn outcomes(&self) -> &[Outcome] {
-        &self.outcomes
+        &self.outcomes[..self.num_hands]
     }
 
     /// Returns final bankroll.

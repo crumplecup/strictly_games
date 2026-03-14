@@ -30,9 +30,9 @@ pub mod workflow;
 pub use action::{BasicAction, PlayerAction};
 pub use card::{Card, Rank, Suit};
 pub use contracts::{LegalAction, NotBust, ValidAction, execute_action, validate_action};
-pub use deck::Deck;
+pub use deck::{Deck, MAX_DECK_CARDS};
 pub use error::ActionError;
-pub use hand::{Hand, HandValue};
+pub use hand::{Hand, HandValue, MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 pub use ledger::{BankrollLedger, BetDeducted, PayoutSettled};
 pub use typestate::{
     GameBetting, GameDealerTurn, GameFinished, GamePlayerTurn, GameResult, GameSetup,

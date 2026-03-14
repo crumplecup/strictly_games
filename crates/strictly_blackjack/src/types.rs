@@ -4,7 +4,7 @@ use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 
 /// Outcome of a blackjack hand.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
 pub enum Outcome {
     /// Player won (hand closer to 21 than dealer).
     Win,
@@ -13,6 +13,7 @@ pub enum Outcome {
     /// Push (tie with dealer).
     Push,
     /// Player lost (dealer closer to 21, or player bust).
+    #[default]
     Loss,
     /// Player surrendered (forfeited half bet).
     Surrender,

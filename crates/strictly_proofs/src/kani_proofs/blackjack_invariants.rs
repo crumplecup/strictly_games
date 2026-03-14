@@ -1,16 +1,16 @@
 //! Blackjack invariant proofs.
 //!
 //! Uses "cloud of assumptions" pattern:
-//! - Trust: Rust's type system (enums, bounds checks, Vec)
+//! - Trust: Rust's type system (enums, bounds checks, fixed arrays)
 //! - Verify: Game semantics (deck integrity, hand values, game rules)
 
-use strictly_blackjack::{Card, Deck, Hand, HandValue, Rank, Suit};
+use strictly_blackjack::{Card, Deck, Hand, HandValue, MAX_DECK_CARDS, Rank, Suit};
 
 /// Verifies a new deck has exactly 52 cards.
 ///
 /// Property: |Deck::new_shuffled().remaining()| = 52
 ///
-/// Cloud: Trust Vec::len() and RNG
+/// Cloud: Trust fixed-array indexing and RNG
 /// Verify: Our deck initialization creates 52 cards
 #[cfg(kani)]
 #[kani::proof]
@@ -23,7 +23,7 @@ fn deck_has_52_cards() {
 ///
 /// Property: deal(deck) ⟹ remaining(deck') = remaining(deck) - 1
 ///
-/// Cloud: Trust Vec::pop()
+/// Cloud: Trust fixed-array indexing and `dealt` counter
 /// Verify: Our deal tracking logic
 #[cfg(kani)]
 #[kani::proof]
@@ -42,12 +42,11 @@ fn deal_reduces_remaining() {
 /// Property: remaining(deck) = 0 ⟹ deal(deck) = None
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(53)] // Need 52 deals + 1 final check
 fn exhausted_deck_returns_none() {
     let mut deck = Deck::new_shuffled();
 
-    // Deal all 52 cards
-    for _ in 0..52 {
+    // Deal all MAX_DECK_CARDS cards — concrete constant, Kani auto-determines bound.
+    for _ in 0..MAX_DECK_CARDS {
         let card = deck.deal();
         assert!(card.is_some(), "Cards available while remaining > 0");
     }
@@ -98,7 +97,7 @@ fn ace_detection() {
 #[cfg(kani)]
 #[kani::proof]
 fn empty_hand_zero_value() {
-    let hand = Hand::new(vec![]);
+    let hand = Hand::new(&[]);
     let value = hand.value();
 
     assert_eq!(value.hard(), 0, "Empty hand has hard value 0");
@@ -111,7 +110,7 @@ fn empty_hand_zero_value() {
 #[cfg(kani)]
 #[kani::proof]
 fn hand_value_no_aces() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Two, Suit::Spades),
         Card::new(Rank::Three, Suit::Hearts),
     ]);
@@ -128,7 +127,7 @@ fn hand_value_no_aces() {
 #[cfg(kani)]
 #[kani::proof]
 fn hand_value_single_ace_soft() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ace, Suit::Spades),
         Card::new(Rank::Six, Suit::Hearts),
     ]);
@@ -147,7 +146,7 @@ fn hand_value_single_ace_soft() {
 #[cfg(kani)]
 #[kani::proof]
 fn hand_value_ace_busts_soft() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ace, Suit::Spades),
         Card::new(Rank::Ten, Suit::Hearts),
         Card::new(Rank::Five, Suit::Diamonds),
@@ -167,18 +166,15 @@ fn hand_value_ace_busts_soft() {
 /// Soft value only exists if ≤ 21
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(8)]
 fn hand_value_bounds() {
-    // Create hand with bounded number of cards (max 7 for practical verification)
+    // Symbolic array of 7 cards — no fill loop needed, Kani generates the array
+    // symbolically without unwinding.  card_count bounds the active slice.
     let card_count: usize = kani::any();
     kani::assume(card_count <= 7);
 
-    let mut cards = Vec::new();
-    for _ in 0..card_count {
-        cards.push(kani::any());
-    }
+    let cards: [Card; 7] = kani::any();
 
-    let hand = Hand::new(cards);
+    let hand = Hand::new(&cards[..card_count]);
     let value = hand.value();
 
     // Hard total can't overflow u8 (saturating_add prevents it)
@@ -196,18 +192,14 @@ fn hand_value_bounds() {
 /// Property: is_blackjack(h) ⟹ |h| = 2 ∧ value(h) = 21
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(8)]
 fn blackjack_requires_two_cards() {
-    // Create hand with bounded number of cards
+    // Symbolic array of 7 cards — no fill loop needed.
     let card_count: usize = kani::any();
     kani::assume(card_count <= 7);
 
-    let mut cards = Vec::new();
-    for _ in 0..card_count {
-        cards.push(kani::any());
-    }
+    let cards: [Card; 7] = kani::any();
 
-    let hand = Hand::new(cards);
+    let hand = Hand::new(&cards[..card_count]);
 
     if hand.is_blackjack() {
         assert_eq!(hand.card_count(), 2, "Blackjack requires exactly 2 cards");
@@ -223,7 +215,7 @@ fn blackjack_requires_two_cards() {
 #[cfg(kani)]
 #[kani::proof]
 fn blackjack_ace_ten() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ace, Suit::Spades),
         Card::new(Rank::Ten, Suit::Hearts),
     ]);
@@ -237,7 +229,7 @@ fn blackjack_ace_ten() {
 #[cfg(kani)]
 #[kani::proof]
 fn blackjack_ace_king() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ace, Suit::Spades),
         Card::new(Rank::King, Suit::Hearts),
     ]);
@@ -251,7 +243,7 @@ fn blackjack_ace_king() {
 #[cfg(kani)]
 #[kani::proof]
 fn three_card_21_not_blackjack() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Seven, Suit::Spades),
         Card::new(Rank::Seven, Suit::Hearts),
         Card::new(Rank::Seven, Suit::Diamonds),
@@ -268,7 +260,7 @@ fn three_card_21_not_blackjack() {
 #[cfg(kani)]
 #[kani::proof]
 fn bust_detection() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::King, Suit::Spades),
         Card::new(Rank::Queen, Suit::Hearts),
         Card::new(Rank::Five, Suit::Diamonds),
@@ -285,7 +277,7 @@ fn bust_detection() {
 #[cfg(kani)]
 #[kani::proof]
 fn no_bust_under_21() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ten, Suit::Spades),
         Card::new(Rank::Six, Suit::Hearts),
     ]);
@@ -301,7 +293,7 @@ fn no_bust_under_21() {
 #[cfg(kani)]
 #[kani::proof]
 fn exactly_21_not_bust() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::King, Suit::Spades),
         Card::new(Rank::Queen, Suit::Hearts),
         Card::new(Rank::Ace, Suit::Diamonds),
@@ -320,7 +312,7 @@ fn exactly_21_not_bust() {
 fn can_split_matching_ranks() {
     let rank: Rank = kani::any();
 
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(rank, Suit::Spades),
         Card::new(rank, Suit::Hearts),
     ]);
@@ -334,7 +326,7 @@ fn can_split_matching_ranks() {
 #[cfg(kani)]
 #[kani::proof]
 fn cannot_split_different_ranks() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::King, Suit::Spades),
         Card::new(Rank::Queen, Suit::Hearts),
     ]);
@@ -348,11 +340,11 @@ fn cannot_split_different_ranks() {
 #[cfg(kani)]
 #[kani::proof]
 fn cannot_split_wrong_count() {
-    let hand = Hand::new(vec![Card::new(Rank::King, Suit::Spades)]);
+    let hand = Hand::new(&[Card::new(Rank::King, Suit::Spades)]);
 
     assert!(!hand.can_split(), "Single card cannot split");
 
-    let hand3 = Hand::new(vec![
+    let hand3 = Hand::new(&[
         Card::new(Rank::King, Suit::Spades),
         Card::new(Rank::King, Suit::Hearts),
         Card::new(Rank::King, Suit::Diamonds),
@@ -394,7 +386,7 @@ fn ace_raw_value_is_eleven() {
     // Rank::value() returns 11 for Ace — calculate_value treats it as 1 hard.
     assert_eq!(Card::new(Rank::Ace, suit).value(), 11, "Ace raw rank value is 11");
     // In a single-ace hand, hard=1 and soft=11
-    let hand = Hand::new(vec![Card::new(Rank::Ace, suit)]);
+    let hand = Hand::new(&[Card::new(Rank::Ace, suit)]);
     assert_eq!(hand.value().hard(), 1, "Ace counts as 1 in hard total");
     assert_eq!(hand.value().soft(), Some(11), "Ace counts as 11 in soft total");
 }
@@ -408,17 +400,14 @@ fn ace_raw_value_is_eleven() {
 /// Only one ace can be counted as 11 at a time.
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(8)]
 fn soft_hard_exact_relation() {
+    // Symbolic array of 7 cards — no fill loop needed.
     let card_count: usize = kani::any();
     kani::assume(card_count <= 7);
 
-    let mut cards = Vec::new();
-    for _ in 0..card_count {
-        cards.push(kani::any::<Card>());
-    }
+    let cards: [Card; 7] = kani::any();
 
-    let hand = Hand::new(cards);
+    let hand = Hand::new(&cards[..card_count]);
     let value = hand.value();
 
     if let Some(soft) = value.soft() {
@@ -442,22 +431,24 @@ fn soft_hard_exact_relation() {
 /// appears exactly once — proven by exhaustive pairwise comparison.
 #[cfg(kani)]
 #[kani::proof]
-#[kani::unwind(53)]
 fn deck_all_cards_unique() {
-    // Build an ordered deck the same way new_shuffled() does (no shuffle in kani).
-    let mut cards: Vec<Card> = Vec::new();
-    for suit in Suit::ALL {
-        for rank in Rank::ALL {
-            cards.push(Card::new(rank, suit));
-        }
+    let mut deck = Deck::new_shuffled();
+
+    // Deal all cards into a fixed-size array — MAX_DECK_CARDS is a constant so
+    // Kani auto-determines the loop bound without an unwind annotation.
+    let mut cards = [Card::default(); MAX_DECK_CARDS];
+    for i in 0..MAX_DECK_CARDS {
+        let card = deck.deal();
+        assert!(card.is_some(), "All 52 cards available on fresh deck");
+        cards[i] = card.unwrap();
     }
 
-    assert_eq!(cards.len(), 52, "Deck has 52 cards");
+    assert_eq!(deck.remaining(), 0, "Deck has exactly MAX_DECK_CARDS cards");
 
     // Verify no two positions hold the same card.
-    // Kani unrolls this loop over the concrete 52-element Vec.
-    for i in 0..cards.len() {
-        for j in 0..cards.len() {
+    // Both loop bounds are the constant MAX_DECK_CARDS — Kani unrolls them automatically.
+    for i in 0..MAX_DECK_CARDS {
+        for j in 0..MAX_DECK_CARDS {
             if i != j {
                 assert_ne!(cards[i], cards[j], "No duplicate cards in deck");
             }
@@ -481,7 +472,7 @@ fn blackjack_biconditional_converse() {
     let rank2: Rank = kani::any();
     let suit2: Suit = kani::any();
 
-    let hand = Hand::new(vec![Card::new(rank1, suit1), Card::new(rank2, suit2)]);
+    let hand = Hand::new(&[Card::new(rank1, suit1), Card::new(rank2, suit2)]);
 
     // Converse: if it's a 2-card hand totaling 21, it must be blackjack.
     if hand.value().best() == 21 && hand.card_count() == 2 {
@@ -501,7 +492,7 @@ fn blackjack_biconditional_converse() {
 #[cfg(kani)]
 #[kani::proof]
 fn double_ace_value() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ace, Suit::Spades),
         Card::new(Rank::Ace, Suit::Hearts),
     ]);
@@ -521,7 +512,7 @@ fn double_ace_value() {
 #[cfg(kani)]
 #[kani::proof]
 fn ace_ace_nine_value() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ace, Suit::Spades),
         Card::new(Rank::Ace, Suit::Hearts),
         Card::new(Rank::Nine, Suit::Diamonds),
@@ -540,7 +531,7 @@ fn ace_ace_nine_value() {
 #[cfg(kani)]
 #[kani::proof]
 fn ace_ace_ten_soft_collapses() {
-    let hand = Hand::new(vec![
+    let hand = Hand::new(&[
         Card::new(Rank::Ace, Suit::Spades),
         Card::new(Rank::Ace, Suit::Hearts),
         Card::new(Rank::Ten, Suit::Diamonds),
