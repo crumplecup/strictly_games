@@ -190,6 +190,7 @@ fn scenario_both_natural() {
 /// **Key property:** normal play chain terminates → `Win` ∧ `PayoutSettled` ∎
 #[cfg(kani)]
 #[kani::proof]
+#[kani::unwind(2)]
 fn scenario_normal_stand() {
     let betting = betting_with_deck(vec![
         Card::new(Rank::King, Suit::Spades),    // p1
@@ -243,6 +244,7 @@ fn scenario_normal_stand() {
 /// **Key property:** player bust path terminates → `Loss` ∧ `PayoutSettled` ∎
 #[cfg(kani)]
 #[kani::proof]
+#[kani::unwind(2)]
 fn scenario_player_bust() {
     let betting = betting_with_deck(vec![
         Card::new(Rank::Six, Suit::Spades),    // p1
@@ -294,6 +296,7 @@ fn scenario_player_bust() {
 /// **Key property:** dealer bust path terminates → `Win` ∧ `PayoutSettled` ∎
 #[cfg(kani)]
 #[kani::proof]
+#[kani::unwind(2)]
 fn scenario_dealer_bust() {
     let betting = betting_with_deck(vec![
         Card::new(Rank::Eight, Suit::Spades),  // p1
