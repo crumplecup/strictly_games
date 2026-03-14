@@ -103,13 +103,204 @@ verify-check:
     @echo "Checking verification code compiles..."
     cargo check -p strictly_proofs
 
-# Tracked verification (CSV output with timestamps)
-verify-kani-tracked:
-    @echo "Running tracked Kani verification..."
-    cargo run --bin strictly_games -- verify --tool kani
+# Run each Kani harness individually, recording pass/fail/duration to a CSV.
+# Format: module,harness,status,duration_secs,timestamp
+# Usage: just verify-kani-tracked            (fresh run, overwrites CSV)
+#        just verify-kani-tracked my.csv     (custom CSV path)
+verify-kani-tracked csv="kani_verification_results.csv":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CSV="{{csv}}"
+    echo "module,harness,status,duration_secs,timestamp" > "$CSV"
+    PASS=0; FAIL=0
+    HARNESSES=(
+        ace_ace_nine_value
+        ace_ace_ten_soft_collapses
+        ace_detection
+        ace_raw_value_is_eleven
+        blackjack_ace_king
+        blackjack_ace_ten
+        blackjack_biconditional_converse
+        blackjack_requires_two_cards
+        bust_detection
+        cannot_split_different_ranks
+        cannot_split_wrong_count
+        can_split_matching_ranks
+        card_equality
+        card_value_in_range
+        deal_reduces_remaining
+        deck_all_cards_unique
+        deck_has_52_cards
+        double_ace_value
+        empty_hand_zero_value
+        exactly_21_not_bust
+        exhausted_deck_returns_none
+        face_card_values_are_ten
+        get_set_roundtrip
+        hand_value_ace_busts_soft
+        hand_value_bounds
+        handvalue_equality
+        hand_value_no_aces
+        hand_value_single_ace_soft
+        new_board_is_empty
+        no_bust_under_21
+        no_winner_on_empty_board
+        opponent_returns_other_player
+        player_opponent_is_involutive
+        position_roundtrip
+        position_to_index_is_always_valid
+        scenario_bankroll_conservation
+        scenario_both_natural
+        scenario_dealer_bust
+        scenario_dealer_natural
+        scenario_normal_stand
+        scenario_player_bust
+        scenario_player_natural
+        set_marks_occupied
+        soft_hard_exact_relation
+        square_equality
+        three_card_21_not_blackjack
+        verify_bankroll_legos
+        verify_blackjack_legos
+        verify_card_compositional
+        verify_debit_arithmetic
+        verify_debit_overdraft_rejected
+        verify_debit_zero_bet_rejected
+        verify_loss_roundtrip
+        verify_no_double_deduction
+        verify_outcome_compositional
+        verify_push_roundtrip
+        verify_rank_compositional
+        verify_settle_blackjack
+        verify_settle_loss
+        verify_settle_push
+        verify_settle_surrender
+        verify_settle_win
+        verify_suit_compositional
+        verify_surrender_roundtrip
+        verify_tictactoe_compositional
+        verify_win_roundtrip
+        winner_detects_column
+        winner_detects_diagonal
+        winner_detects_row
+    )
+    TOTAL=${#HARNESSES[@]}
+    echo "🔬 Running $TOTAL Kani harnesses → $CSV"
+    echo ""
+    for harness in "${HARNESSES[@]}"; do
+        printf "  %-50s" "$harness"
+        START=$(date +%s)
+        if cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
+            END=$(date +%s)
+            ELAPSED=$((END - START))
+            echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            printf "✅ PASS (%ds)\n" "$ELAPSED"
+            PASS=$((PASS + 1))
+        else
+            END=$(date +%s)
+            ELAPSED=$((END - START))
+            echo "kani_proofs,$harness,FAIL,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            printf "❌ FAIL (%ds)\n" "$ELAPSED"
+            FAIL=$((FAIL + 1))
+        fi
+    done
+    echo ""
+    echo "Results: $PASS/$TOTAL passed, $FAIL failed"
+    echo "CSV:     $CSV"
 
-# Run Verus verification with CSV tracking
-verify-verus-tracked:
+# Resume a previous tracked run — skips harnesses already recorded as PASS.
+verify-kani-resume csv="kani_verification_results.csv":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then
+        echo "No existing CSV at $CSV — use 'just verify-kani-tracked' to start fresh."
+        exit 1
+    fi
+    # Build set of already-passed harnesses
+    PASSED=$(awk -F',' '$3=="PASS" {print $2}' "$CSV" | sort -u)
+    HARNESSES=(
+        ace_ace_nine_value ace_ace_ten_soft_collapses ace_detection ace_raw_value_is_eleven
+        blackjack_ace_king blackjack_ace_ten blackjack_biconditional_converse blackjack_requires_two_cards
+        bust_detection cannot_split_different_ranks cannot_split_wrong_count can_split_matching_ranks
+        card_equality card_value_in_range deal_reduces_remaining deck_all_cards_unique deck_has_52_cards
+        double_ace_value empty_hand_zero_value exactly_21_not_bust exhausted_deck_returns_none
+        face_card_values_are_ten get_set_roundtrip hand_value_ace_busts_soft hand_value_bounds
+        handvalue_equality hand_value_no_aces hand_value_single_ace_soft new_board_is_empty
+        no_bust_under_21 no_winner_on_empty_board opponent_returns_other_player player_opponent_is_involutive
+        position_roundtrip position_to_index_is_always_valid scenario_bankroll_conservation
+        scenario_both_natural scenario_dealer_bust scenario_dealer_natural scenario_normal_stand
+        scenario_player_bust scenario_player_natural set_marks_occupied soft_hard_exact_relation
+        square_equality three_card_21_not_blackjack verify_bankroll_legos verify_blackjack_legos
+        verify_card_compositional verify_debit_arithmetic verify_debit_overdraft_rejected
+        verify_debit_zero_bet_rejected verify_loss_roundtrip verify_no_double_deduction
+        verify_outcome_compositional verify_push_roundtrip verify_rank_compositional
+        verify_settle_blackjack verify_settle_loss verify_settle_push verify_settle_surrender
+        verify_settle_win verify_suit_compositional verify_surrender_roundtrip
+        verify_tictactoe_compositional verify_win_roundtrip winner_detects_column
+        winner_detects_diagonal winner_detects_row
+    )
+    PASS=0; FAIL=0; SKIP=0
+    echo "🔬 Resuming Kani run — skipping already-passed harnesses"
+    echo ""
+    for harness in "${HARNESSES[@]}"; do
+        if echo "$PASSED" | grep -qx "$harness"; then
+            printf "  %-50s⏭  SKIP (already passed)\n" "$harness"
+            SKIP=$((SKIP + 1))
+            continue
+        fi
+        printf "  %-50s" "$harness"
+        START=$(date +%s)
+        if cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
+            END=$(date +%s); ELAPSED=$((END - START))
+            echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            printf "✅ PASS (%ds)\n" "$ELAPSED"
+            PASS=$((PASS + 1))
+        else
+            END=$(date +%s); ELAPSED=$((END - START))
+            echo "kani_proofs,$harness,FAIL,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            printf "❌ FAIL (%ds)\n" "$ELAPSED"
+            FAIL=$((FAIL + 1))
+        fi
+    done
+    echo ""
+    echo "Results: $PASS newly passed, $FAIL failed, $SKIP skipped"
+    echo "CSV:     $CSV"
+
+# Print a summary of a previous tracked run from the CSV.
+verify-kani-summary csv="kani_verification_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then
+        echo "No CSV found at $CSV"
+        exit 1
+    fi
+    PASS=$(awk -F',' '$3=="PASS"' "$CSV" | wc -l | tr -d ' ')
+    FAIL=$(awk -F',' '$3=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    TOTAL=$((PASS + FAIL))
+    echo "📊 Kani verification summary ($CSV)"
+    echo "   Passed: $PASS / $TOTAL"
+    echo "   Failed: $FAIL"
+    if [ "$FAIL" -gt 0 ]; then
+        echo ""
+        echo "Failed harnesses:"
+        awk -F',' '$3=="FAIL" {printf "  ❌ %s\n", $2}' "$CSV"
+    fi
+
+# Show only failed harnesses from the CSV.
+verify-kani-failed csv="kani_verification_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then echo "No CSV at $CSV"; exit 1; fi
+    FAIL=$(awk -F',' '$3=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    if [ "$FAIL" -eq 0 ]; then
+        echo "✅ No failed harnesses in $CSV"
+    else
+        echo "❌ Failed harnesses:"
+        awk -F',' '$3=="FAIL" {printf "  %s  (%ss)\n", $2, $4}' "$CSV"
+    fi
+
+
     @echo "Running tracked Verus verification..."
     cargo run --bin strictly_games -- verify --tool verus
 
@@ -119,9 +310,8 @@ verify-creusot-tracked:
     cargo run --bin strictly_games -- verify --tool creusot
 
 # Show current verification status from CSV
-verify-status:
-    @echo "Verification status:"
-    @echo "Run 'just verify-all-tracked' to see all results"
+verify-status csv="kani_verification_results.csv":
+    just verify-kani-summary {{csv}}
 
 # Run all tracked verification (Kani + Verus + Creusot)
 verify-all-tracked:

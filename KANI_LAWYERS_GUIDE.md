@@ -663,4 +663,12 @@ is not "we think so" or "testing shows it." The answer is:
 ---
 
 *Proofs are in `crates/strictly_proofs/src/kani_proofs/`.*
-*Run them with `just verify-kani-tracked` or `cargo kani -p strictly_proofs`.*
+*Run them with:*
+
+```bash
+just verify-kani-tracked          # Run all 69 harnesses; write per-harness CSV
+just verify-kani-resume           # Resume after interruption (skips already-PASS)
+just verify-kani-summary          # Print pass/fail totals from last run
+just verify-kani-failed           # List only the failing harnesses
+cargo kani -p strictly_proofs     # One-shot (no per-harness tracking)
+```
