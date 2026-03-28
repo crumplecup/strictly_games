@@ -3,13 +3,18 @@
 #![warn(missing_docs)]
 
 pub mod blackjack;
+pub mod chat_widget;
 mod input; // Cursor movement
+pub mod mcp_communicator;
+pub mod observable_communicator;
 mod rest_client; // Type-safe REST client
 mod standalone;
 pub mod tui_communicator;
 mod typestate_widget;
 
-pub use blackjack::{BlackjackSessionOutcome, run_blackjack_session};
+pub use blackjack::{BlackjackSessionOutcome, run_blackjack_session, run_multi_blackjack_session};
+pub use chat_widget::{ChatMessage, ChatWidget, Participant, chat_channel};
+pub use mcp_communicator::LlmElicitCommunicator;
 
 use anyhow::Result;
 use crossterm::{

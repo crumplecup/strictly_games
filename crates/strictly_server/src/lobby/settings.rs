@@ -2,6 +2,8 @@
 
 use tracing::instrument;
 
+use crate::AgentConfig;
+
 /// The game to play.
 ///
 /// Defaults to [`GameType::TicTacToe`].
@@ -100,4 +102,28 @@ impl LobbySettings {
     pub fn new() -> Self {
         Self::default()
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Multi-player table types
+// ─────────────────────────────────────────────────────────────
+
+/// Whether a seat at the blackjack table is controlled by a human or an AI agent.
+#[derive(Debug, Clone)]
+pub enum PlayerKind {
+    /// The human sitting at the keyboard.
+    Human,
+    /// An AI agent backed by the given configuration.
+    Agent(AgentConfig),
+}
+
+/// One seat at the multi-player blackjack table.
+#[derive(Debug, Clone)]
+pub struct PlayerSlot {
+    /// Display name shown in the TUI (e.g. "You" or the model label).
+    pub name: String,
+    /// Starting bankroll for this hand.
+    pub bankroll: u64,
+    /// Human or agent, with config if applicable.
+    pub kind: PlayerKind,
 }

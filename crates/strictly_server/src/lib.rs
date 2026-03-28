@@ -11,6 +11,9 @@
 
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
+// The multi-player blackjack async state machine is deeply nested; 128 is
+// insufficient for the layout computation of the controller's run() future.
+#![recursion_limit = "256"]
 
 // Private module declarations
 mod agent_config;
@@ -41,7 +44,10 @@ pub use db::{
 };
 
 // Public API exports - Lobby
-pub use lobby::{FirstPlayer, GameType, LobbyController, LobbySettings, Screen, ScreenTransition};
+pub use lobby::{
+    FirstPlayer, GameType, LobbyController, LobbySettings, PlayerKind, PlayerSlot, Screen,
+    ScreenTransition,
+};
 
 // Public API exports - Profile service
 pub use profile_service::ProfileService;
@@ -67,13 +73,16 @@ pub use games::tictactoe::{
     Outcome, Player, Position, Square,
 };
 
+// Public API exports - TicTacToe contract propositions
+pub use games::tictactoe::{PlayerTurn, SquareEmpty};
+
 // Public API exports - Blackjack types (game logic from strictly_blackjack, workflow from server)
+pub use games::blackjack::{BlackjackWorkflow, HandResult};
 pub use strictly_blackjack::{
     ActionError, BasicAction, BetPlaced, GameBetting, GameDealerTurn,
     GameFinished as BlackjackFinished, GamePlayerTurn, GameResult as BlackjackResult,
     GameSetup as BlackjackSetup, PayoutSettled, PlayerAction, PlayerTurnComplete,
 };
-pub use games::blackjack::{BlackjackWorkflow, HandResult};
 
 // Re-export for convenience
 pub use strictly_tictactoe;

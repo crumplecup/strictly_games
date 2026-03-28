@@ -4,7 +4,7 @@ use crossterm::event::KeyEvent;
 use ratatui::Frame;
 
 use crate::ProfileService;
-use crate::lobby::settings::GameType;
+use crate::lobby::settings::{GameType, PlayerSlot};
 
 /// The result of handling an input event on a screen.
 ///
@@ -35,6 +35,13 @@ pub enum ScreenTransition {
     GoToInGame {
         /// Name of the selected agent config to use as the AI opponent.
         agent_name: String,
+    },
+    /// Navigate to the blackjack table setup screen to configure seats.
+    GoToBlackjackSetup,
+    /// Launch a multi-player blackjack session with the configured seats.
+    GoToBlackjackTable {
+        /// One slot per seat (human first, then agents in order).
+        players: Vec<PlayerSlot>,
     },
     /// Exit the lobby application cleanly.
     Quit,

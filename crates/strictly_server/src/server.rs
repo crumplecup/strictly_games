@@ -1,6 +1,5 @@
 //! MCP server setup and configuration.
 
-use strictly_blackjack::{BasicAction, GameSetup};
 use crate::games::tictactoe::{Player, Position};
 use crate::session::{PlayerType, SessionManager};
 use elicitation::{ChoiceSet, ElicitServer, Elicitation};
@@ -11,6 +10,7 @@ use rmcp::service::{Peer, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use strictly_blackjack::{BasicAction, GameSetup};
 use tracing::{debug, error, info, instrument, warn};
 
 /// Request for registering a player.
@@ -666,10 +666,8 @@ impl GameServer {
 
                 result_messages.push(format!("Action: {:?}\n", action));
 
-                let player_action = strictly_blackjack::PlayerAction::new(
-                    action,
-                    player_game.current_hand_index(),
-                );
+                let player_action =
+                    strictly_blackjack::PlayerAction::new(action, player_game.current_hand_index());
 
                 game_result = player_game
                     .take_action(player_action)

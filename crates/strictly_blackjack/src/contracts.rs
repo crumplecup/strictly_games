@@ -3,7 +3,8 @@
 //! Instead of runtime-only validation, we use the elicitation framework's
 //! contract system to carry proofs through the program.
 
-use elicitation::contracts::{And, Established, Prop, both};
+use elicitation::VerifiedWorkflow;
+use elicitation::contracts::{And, Established, both};
 use tracing::instrument;
 
 use crate::{ActionError, BasicAction, GamePlayerTurn, PlayerAction};
@@ -13,14 +14,17 @@ use crate::{ActionError, BasicAction, GamePlayerTurn, PlayerAction};
 // ─────────────────────────────────────────────────────────────
 
 /// Proposition: the action is valid for the current game state.
+#[derive(elicitation::Prop)]
 pub struct ValidAction;
-impl Prop for ValidAction {}
+impl VerifiedWorkflow for ValidAction {}
 
 /// Proposition: the hand is not bust.
+#[derive(elicitation::Prop)]
 pub struct NotBust;
-impl Prop for NotBust {}
+impl VerifiedWorkflow for NotBust {}
 
 /// Composite proposition: an action is legal (valid AND not bust).
+/// `And<ValidAction, NotBust>: VerifiedWorkflow` via blanket impl — proof composition is automatic.
 pub type LegalAction = And<ValidAction, NotBust>;
 
 // ─────────────────────────────────────────────────────────────

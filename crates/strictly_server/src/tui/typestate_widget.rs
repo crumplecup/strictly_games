@@ -69,6 +69,13 @@ pub struct PhaseContext {
     pub narrative: String,
     /// Available transitions the player can take right now.
     pub choices: Vec<ChoiceHint>,
+    /// The exact prompt text currently in-flight to the agent, captured by
+    /// [`ObservableCommunicator`] the moment before `send_prompt` blocks.
+    ///
+    /// `None` when no elicitation is active. When `Some`, the widget renders
+    /// the full assembled prompt (options list included) in a highlighted panel
+    /// so the observer can see precisely what the agent was asked.
+    pub pending_prompt: Option<String>,
 }
 
 impl PhaseContext {
@@ -77,6 +84,7 @@ impl PhaseContext {
         Self {
             narrative: narrative.into(),
             choices: Vec::new(),
+            pending_prompt: None,
         }
     }
 
@@ -85,7 +93,14 @@ impl PhaseContext {
         Self {
             narrative: narrative.into(),
             choices,
+            pending_prompt: None,
         }
+    }
+
+    /// Attach a live in-flight prompt snapshot from [`ObservableCommunicator`].
+    pub fn with_pending_prompt(mut self, prompt: Option<String>) -> Self {
+        self.pending_prompt = prompt;
+        self
     }
 }
 
@@ -157,10 +172,26 @@ pub fn blackjack_nodes() -> Vec<NodeDef> {
 /// Edge definitions for the blackjack typestate graph.
 pub fn blackjack_edges() -> Vec<EdgeDef> {
     vec![
-        EdgeDef { from: 0, to: 1, label: None }, // place_bet → PlayerTurn
-        EdgeDef { from: 1, to: 2, label: None }, // stand → DealerTurn
-        EdgeDef { from: 2, to: 3, label: None }, // play_dealer_turn → Finished
-        EdgeDef { from: 0, to: 3, label: Some("(natural)") }, // natural blackjack fast-finish
+        EdgeDef {
+            from: 0,
+            to: 1,
+            label: None,
+        }, // place_bet → PlayerTurn
+        EdgeDef {
+            from: 1,
+            to: 2,
+            label: None,
+        }, // stand → DealerTurn
+        EdgeDef {
+            from: 2,
+            to: 3,
+            label: None,
+        }, // play_dealer_turn → Finished
+        EdgeDef {
+            from: 0,
+            to: 3,
+            label: Some("(natural)"),
+        }, // natural blackjack fast-finish
     ]
 }
 
@@ -196,9 +227,21 @@ pub fn tictactoe_nodes() -> Vec<NodeDef> {
 /// Edge definitions for the tictactoe typestate graph.
 pub fn tictactoe_edges() -> Vec<EdgeDef> {
     vec![
-        EdgeDef { from: 0, to: 1, label: None }, // .start()
-        EdgeDef { from: 1, to: 2, label: None }, // .make_move() → terminal
-        EdgeDef { from: 2, to: 0, label: None }, // .restart()
+        EdgeDef {
+            from: 0,
+            to: 1,
+            label: None,
+        }, // .start()
+        EdgeDef {
+            from: 1,
+            to: 2,
+            label: None,
+        }, // .make_move() → terminal
+        EdgeDef {
+            from: 2,
+            to: 0,
+            label: None,
+        }, // .restart()
     ]
 }
 
@@ -509,13 +552,21 @@ impl TypestateGraphWidget<'_> {
     fn callout_height(&self) -> usize {
         match (self.active, self.context) {
             (Some(_), Some(ctx)) if !ctx.narrative.is_empty() => {
-                // border top + narrative + blank + choices + border bottom
+                // border top + narrative + blank + choices + pending_prompt + border bottom
+                let prompt_rows = match &ctx.pending_prompt {
+                    Some(p) => {
+                        // One row per line in the prompt, plus a separator blank.
+                        p.lines().count() + 1
+                    }
+                    None => 0,
+                };
                 2 + 1
                     + if ctx.choices.is_empty() {
                         0
                     } else {
                         ctx.choices.len() + 1
                     }
+                    + prompt_rows
             }
             _ => 0,
         }
@@ -629,6 +680,42 @@ impl TypestateGraphWidget<'_> {
                     buf[(right_x, row)].set_char('│').set_style(border_style);
                 }
 
+                row += 1;
+            }
+        }
+
+        // Pending prompt panel — shown when an elicitation is in-flight.
+        // Renders the exact assembled prompt (including numbered options) that
+        // was delivered to the agent, captured by ObservableCommunicator.
+        if let Some(prompt_text) = &ctx.pending_prompt {
+            let prompt_label_style = Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD);
+            let prompt_text_style = Style::default().fg(Color::Magenta);
+
+            // Blank separator before the prompt panel.
+            if row < area.y + area.height {
+                let blank = format!("│{}│", " ".repeat(inner_w));
+                buf.set_string(cx, row, &blank, border_style);
+                row += 1;
+            }
+
+            // "▶ Prompt:" label on its own line.
+            if row < area.y + area.height {
+                let header = clip_str("▶ Prompt in-flight:", inner_w - 2);
+                let padded = format!("│ {:<width$} │", header, width = inner_w.saturating_sub(2));
+                buf.set_string(cx, row, &padded, prompt_label_style);
+                row += 1;
+            }
+
+            // Each line of the prompt text (handles the multi-line Options list).
+            for prompt_line in prompt_text.lines() {
+                if row >= area.y + area.height {
+                    break;
+                }
+                let clipped = clip_str(prompt_line, inner_w.saturating_sub(2));
+                let padded = format!("│ {:<width$} │", clipped, width = inner_w.saturating_sub(2));
+                buf.set_string(cx, row, &padded, prompt_text_style);
                 row += 1;
             }
         }

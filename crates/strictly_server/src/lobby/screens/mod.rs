@@ -1,6 +1,7 @@
 //! Screen implementations for the lobby state machine.
 
 mod agent_select;
+mod blackjack_setup;
 mod game_select;
 mod in_game;
 mod main_lobby;
@@ -9,6 +10,7 @@ mod settings;
 mod stats_view;
 
 pub use agent_select::AgentSelectScreen;
+pub use blackjack_setup::BlackjackSetupScreen;
 pub use game_select::GameSelectScreen;
 pub use in_game::InGameScreen;
 pub use main_lobby::MainLobbyScreen;

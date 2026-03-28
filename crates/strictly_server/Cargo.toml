@@ -75,3 +75,5 @@ tempfile = "3"
 [features]
 # Empty marker feature for API tests
 api = []
+# Enable proof generation methods (requires elicitation/proofs)
+proofs = []

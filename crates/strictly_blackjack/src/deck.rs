@@ -40,7 +40,11 @@ impl Deck {
             cards[..total].shuffle(&mut thread_rng());
         }
 
-        Self { cards, total, dealt: 0 }
+        Self {
+            cards,
+            total,
+            dealt: 0,
+        }
     }
 
     /// Creates a deck with a specific card order (for testing and formal verification).
@@ -54,7 +58,11 @@ impl Deck {
         );
         let mut arr = [Card::default(); MAX_DECK_CARDS];
         arr[..cards.len()].copy_from_slice(cards);
-        Self { cards: arr, total: cards.len(), dealt: 0 }
+        Self {
+            cards: arr,
+            total: cards.len(),
+            dealt: 0,
+        }
     }
 
     /// Deals one card from the top of the deck.
@@ -138,6 +146,10 @@ impl<'de> Deserialize<'de> for Deck {
         }
         let mut arr = [Card::default(); MAX_DECK_CARDS];
         arr[..helper.cards.len()].copy_from_slice(&helper.cards);
-        Ok(Self { cards: arr, total: helper.cards.len(), dealt: helper.dealt })
+        Ok(Self {
+            cards: arr,
+            total: helper.cards.len(),
+            dealt: helper.dealt,
+        })
     }
 }

@@ -8,7 +8,8 @@
 
 use super::action::{Move, MoveError};
 use super::typestate::GameInProgress;
-use elicitation::contracts::{And, Established, Prop, both};
+use elicitation::VerifiedWorkflow;
+use elicitation::contracts::{And, Established, both};
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -16,14 +17,17 @@ use tracing::instrument;
 // ─────────────────────────────────────────────────────────────
 
 /// Proposition: The square at the move's position is empty.
+#[derive(elicitation::Prop)]
 pub struct SquareEmpty;
-impl Prop for SquareEmpty {}
+impl VerifiedWorkflow for SquareEmpty {}
 
 /// Proposition: It is the player's turn.
+#[derive(elicitation::Prop)]
 pub struct PlayerTurn;
-impl Prop for PlayerTurn {}
+impl VerifiedWorkflow for PlayerTurn {}
 
 /// Composite proposition: A move is legal (square empty AND player's turn).
+/// `And<SquareEmpty, PlayerTurn>: VerifiedWorkflow` via blanket impl — proof composition is automatic.
 pub type LegalMove = And<SquareEmpty, PlayerTurn>;
 
 // ─────────────────────────────────────────────────────────────

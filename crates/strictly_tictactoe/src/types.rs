@@ -1,10 +1,11 @@
 //! Core domain types for tic-tac-toe.
 
 use elicitation::{Elicit, Prompt, Select};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Player in the game.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Elicit)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Player {
     /// Player X (goes first).
@@ -24,7 +25,7 @@ impl Player {
 }
 
 /// A square on the tic-tac-toe board.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Elicit)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Square {
     /// Empty square.
@@ -34,7 +35,7 @@ pub enum Square {
 }
 
 /// 3x3 tic-tac-toe board.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Elicit)]
 pub struct Board {
     /// Squares in row-major order (0-8).
     squares: [Square; 9],

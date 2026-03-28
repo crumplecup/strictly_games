@@ -17,18 +17,20 @@
 //! BankrollLedger::debit() → BetDeducted → BankrollLedger::settle() → PayoutSettled
 //! ```
 
-use elicitation::contracts::Prop;
+use elicitation::VerifiedWorkflow;
 
 /// Proposition: a bet has been placed and initial cards dealt.
 ///
 /// Established by [`crate::execute_place_bet`].
 /// Required by [`crate::execute_play_action`].
+#[derive(elicitation::Prop)]
 pub struct BetPlaced;
-impl Prop for BetPlaced {}
+impl VerifiedWorkflow for BetPlaced {}
 
 /// Proposition: the player's turn is complete (stood, bust, or blackjack).
 ///
 /// Established by [`crate::execute_play_action`] when the hand reaches a
 /// terminal player state. Required by [`crate::execute_dealer_turn`].
+#[derive(elicitation::Prop)]
 pub struct PlayerTurnComplete;
-impl Prop for PlayerTurnComplete {}
+impl VerifiedWorkflow for PlayerTurnComplete {}

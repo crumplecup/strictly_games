@@ -312,10 +312,7 @@ fn exactly_21_not_bust() {
 fn can_split_matching_ranks() {
     let rank: Rank = kani::any();
 
-    let hand = Hand::new(&[
-        Card::new(rank, Suit::Spades),
-        Card::new(rank, Suit::Hearts),
-    ]);
+    let hand = Hand::new(&[Card::new(rank, Suit::Spades), Card::new(rank, Suit::Hearts)]);
 
     assert!(hand.can_split(), "Matching ranks can split");
 }
@@ -384,11 +381,19 @@ fn face_card_values_are_ten() {
 fn ace_raw_value_is_eleven() {
     let suit: Suit = kani::any();
     // Rank::value() returns 11 for Ace — calculate_value treats it as 1 hard.
-    assert_eq!(Card::new(Rank::Ace, suit).value(), 11, "Ace raw rank value is 11");
+    assert_eq!(
+        Card::new(Rank::Ace, suit).value(),
+        11,
+        "Ace raw rank value is 11"
+    );
     // In a single-ace hand, hard=1 and soft=11
     let hand = Hand::new(&[Card::new(Rank::Ace, suit)]);
     assert_eq!(hand.value().hard(), 1, "Ace counts as 1 in hard total");
-    assert_eq!(hand.value().soft(), Some(11), "Ace counts as 11 in soft total");
+    assert_eq!(
+        hand.value().soft(),
+        Some(11),
+        "Ace counts as 11 in soft total"
+    );
 }
 
 /// Verifies the exact soft/hard relationship: soft == hard + 10.
@@ -520,7 +525,11 @@ fn ace_ace_nine_value() {
 
     let value = hand.value();
     assert_eq!(value.hard(), 11, "A,A,9: hard = 11");
-    assert_eq!(value.soft(), Some(21), "A,A,9: soft = 21 (one ace promoted)");
+    assert_eq!(
+        value.soft(),
+        Some(21),
+        "A,A,9: soft = 21 (one ace promoted)"
+    );
 }
 
 /// Verifies ace/ace/ten: soft collapses to hard only.

@@ -7,4 +7,4 @@ mod settings;
 
 pub use controller::LobbyController;
 pub use screen::{Screen, ScreenTransition};
-pub use settings::{FirstPlayer, GameType, LobbySettings};
+pub use settings::{FirstPlayer, GameType, LobbySettings, PlayerKind, PlayerSlot};

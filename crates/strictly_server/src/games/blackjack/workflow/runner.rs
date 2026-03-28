@@ -105,8 +105,7 @@ impl<C: ElicitCommunicator> BlackjackWorkflow<C> {
                                     // Bust or instant finish — settlement already ran.
                                     // Re-use player_done_proof as PayoutSettled witness:
                                     // the Finished path in take_action came from resolve().
-                                    let settled: Established<PayoutSettled> =
-                                        Established::assert();
+                                    let settled: Established<PayoutSettled> = Established::assert();
                                     tracing::debug!("Hand finished without dealer turn");
                                     break (f, settled);
                                 }

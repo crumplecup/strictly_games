@@ -13,6 +13,7 @@
 
 #![warn(missing_docs)]
 
+mod complete;
 pub mod position;
 pub mod rules;
 pub mod types;

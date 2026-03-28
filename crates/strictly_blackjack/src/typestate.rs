@@ -341,13 +341,10 @@ impl GameDealerTurn {
 
         let mut outcomes = [Outcome::default(); MAX_PLAYER_HANDS];
         // Bounded by compile-time constant so Kani auto-determines loop bound.
-        for i in 0..MAX_PLAYER_HANDS {
-            if i >= self.num_hands {
-                break;
-            }
+        for (i, outcome) in outcomes.iter_mut().enumerate().take(self.num_hands) {
             let hand = &self.player_hands[i];
             let player_value = hand.value().best();
-            outcomes[i] = if hand.is_bust() {
+            *outcome = if hand.is_bust() {
                 Outcome::Loss
             } else if dealer_bust || player_value > dealer_value {
                 Outcome::Win

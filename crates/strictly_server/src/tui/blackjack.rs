@@ -9,8 +9,17 @@
 //! `execute_place_bet` → `execute_play_action` (loop) → `execute_dealer_turn`.
 //! The compiler enforces the correct call order via `Established<P>` contracts.
 
+use crate::tui::observable_communicator::ObservableCommunicator;
+use crate::tui::tui_communicator::TuiCommunicator;
+use crate::tui::typestate_widget::{
+    ChoiceHint, GameEvent, PhaseContext, TypestateGraphWidget, blackjack_active, blackjack_edges,
+    blackjack_nodes,
+};
+use crate::tui::{ChatMessage, LlmElicitCommunicator, Participant, chat_channel};
+use crate::{PlayerKind, PlayerSlot};
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
+use elicitation::Elicitation as _;
 use elicitation::contracts::Established;
 use ratatui::{
     Terminal,
@@ -23,17 +32,12 @@ use ratatui::{
 };
 use strictly_blackjack::{
     BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup, Hand, Outcome,
-    PlaceBetOutput, PlayActionOutput, PlayActionResult, execute_dealer_turn, execute_place_bet,
-    execute_play_action,
+    PlaceBetOutput, PlayActionOutput, PlayActionResult, SeatBet, execute_dealer_turn,
+    execute_place_bet, execute_play_action,
 };
+use tokio::sync::watch;
 use tokio::time::{Duration, sleep};
 use tracing::{info, instrument, warn};
-use crate::tui::tui_communicator::TuiCommunicator;
-use crate::tui::typestate_widget::{
-    ChoiceHint, GameEvent, PhaseContext, TypestateGraphWidget, blackjack_active, blackjack_edges,
-    blackjack_nodes,
-};
-use elicitation::Elicitation as _;
 
 /// Outcome of a complete blackjack session, from the player's perspective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +69,9 @@ struct RenderCtx<'a, B: Backend> {
     show_typestate_graph: bool,
     bj_nodes: &'a [crate::tui::typestate_widget::NodeDef],
     bj_edges: &'a [crate::tui::typestate_widget::EdgeDef],
+    /// Receives the latest in-flight prompt from [`ObservableCommunicator`].
+    /// `None` when no elicitation is active.
+    prompt_rx: watch::Receiver<Option<String>>,
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -92,7 +99,8 @@ where
 {
     info!("Starting blackjack session");
 
-    let comm = TuiCommunicator::new();
+    let (prompt_tx, prompt_rx) = watch::channel(None::<String>);
+    let comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx);
     let bj_nodes = blackjack_nodes();
     let bj_edges = blackjack_edges();
     let mut bankroll = initial_bankroll;
@@ -108,6 +116,7 @@ where
             show_typestate_graph,
             bj_nodes: &bj_nodes,
             bj_edges: &bj_edges,
+            prompt_rx: prompt_rx.clone(),
         };
 
         let Some((hand_result, hand_outcome)) =
@@ -125,6 +134,7 @@ where
             show_typestate_graph,
             bj_nodes: &bj_nodes,
             bj_edges: &bj_edges,
+            prompt_rx: prompt_rx.clone(),
         };
         render_finish(&mut ctx, &hand_result, &last_outcome, &event_log)?;
 
@@ -152,7 +162,7 @@ where
 async fn run_single_hand<B: Backend>(
     ctx: &mut RenderCtx<'_, B>,
     bankroll: u64,
-    comm: &TuiCommunicator,
+    comm: &ObservableCommunicator<TuiCommunicator>,
     event_log: &mut Vec<GameEvent>,
 ) -> Result<Option<(GameFinished, BlackjackSessionOutcome)>>
 where
@@ -250,7 +260,7 @@ async fn play_player_turn<B: Backend>(
     ctx: &mut RenderCtx<'_, B>,
     mut state: GamePlayerTurn,
     mut current_proof: Established<BetPlaced>,
-    comm: &TuiCommunicator,
+    comm: &ObservableCommunicator<TuiCommunicator>,
     current_phase: &mut String,
     event_log: &mut Vec<GameEvent>,
 ) -> Result<GameFinished>
@@ -377,7 +387,9 @@ fn render_blackjack<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
-    let phase_ctx = build_phase_context(&phase);
+    // Snapshot the latest in-flight prompt (non-blocking).
+    let pending_prompt = ctx.prompt_rx.borrow().clone();
+    let phase_ctx = build_phase_context(&phase).with_pending_prompt(pending_prompt);
 
     ctx.terminal.draw(|frame| {
         let area = frame.area();
@@ -645,6 +657,437 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
     lines
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Multi-player helpers
+// ─────────────────────────────────────────────────────────────
+
+/// Type-erased seat communicator — dispatches elicitation to either the human
+/// TUI communicator or an AI agent LLM communicator.
+enum SeatComm {
+    Human {
+        comm: ObservableCommunicator<TuiCommunicator>,
+        prompt_rx: watch::Receiver<Option<String>>,
+    },
+    Agent {
+        comm: ObservableCommunicator<LlmElicitCommunicator>,
+        prompt_rx: watch::Receiver<Option<String>>,
+    },
+}
+
+/// Elicits a valid bet (1..=max_bet) from any communicator.
+///
+/// Returns `None` only if the communicator signals a cancellation.
+#[instrument(skip(comm))]
+async fn elicit_bet_from<C: elicitation::ElicitCommunicator>(
+    comm: &C,
+    max_bet: u64,
+) -> Option<u64> {
+    loop {
+        match u64::elicit(comm).await {
+            Ok(v) if v > 0 && v <= max_bet => return Some(v),
+            Ok(_) => continue,
+            Err(_) => return None,
+        }
+    }
+}
+
+/// Elicits a `BasicAction` from any communicator.
+///
+/// Returns `None` only if the communicator signals a cancellation.
+#[instrument(skip(comm))]
+async fn elicit_action_from<C: elicitation::ElicitCommunicator>(comm: &C) -> Option<BasicAction> {
+    BasicAction::elicit(comm).await.ok()
+}
+
+/// Runs a multi-player blackjack session with one human and zero or more AI agents.
+///
+/// All players compete independently against the house from a single shared deck.
+/// Chat messages from all seats are collected and displayed in the right panel.
+///
+/// # Round flow
+///
+/// 1. Elicit a bet from each active seat (bankroll > 0).
+/// 2. Deal via [`MultiRound::deal`].
+/// 3. If dealer has a natural: settle immediately.
+/// 4. Otherwise: elicit Hit/Stand per seat until all done.
+/// 5. Dealer plays deterministically.
+/// 6. Settle all seats; update bankrolls.
+/// 7. Repeat or exit on bankroll exhaustion / player quit.
+#[instrument(skip(terminal, players))]
+pub async fn run_multi_blackjack_session<B: Backend>(
+    terminal: &mut Terminal<B>,
+    players: Vec<PlayerSlot>,
+    show_typestate_graph: bool,
+) -> Result<()>
+where
+    <B as Backend>::Error: Send + Sync + 'static,
+{
+    use strictly_blackjack::MultiRound;
+
+    info!("Starting multi-player blackjack session");
+
+    let (chat_tx, mut chat_rx) = chat_channel();
+    let bj_nodes = blackjack_nodes();
+    let bj_edges = blackjack_edges();
+
+    // Build per-seat communicators and state.
+    let mut seat_comms: Vec<SeatComm> = Vec::new();
+    let mut seat_names: Vec<String> = Vec::new();
+    let mut bankrolls: Vec<u64> = Vec::new();
+
+    for slot in players {
+        let (prompt_tx, prompt_rx) = watch::channel(None::<String>);
+        match slot.kind {
+            PlayerKind::Human => {
+                let comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx)
+                    .with_chat(chat_tx.clone(), Participant::Human);
+                seat_comms.push(SeatComm::Human { comm, prompt_rx });
+                seat_names.push(slot.name);
+                bankrolls.push(slot.bankroll);
+            }
+            PlayerKind::Agent(ref config) => match LlmElicitCommunicator::new(config) {
+                Ok(base) => {
+                    let participant = Participant::Agent(slot.name.clone());
+                    let comm = ObservableCommunicator::new(base, prompt_tx)
+                        .with_chat(chat_tx.clone(), participant);
+                    seat_comms.push(SeatComm::Agent { comm, prompt_rx });
+                    seat_names.push(slot.name);
+                    bankrolls.push(slot.bankroll);
+                }
+                Err(e) => {
+                    warn!(agent = %slot.name, error = %e, "Failed to create agent communicator");
+                }
+            },
+        }
+    }
+
+    if seat_comms.is_empty() {
+        warn!("No valid seats — aborting multi-player session");
+        return Ok(());
+    }
+
+    let num_seats = seat_comms.len();
+    let mut event_log: Vec<GameEvent> = Vec::new();
+    let mut chat_messages: Vec<ChatMessage> = Vec::new();
+
+    'session: loop {
+        // ── Collect bets ─────────────────────────────────────────────────
+        let mut seat_bets: Vec<SeatBet> = Vec::new();
+        // Track which `bankrolls` indices are participating this round so we
+        // can map `results[j]` back to the correct `bankrolls[active_indices[j]]`.
+        let mut active_indices: Vec<usize> = Vec::new();
+
+        for i in 0..num_seats {
+            let bankroll = bankrolls[i];
+            if bankroll == 0 {
+                continue;
+            }
+            event_log.push(GameEvent::story(format!(
+                "💰  {} — {bankroll} chips",
+                seat_names[i]
+            )));
+
+            let bet_opt = match &seat_comms[i] {
+                SeatComm::Human { comm, .. } => elicit_bet_from(comm, bankroll).await,
+                SeatComm::Agent { comm, .. } => elicit_bet_from(comm, bankroll).await,
+            };
+            let Some(bet) = bet_opt else {
+                break 'session;
+            };
+
+            active_indices.push(i);
+            seat_bets.push(SeatBet {
+                name: seat_names[i].clone(),
+                bankroll,
+                bet,
+            });
+        }
+
+        if seat_bets.is_empty() {
+            break 'session;
+        }
+
+        // ── Deal ─────────────────────────────────────────────────────────
+        let mut round = MultiRound::deal(seat_bets).map_err(anyhow::Error::msg)?;
+        event_log.push(GameEvent::story("🂠  Cards dealt".to_string()));
+        event_log.push(GameEvent::phase_change("Betting", "PlayerTurn"));
+        event_log.push(GameEvent::proof("BetPlaced × all seats"));
+
+        // ── Player turns (skip if dealer natural) ────────────────────────
+        if !round.dealer_natural() {
+            for (i, &seat_idx) in active_indices.iter().enumerate() {
+                if round.seats[i].is_done() {
+                    // Natural — no action needed.
+                    continue;
+                }
+
+                event_log.push(GameEvent::story(format!(
+                    "🎯  {}'s turn",
+                    seat_names[seat_idx]
+                )));
+
+                loop {
+                    // Drain any new chat messages before rendering.
+                    while let Ok(msg) = chat_rx.try_recv() {
+                        chat_messages.push(msg);
+                    }
+
+                    let prompt_snapshot = match &seat_comms[seat_idx] {
+                        SeatComm::Human { prompt_rx, .. } => prompt_rx.borrow().clone(),
+                        SeatComm::Agent { prompt_rx, .. } => prompt_rx.borrow().clone(),
+                    };
+
+                    render_multi(
+                        terminal,
+                        MultiRenderCtx {
+                            seat_names: &seat_names,
+                            bankrolls: &bankrolls,
+                            dealer_hand: &round.dealer_hand,
+                            seats: &round.seats,
+                            active_seat: i,
+                            chat_messages: &chat_messages,
+                            bj_nodes: &bj_nodes,
+                            bj_edges: &bj_edges,
+                            show_typestate_graph,
+                            event_log: &event_log,
+                            prompt: prompt_snapshot.as_deref(),
+                        },
+                    )?;
+
+                    if round.seats[i].is_done() {
+                        break;
+                    }
+
+                    let action_opt = match &seat_comms[seat_idx] {
+                        SeatComm::Human { comm, .. } => elicit_action_from(comm).await,
+                        SeatComm::Agent { comm, .. } => elicit_action_from(comm).await,
+                    };
+                    let Some(action) = action_opt else {
+                        break 'session;
+                    };
+
+                    match action {
+                        BasicAction::Hit => {
+                            let deck = &mut round.deck;
+                            round.seats[i].hit(deck).map_err(anyhow::Error::msg)?;
+                            event_log
+                                .push(GameEvent::story(format!("  {} hits", seat_names[seat_idx])));
+                        }
+                        BasicAction::Stand => {
+                            round.seats[i].stand();
+                            event_log.push(GameEvent::story(format!(
+                                "  {} stands",
+                                seat_names[seat_idx]
+                            )));
+                        }
+                    }
+                }
+            }
+        } else {
+            event_log.push(GameEvent::story("⚡  Dealer natural blackjack".to_string()));
+        }
+
+        // ── Dealer turn ──────────────────────────────────────────────────
+        event_log.push(GameEvent::phase_change("PlayerTurn", "DealerTurn"));
+        round.play_dealer();
+        event_log.push(GameEvent::phase_change("DealerTurn", "Finished"));
+
+        // ── Settle ───────────────────────────────────────────────────────
+        // Snapshot hand state before round is consumed by settle().
+        let dealer_hand_snap = round.dealer_hand;
+        let seats_snap = round.seats.clone();
+        let results = round.settle();
+        event_log.push(GameEvent::proof("PayoutSettled × all seats"));
+
+        for result in &results {
+            let outcome_str = match result.outcome {
+                Outcome::Win => "🎉 Win",
+                Outcome::Loss => "💸 Loss",
+                Outcome::Push => "🤝 Push",
+                Outcome::Blackjack => "⭐ Blackjack!",
+                Outcome::Surrender => "🏳 Surrender",
+            };
+            event_log.push(GameEvent::result(format!(
+                "{}: {} → {} chips",
+                result.name, outcome_str, result.final_bankroll
+            )));
+        }
+
+        // Update bankrolls — results are parallel to active_indices, not to
+        // bankrolls directly (skipped seats with bankroll==0 are not in results).
+        for (seat_idx, result) in active_indices.iter().zip(results.iter()) {
+            bankrolls[*seat_idx] = result.final_bankroll;
+        }
+
+        // Drain any remaining chat messages.
+        while let Ok(msg) = chat_rx.try_recv() {
+            chat_messages.push(msg);
+        }
+
+        render_multi(
+            terminal,
+            MultiRenderCtx {
+                seat_names: &seat_names,
+                bankrolls: &bankrolls,
+                dealer_hand: &dealer_hand_snap,
+                seats: &seats_snap,
+                active_seat: usize::MAX,
+                chat_messages: &chat_messages,
+                bj_nodes: &bj_nodes,
+                bj_edges: &bj_edges,
+                show_typestate_graph,
+                event_log: &event_log,
+                prompt: None,
+            },
+        )?;
+
+        if bankrolls.iter().all(|&b| b == 0) {
+            info!("All bankrolls exhausted — ending session");
+            break 'session;
+        }
+
+        if !wait_for_keypress().await? {
+            break 'session;
+        }
+    }
+
+    Ok(())
+}
+
+/// Context bundle for [`render_multi`] — avoids too-many-arguments lint.
+struct MultiRenderCtx<'a> {
+    seat_names: &'a [String],
+    bankrolls: &'a [u64],
+    dealer_hand: &'a Hand,
+    seats: &'a [strictly_blackjack::SeatPlay],
+    active_seat: usize,
+    chat_messages: &'a [ChatMessage],
+    bj_nodes: &'a [crate::tui::typestate_widget::NodeDef],
+    bj_edges: &'a [crate::tui::typestate_widget::EdgeDef],
+    show_typestate_graph: bool,
+    event_log: &'a [GameEvent],
+    prompt: Option<&'a str>,
+}
+
+/// Minimal multi-player render: left=hands, center=typestate+log, right=chat.
+#[instrument(skip_all)]
+fn render_multi<B: Backend>(terminal: &mut Terminal<B>, ctx: MultiRenderCtx<'_>) -> Result<()>
+where
+    <B as Backend>::Error: Send + Sync + 'static,
+{
+    use crate::tui::ChatWidget;
+    let MultiRenderCtx {
+        seat_names,
+        bankrolls,
+        dealer_hand,
+        seats,
+        active_seat,
+        chat_messages,
+        bj_nodes,
+        bj_edges,
+        show_typestate_graph,
+        event_log,
+        prompt,
+    } = ctx;
+
+    terminal.draw(|frame| {
+        let area = frame.area();
+
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(40),
+                Constraint::Percentage(35),
+                Constraint::Percentage(25),
+            ])
+            .split(area);
+
+        // ── Left: all players' hands ─────────────────────────────────────
+        let mut hand_lines: Vec<Line<'static>> = Vec::new();
+        hand_lines.push(Line::from(Span::styled(
+            " Dealer ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )));
+        let dealer_str = dealer_hand
+            .cards()
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        hand_lines.push(Line::from(format!("  {dealer_str}")));
+        hand_lines.push(Line::from(""));
+
+        for (i, seat) in seats.iter().enumerate() {
+            let name = seat_names.get(i).map(|s| s.as_str()).unwrap_or("?");
+            let bankroll = bankrolls.get(i).copied().unwrap_or(0);
+            let color = if i == active_seat {
+                Color::Green
+            } else {
+                Color::White
+            };
+            let prefix = if i == active_seat { "► " } else { "  " };
+
+            hand_lines.push(Line::from(Span::styled(
+                format!("{prefix}{name} ({bankroll} chips)"),
+                Style::default().fg(color).add_modifier(Modifier::BOLD),
+            )));
+            let cards_str = seat
+                .hand
+                .cards()
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let value = seat.hand.value().best();
+            let status = if seat.natural {
+                "★ Natural!".to_string()
+            } else if seat.bust {
+                "✗ Bust".to_string()
+            } else if seat.stood {
+                format!("Stand ({value})")
+            } else {
+                format!("({value})")
+            };
+            hand_lines.push(Line::from(format!("  {cards_str}  {status}")));
+            hand_lines.push(Line::from(""));
+        }
+
+        let hands_widget = Paragraph::new(hand_lines)
+            .block(Block::default().borders(Borders::ALL).title(" Table "));
+        frame.render_widget(hands_widget, chunks[0]);
+
+        // ── Center: typestate + log ───────────────────────────────────────
+        if show_typestate_graph {
+            let phase_ctx =
+                PhaseContext::info("Playing…").with_pending_prompt(prompt.map(|s| s.to_string()));
+            let widget = TypestateGraphWidget::new(
+                bj_nodes,
+                bj_edges,
+                blackjack_active("PlayerTurn"),
+                event_log,
+            )
+            .with_context(&phase_ctx);
+            frame.render_widget(widget, chunks[1]);
+        } else {
+            let log_lines: Vec<Line<'static>> = event_log
+                .iter()
+                .rev()
+                .take(chunks[1].height as usize)
+                .map(|e| Line::from(e.text.clone()))
+                .collect();
+            let log = Paragraph::new(log_lines)
+                .block(Block::default().borders(Borders::ALL).title(" Game Log "));
+            frame.render_widget(log, chunks[1]);
+        }
+
+        // ── Right: chat log ───────────────────────────────────────────────
+        let chat = ChatWidget::new(chat_messages);
+        frame.render_widget(chat, chunks[2]);
+    })?;
+    Ok(())
+}
 async fn wait_for_keypress() -> Result<bool> {
     // Drain any events buffered during the previous input phase (e.g. the
     // Enter key from the bet prompt) before we start watching for fresh input.

@@ -26,3 +26,5 @@ quote = "1"
 [features]
 # Marker features for verification tools
 verification = []
+# Enable proof generation methods (requires elicitation/proofs)
+proofs = []

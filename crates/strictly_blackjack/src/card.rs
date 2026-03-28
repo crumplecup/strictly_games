@@ -5,7 +5,17 @@ use serde::{Deserialize, Serialize};
 
 /// Rank of a playing card.
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
     Elicit,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
@@ -104,7 +114,17 @@ impl std::fmt::Display for Rank {
 
 /// Suit of a playing card.
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
     Elicit,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
@@ -143,7 +163,17 @@ impl std::fmt::Display for Suit {
 
 /// A playing card with rank and suit.
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
     Elicit,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]

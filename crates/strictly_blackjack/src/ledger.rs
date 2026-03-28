@@ -32,7 +32,8 @@
 //! debit step or attempts to settle twice (proof token is consumed on use).
 
 use elicitation::Elicit;
-use elicitation::contracts::{Established, Prop};
+use elicitation::VerifiedWorkflow;
+use elicitation::contracts::Established;
 use tracing::instrument;
 
 use crate::Outcome;
@@ -47,18 +48,18 @@ use crate::error::ActionError;
 ///
 /// Carrying this token through game state means any code that reaches
 /// settlement *must* have gone through a validated debit first.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Elicit, elicitation::Prop)]
 pub struct BetDeducted;
-impl Prop for BetDeducted {}
+impl VerifiedWorkflow for BetDeducted {}
 
 /// Proposition: the hand's payout has been correctly settled.
 ///
 /// Established exclusively by [`BankrollLedger::settle`].
 /// Consuming `Established<BetDeducted>` guarantees settlement happened
 /// exactly once and that the gross-return arithmetic was applied.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Elicit, elicitation::Prop)]
 pub struct PayoutSettled;
-impl Prop for PayoutSettled {}
+impl VerifiedWorkflow for PayoutSettled {}
 
 // ── Ledger ────────────────────────────────────────────────────────────────────
 

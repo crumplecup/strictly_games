@@ -21,9 +21,10 @@ mod deck;
 pub mod error;
 mod hand;
 pub mod ledger;
+pub mod multi_player;
 pub mod rules;
-mod typestate;
 mod types;
+mod typestate;
 pub mod workflow;
 
 // Core types
@@ -34,12 +35,13 @@ pub use deck::{Deck, MAX_DECK_CARDS};
 pub use error::ActionError;
 pub use hand::{Hand, HandValue, MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 pub use ledger::{BankrollLedger, BetDeducted, PayoutSettled};
+pub use multi_player::{MAX_SEATS, MultiRound, SeatBet, SeatPlay, SeatResult};
+pub use types::Outcome;
 pub use typestate::{
     GameBetting, GameDealerTurn, GameFinished, GamePlayerTurn, GameResult, GameSetup,
 };
-pub use types::Outcome;
 // Workflow re-exports for convenience
 pub use workflow::{
-    BetPlaced, PlayerTurnComplete, PlaceBetOutput, PlayActionOutput, PlayActionResult,
+    BetPlaced, PlaceBetOutput, PlayActionOutput, PlayActionResult, PlayerTurnComplete,
     execute_dealer_turn, execute_place_bet, execute_play_action,
 };

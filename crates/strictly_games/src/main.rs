@@ -3,6 +3,7 @@
 //! Type-safe game server with multiple modes of operation.
 
 #![warn(missing_docs)]
+#![recursion_limit = "256"]
 
 mod cli;
 

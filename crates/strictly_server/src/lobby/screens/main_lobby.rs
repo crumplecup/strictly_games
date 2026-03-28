@@ -184,7 +184,13 @@ impl Screen for MainLobbyScreen {
                 let option = self.selected_option();
                 info!(option = ?option, "Lobby option selected");
                 match option {
-                    LobbyOption::PlayGame => ScreenTransition::GoToAgentSelect,
+                    LobbyOption::PlayGame => {
+                        if self.selected_game == GameType::Blackjack {
+                            ScreenTransition::GoToBlackjackSetup
+                        } else {
+                            ScreenTransition::GoToAgentSelect
+                        }
+                    }
                     LobbyOption::SelectGame => ScreenTransition::GoToGameSelect,
                     LobbyOption::ViewStats => ScreenTransition::GoToStatsView,
                     LobbyOption::ChangeProfile => ScreenTransition::GoToProfileSelect,

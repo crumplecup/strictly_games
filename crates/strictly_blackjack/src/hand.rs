@@ -97,12 +97,18 @@ impl Hand {
         );
         let mut arr = [Card::default(); MAX_HAND_CARDS];
         arr[..cards.len()].copy_from_slice(cards);
-        Self { cards: arr, len: cards.len() }
+        Self {
+            cards: arr,
+            len: cards.len(),
+        }
     }
 
     /// Creates an empty hand.
     pub fn empty() -> Self {
-        Self { cards: [Card::default(); MAX_HAND_CARDS], len: 0 }
+        Self {
+            cards: [Card::default(); MAX_HAND_CARDS],
+            len: 0,
+        }
     }
 
     /// Adds a card to the hand.

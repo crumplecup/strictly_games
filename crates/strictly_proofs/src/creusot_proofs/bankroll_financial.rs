@@ -100,4 +100,3 @@ pub fn verify_blackjack_payout(bankroll: u64, bet: u64) -> u64 {
     let (final_balance, _) = ledger.settle(Outcome::Blackjack, token);
     final_balance
 }
-

@@ -192,11 +192,11 @@ fn scenario_both_natural() {
 #[kani::proof]
 fn scenario_normal_stand() {
     let betting = betting_with_deck(&[
-        Card::new(Rank::King, Suit::Spades),    // p1
-        Card::new(Rank::Six, Suit::Clubs),      // d1
-        Card::new(Rank::King, Suit::Hearts),    // p2 → player King+King = 20
-        Card::new(Rank::Ten, Suit::Diamonds),   // d2 → dealer Six+Ten = 16
-        Card::new(Rank::Two, Suit::Clubs),      // dealer hits → 18
+        Card::new(Rank::King, Suit::Spades),  // p1
+        Card::new(Rank::Six, Suit::Clubs),    // d1
+        Card::new(Rank::King, Suit::Hearts),  // p2 → player King+King = 20
+        Card::new(Rank::Ten, Suit::Diamonds), // d2 → dealer Six+Ten = 16
+        Card::new(Rank::Two, Suit::Clubs),    // dealer hits → 18
     ]);
 
     let place_output = execute_place_bet(betting, 100).expect("valid bet");
@@ -245,11 +245,11 @@ fn scenario_normal_stand() {
 #[kani::proof]
 fn scenario_player_bust() {
     let betting = betting_with_deck(&[
-        Card::new(Rank::Six, Suit::Spades),    // p1
-        Card::new(Rank::Two, Suit::Clubs),     // d1
-        Card::new(Rank::Seven, Suit::Hearts),  // p2 → player Six+Seven = 13
-        Card::new(Rank::Three, Suit::Diamonds),// d2 → dealer Two+Three = 5
-        Card::new(Rank::Ten, Suit::Clubs),     // player hits → 23 (bust)
+        Card::new(Rank::Six, Suit::Spades),     // p1
+        Card::new(Rank::Two, Suit::Clubs),      // d1
+        Card::new(Rank::Seven, Suit::Hearts),   // p2 → player Six+Seven = 13
+        Card::new(Rank::Three, Suit::Diamonds), // d2 → dealer Two+Three = 5
+        Card::new(Rank::Ten, Suit::Clubs),      // player hits → 23 (bust)
     ]);
 
     let place_output = execute_place_bet(betting, 100).expect("valid bet");
@@ -296,11 +296,11 @@ fn scenario_player_bust() {
 #[kani::proof]
 fn scenario_dealer_bust() {
     let betting = betting_with_deck(&[
-        Card::new(Rank::Eight, Suit::Spades),  // p1
-        Card::new(Rank::Six, Suit::Clubs),     // d1
-        Card::new(Rank::Nine, Suit::Hearts),   // p2 → player Eight+Nine = 17
-        Card::new(Rank::Seven, Suit::Diamonds),// d2 → dealer Six+Seven = 13
-        Card::new(Rank::King, Suit::Clubs),    // dealer hits → 23 (bust)
+        Card::new(Rank::Eight, Suit::Spades),   // p1
+        Card::new(Rank::Six, Suit::Clubs),      // d1
+        Card::new(Rank::Nine, Suit::Hearts),    // p2 → player Eight+Nine = 17
+        Card::new(Rank::Seven, Suit::Diamonds), // d2 → dealer Six+Seven = 13
+        Card::new(Rank::King, Suit::Clubs),     // dealer hits → 23 (bust)
     ]);
 
     let place_output = execute_place_bet(betting, 100).expect("valid bet");
@@ -379,5 +379,9 @@ fn scenario_bankroll_conservation() {
     // Compiler proves _settled: Established<PayoutSettled> ∎
 
     // Win: gross_return = bet * 2; final = (bankroll - bet) + bet * 2 = bankroll + bet
-    assert_eq!(finished.bankroll(), bankroll + bet, "Win conservation: final = initial + bet");
+    assert_eq!(
+        finished.bankroll(),
+        bankroll + bet,
+        "Win conservation: final = initial + bet"
+    );
 }

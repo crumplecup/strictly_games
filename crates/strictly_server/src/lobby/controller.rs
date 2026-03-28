@@ -10,8 +10,8 @@ use tracing::{debug, info, instrument, warn};
 
 use crate::lobby::screen::ScreenTransition;
 use crate::lobby::screens::{
-    AgentSelectScreen, GameSelectScreen, InGameScreen, MainLobbyScreen, ProfileSelectScreen,
-    SettingsScreen, StatsViewScreen,
+    AgentSelectScreen, BlackjackSetupScreen, GameSelectScreen, InGameScreen, MainLobbyScreen,
+    ProfileSelectScreen, SettingsScreen, StatsViewScreen,
 };
 use crate::lobby::settings::GameType;
 use crate::lobby::settings::LobbySettings;
@@ -29,6 +29,7 @@ enum ActiveScreen {
     MainLobby(MainLobbyScreen),
     GameSelect(GameSelectScreen),
     AgentSelect(AgentSelectScreen),
+    BlackjackSetup(BlackjackSetupScreen),
     StatsView(StatsViewScreen),
     InGame(InGameScreen),
     Settings(SettingsScreen),
@@ -93,6 +94,7 @@ impl LobbyController {
                     ActiveScreen::MainLobby(s) => s.render(f, &self.profile_service),
                     ActiveScreen::GameSelect(s) => s.render(f, &self.profile_service),
                     ActiveScreen::AgentSelect(s) => s.render(f, &self.profile_service),
+                    ActiveScreen::BlackjackSetup(s) => s.render(f, &self.profile_service),
                     ActiveScreen::StatsView(s) => s.render(f, &self.profile_service),
                     ActiveScreen::InGame(s) => s.render(f, &self.profile_service),
                     ActiveScreen::Settings(s) => s.render(f, &self.profile_service),
@@ -114,6 +116,7 @@ impl LobbyController {
                     ActiveScreen::MainLobby(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::GameSelect(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::AgentSelect(s) => s.handle_key(key, &self.profile_service),
+                    ActiveScreen::BlackjackSetup(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::StatsView(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::InGame(s) => s.handle_key(key, &self.profile_service),
                     ActiveScreen::Settings(s) => s.handle_key(key, &self.profile_service),
@@ -137,6 +140,43 @@ impl LobbyController {
                         }
                         Err(e) => {
                             tracing::error!(error = %e, "Game session failed");
+                            screen = match &self.current_user {
+                                Some(user) => ActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                                    user.clone(),
+                                    self.settings.selected_game,
+                                )),
+                                None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(
+                                    &self.profile_service,
+                                )),
+                            };
+                            continue;
+                        }
+                    }
+                }
+
+                // GoToBlackjackTable runs the multi-player session before transitioning.
+                if let ScreenTransition::GoToBlackjackTable { ref players } = transition {
+                    let players = players.clone();
+                    let player_name = self
+                        .current_user
+                        .as_ref()
+                        .map(|u| u.display_name().clone())
+                        .unwrap_or_else(|| "Human".to_string());
+                    match self
+                        .execute_blackjack_table(
+                            terminal,
+                            player_name,
+                            players,
+                            self.settings.show_typestate_graph,
+                        )
+                        .await
+                    {
+                        Ok(next_screen) => {
+                            screen = next_screen;
+                            continue;
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "Blackjack table session failed");
                             screen = match &self.current_user {
                                 Some(user) => ActiveScreen::MainLobby(MainLobbyScreen::with_game(
                                     user.clone(),
@@ -265,6 +305,31 @@ impl LobbyController {
             ScreenTransition::GoToSettings => {
                 info!("Navigating to Settings");
                 Some(ActiveScreen::Settings(SettingsScreen::new(self.settings)))
+            }
+
+            ScreenTransition::GoToBlackjackSetup => {
+                let user_name = self
+                    .current_user
+                    .as_ref()
+                    .map(|u| u.display_name().clone())
+                    .unwrap_or_else(|| "You".to_string());
+                info!(user_name = %user_name, "Navigating to BlackjackSetup");
+                Some(ActiveScreen::BlackjackSetup(BlackjackSetupScreen::new(
+                    user_name,
+                    &self.agent_library,
+                )))
+            }
+
+            // GoToBlackjackTable is handled before apply_transition; reaching here is
+            // unreachable in normal operation but we gracefully return to lobby.
+            ScreenTransition::GoToBlackjackTable { .. } => {
+                warn!("GoToBlackjackTable reached apply_transition — should have been intercepted");
+                self.current_user.as_ref().map(|user| {
+                    ActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                        user.clone(),
+                        self.settings.selected_game,
+                    ))
+                })
             }
 
             ScreenTransition::GoToInGame { agent_name } => {
@@ -439,6 +504,42 @@ impl LobbyController {
                 Ok(lobby_screen(&self.current_user))
             }
         }
+    }
+
+    /// Runs a multi-player blackjack table session.
+    ///
+    /// Called when `GoToBlackjackTable` is intercepted in the event loop.
+    #[instrument(skip(self, terminal, players), fields(num_seats = players.len()))]
+    async fn execute_blackjack_table<B: Backend + std::io::Write>(
+        &mut self,
+        terminal: &mut Terminal<B>,
+        player_name: String,
+        players: Vec<crate::lobby::settings::PlayerSlot>,
+        show_typestate_graph: bool,
+    ) -> anyhow::Result<ActiveScreen>
+    where
+        <B as Backend>::Error: Send + Sync + 'static,
+    {
+        use crate::tui::run_multi_blackjack_session;
+
+        info!(
+            player_name = %player_name,
+            num_seats = players.len(),
+            show_typestate_graph,
+            "Executing multi-player blackjack session"
+        );
+
+        let lobby_screen = |u: &Option<crate::User>| match u {
+            Some(u) => ActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                u.clone(),
+                self.settings.selected_game,
+            )),
+            None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(&self.profile_service)),
+        };
+
+        run_multi_blackjack_session(terminal, players, show_typestate_graph).await?;
+
+        Ok(lobby_screen(&self.current_user))
     }
 }
 

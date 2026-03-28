@@ -13,8 +13,9 @@ pub mod outcome;
 pub mod typestate;
 pub mod wrapper;
 
-// Re-export application types
+// Re-export contract propositions
 pub use action::{Move, MoveError};
+pub use contracts::{PlayerTurn, SquareEmpty};
 pub use outcome::Outcome;
 pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 pub use wrapper::AnyGame;

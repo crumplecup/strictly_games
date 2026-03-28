@@ -23,6 +23,7 @@ strictly_server = { path = "crates/strictly_server" }
 # Elicitation framework (local dev)
 elicitation = { path = "../elicitation/crates/elicitation/", features = [
   "rand",
+  "proofs",
 ] }
 # elicitation = { version = "0.8.2", features = ["rand"] }
 
@@ -77,7 +78,7 @@ rmcp = { version = "1.2", features = [
 schemars = { version = "1", features = ["derive"] }
 
 # LLM clients
-async-openai = { version = "0.33", features = ["chat-completion"] }
+async-openai = { version = "0.34", features = ["chat-completion"] }
 
 # Config
 dotenvy = "0.15"
