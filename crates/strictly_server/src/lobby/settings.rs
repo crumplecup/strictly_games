@@ -90,7 +90,7 @@ impl Default for LobbySettings {
     fn default() -> Self {
         Self {
             first_player: FirstPlayer::default(),
-            show_typestate_graph: false,
+            show_typestate_graph: true,
             selected_game: GameType::default(),
         }
     }
