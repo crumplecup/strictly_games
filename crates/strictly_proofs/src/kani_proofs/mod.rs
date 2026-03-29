@@ -8,4 +8,7 @@ pub mod blackjack_compositional;
 pub mod blackjack_invariants;
 pub mod blackjack_scenarios;
 pub mod compositional_proof;
+pub mod craps_financial;
+pub mod craps_invariants;
+pub mod craps_scenarios;
 pub mod game_invariants;

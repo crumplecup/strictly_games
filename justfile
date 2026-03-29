@@ -67,6 +67,7 @@ verify-compositional:
     cargo kani -p strictly_proofs --harness verify_tictactoe_compositional
     cargo kani -p strictly_proofs --harness verify_blackjack_legos
     cargo kani -p strictly_proofs --harness verify_bankroll_legos
+    cargo kani -p strictly_proofs --harness verify_craps_legos
 
 # Run game invariant proofs (game rules correctness)
 verify-invariants:
@@ -91,6 +92,53 @@ verify-financial:
         --harness verify_push_roundtrip \
         --harness verify_loss_roundtrip \
         --harness verify_surrender_roundtrip
+
+# Run craps invariant, scenario, and financial proofs
+verify-craps:
+    @echo "Verifying craps game logic..."
+    cargo kani -p strictly_proofs \
+        --harness die_face_value_bounded \
+        --harness dice_roll_sum_bounded \
+        --harness die_face_roundtrip \
+        --harness point_values_are_valid \
+        --harness point_roundtrip \
+        --harness seven_is_not_a_point \
+        --harness craps_numbers_are_not_points \
+        --harness comeout_classification_exhaustive \
+        --harness comeout_classification_exclusive \
+        --harness natural_values_correct \
+        --harness craps_values_correct \
+        --harness pass_line_payout_is_even_money \
+        --harness dont_pass_payout_is_even_money \
+        --harness place_six_eight_payout \
+        --harness place_five_nine_payout \
+        --harness place_four_ten_payout \
+        --harness house_edge_non_negative \
+        --harness comeout_natural_seven \
+        --harness comeout_natural_eleven \
+        --harness comeout_craps_two \
+        --harness comeout_craps_three \
+        --harness comeout_craps_twelve \
+        --harness point_made_eight \
+        --harness seven_out \
+        --harness point_phase_no_decision \
+        --harness pass_line_wins_on_natural \
+        --harness dont_pass_wins_on_craps_two \
+        --harness dont_pass_pushes_on_twelve \
+        --harness verify_craps_legos \
+        --harness debit_single_bet_correct \
+        --harness debit_rejects_over_bankroll \
+        --harness debit_rejects_zero_bet \
+        --harness settle_win_returns_correct_balance \
+        --harness settle_loss_reduces_balance \
+        --harness settle_push_returns_wager \
+        --harness pass_line_win_payout_correct \
+        --harness place_six_win_payout_correct \
+        --harness place_five_win_payout_correct \
+        --harness win_payout_never_zero \
+        --harness lesson_level_bounded \
+        --harness at_level_clamps \
+        --harness lesson_advancement_monotonic
 
 # Run passive-affirm escape hatch proofs
 verify-passive-affirm:
@@ -183,6 +231,48 @@ verify-kani-tracked csv="kani_verification_results.csv":
         winner_detects_column
         winner_detects_diagonal
         winner_detects_row
+        at_level_clamps
+        comeout_classification_exhaustive
+        comeout_classification_exclusive
+        comeout_craps_three
+        comeout_craps_twelve
+        comeout_craps_two
+        comeout_natural_eleven
+        comeout_natural_seven
+        craps_numbers_are_not_points
+        craps_values_correct
+        debit_rejects_over_bankroll
+        debit_rejects_zero_bet
+        debit_single_bet_correct
+        dice_roll_sum_bounded
+        die_face_roundtrip
+        die_face_value_bounded
+        dont_pass_payout_is_even_money
+        dont_pass_pushes_on_twelve
+        dont_pass_wins_on_craps_two
+        house_edge_non_negative
+        lesson_advancement_monotonic
+        lesson_level_bounded
+        natural_values_correct
+        pass_line_payout_is_even_money
+        pass_line_win_payout_correct
+        pass_line_wins_on_natural
+        place_five_nine_payout
+        place_five_win_payout_correct
+        place_four_ten_payout
+        place_six_eight_payout
+        place_six_win_payout_correct
+        point_made_eight
+        point_phase_no_decision
+        point_roundtrip
+        point_values_are_valid
+        settle_loss_reduces_balance
+        settle_push_returns_wager
+        settle_win_returns_correct_balance
+        seven_is_not_a_point
+        seven_out
+        verify_craps_legos
+        win_payout_never_zero
     )
     TOTAL=${#HARNESSES[@]}
     echo "🔬 Running $TOTAL Kani harnesses → $CSV"

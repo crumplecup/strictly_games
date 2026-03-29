@@ -13,6 +13,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(creusot)', 'cfg(kani)'] }
 [dependencies]
 strictly_tictactoe = { workspace = true }
 strictly_blackjack = { path = "../strictly_blackjack", default-features = false }
+strictly_craps = { path = "../strictly_craps", default-features = false }
 elicitation = { workspace = true }
 creusot-std = { workspace = true }
 
