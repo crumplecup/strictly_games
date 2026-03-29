@@ -22,7 +22,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{Terminal, backend::CrosstermBackend};
+use ratatui::{Terminal, backend::CrosstermBackend, style::Color};
 use std::{io, path::PathBuf};
 use tokio::process::Child;
 use tracing::{error, info, instrument};
@@ -32,8 +32,8 @@ use crate::{AnyGame, FirstPlayer, TicTacToePlayer};
 use crate::games::tictactoe::Position;
 use rest_client::RestGameClient;
 use typestate_widget::{
-    GameEvent, TypestateGraphWidget, tictactoe_active, tictactoe_edges, tictactoe_nodes,
-    tictactoe_phase_name,
+    EdgeDef, GameEvent, NodeDef, TypestateGraphWidget, tictactoe_active, tictactoe_edges,
+    tictactoe_nodes, tictactoe_phase_name,
 };
 
 /// Run the TUI client
@@ -141,7 +141,7 @@ where
     info!("Starting type-safe game loop");
 
     let mut cursor = Position::Center;
-    let mut event_log: Vec<GameEvent> = Vec::new();
+    let mut event_log: Vec<GameEvent> = vec![GameEvent::story("🎮 Game begins — X moves first")];
     let mut prev_phase: Option<&'static str> = None;
     let mut prev_move_count: usize = 0;
     let ttt_nodes = tictactoe_nodes();
@@ -151,125 +151,77 @@ where
         // Get game state (type-safe!)
         let game = client.get_game().await?;
 
-        // Track phase transitions and proof events.
+        // Track phase transitions.
         let current_phase = tictactoe_phase_name(&game);
         if Some(current_phase) != prev_phase {
             if let Some(prev) = prev_phase {
                 event_log.push(GameEvent::phase_change(prev, current_phase));
             }
             if game.is_over() {
-                event_log.push(GameEvent::result(game.status_string()));
+                if let Some(winner) = game.winner() {
+                    let w = if winner == Player::X { "X" } else { "O" };
+                    event_log.push(GameEvent::result(format!("🏆 {} wins!", w)));
+                } else {
+                    event_log.push(GameEvent::result("🤝 Draw — the board is full"));
+                }
             }
             prev_phase = Some(current_phase);
         }
-        let move_count = game.history().len();
-        if move_count > prev_move_count {
+
+        // Track individual moves with rich narration.
+        let history = game.history();
+        for (i, &pos) in history.iter().enumerate().skip(prev_move_count) {
+            let player = if i % 2 == 0 { "X" } else { "O" };
+            event_log.push(GameEvent::story(format!(
+                "  {} {} plays {}",
+                if player == "X" { "✕" } else { "◯" },
+                player,
+                pos.label(),
+            )));
             event_log.push(GameEvent::proof("LegalMove"));
-            prev_move_count = move_count;
         }
+        prev_move_count = history.len();
 
         let active = tictactoe_active(&game);
 
+        // Build status text.
+        let status_text = if let Some(ref error) = client.last_error {
+            format!(
+                "ERROR: {}  •  Arrow keys + Enter | R: Restart | Q: Quit",
+                error
+            )
+        } else if game.is_over() {
+            format!("{}  •  R: Restart | Q: Quit", game.status_string())
+        } else if let Some(player) = game.to_move() {
+            let p = if player == Player::X { "X" } else { "O" };
+            format!(
+                "Player {} to move  •  Arrow keys + Enter | R: Restart | Q: Quit",
+                p
+            )
+        } else {
+            "Waiting…  •  Arrow keys + Enter | R: Restart | Q: Quit".to_string()
+        };
+
+        let status_color = if client.last_error.is_some() {
+            Color::Red
+        } else if game.is_over() {
+            Color::Green
+        } else {
+            Color::Yellow
+        };
+
         // Render UI
+        let graph = GraphState::new(true, &ttt_nodes, &ttt_edges, active);
         terminal.draw(|f| {
-            use ratatui::{
-                layout::{Alignment, Constraint, Direction, Layout},
-                style::{Color, Modifier, Style},
-                widgets::{Block, Borders, Paragraph},
-            };
-
-            let outer = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3), // Title
-                    Constraint::Min(0),    // Content
-                    Constraint::Length(3), // Status
-                    Constraint::Length(3), // Help
-                ])
-                .split(f.area());
-
-            let content = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(55), // Board
-                    Constraint::Percentage(45), // Typestate graph
-                ])
-                .split(outer[1]);
-
-            // Title
-            let title = Paragraph::new("Strictly Games - Tic Tac Toe (Type-Safe)")
-                .style(
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            f.render_widget(title, outer[0]);
-
-            // Board (with cursor highlighting!)
-            let board_lines = render_board_with_cursor(game.board(), cursor);
-            let board = Paragraph::new(board_lines)
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).title("Board"));
-            f.render_widget(board, content[0]);
-
-            // Typestate graph.
-            f.render_widget(
-                TypestateGraphWidget::new(&ttt_nodes, &ttt_edges, active, &event_log),
-                content[1],
+            render_tictactoe_frame(
+                f,
+                &game,
+                cursor,
+                &event_log,
+                &graph,
+                &status_text,
+                status_color,
             );
-
-            // Status (type-safe!)
-            let status_text = if game.is_over() {
-                if let Some(winner) = game.winner() {
-                    format!(
-                        "Game Over! {} wins! Press 'r' to restart, 'q' to quit",
-                        if winner == Player::X { "X" } else { "O" }
-                    )
-                } else {
-                    "Game Over! Draw! Press 'r' to restart, 'q' to quit".to_string()
-                }
-            } else if let Some(player) = game.to_move() {
-                format!(
-                    "Player {} to move. Use arrow keys + Enter",
-                    if player == Player::X { "X" } else { "O" }
-                )
-            } else {
-                "Waiting...".to_string()
-            };
-
-            // Color status based on errors
-            let status_color = if client.last_error.is_some() {
-                Color::Red
-            } else {
-                Color::Yellow
-            };
-
-            let status = Paragraph::new(status_text)
-                .style(Style::default().fg(status_color))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL).title("Status"));
-            f.render_widget(status, outer[2]);
-
-            // Help / Error message
-            let help_text = if let Some(ref error) = client.last_error {
-                format!("ERROR: {}", error)
-            } else {
-                "Arrow keys: Move | Enter: Place | Q: Quit | R: Restart".to_string()
-            };
-
-            let help_color = if client.last_error.is_some() {
-                Color::Red
-            } else {
-                Color::DarkGray
-            };
-
-            let help = Paragraph::new(help_text)
-                .style(Style::default().fg(help_color))
-                .alignment(Alignment::Center)
-                .block(Block::default().borders(Borders::ALL));
-            f.render_widget(help, outer[3]);
         })?;
 
         // Handle game over
@@ -397,34 +349,49 @@ async fn run_lobby_game<B: ratatui::backend::Backend>(
 where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
+    use crate::games::tictactoe::Player;
     use tokio::time::{Duration, sleep};
 
     info!(show_typestate_graph, "Starting lobby game loop");
 
     let mut cursor = Position::Center;
-    let mut event_log: Vec<GameEvent> = Vec::new();
+    let mut event_log: Vec<GameEvent> = vec![GameEvent::story("🎮 Game begins — X moves first")];
     let mut prev_phase: Option<&'static str> = None;
     let mut prev_move_count: usize = 0;
 
     loop {
         let game = client.get_game().await?;
 
-        // Track phase transitions and proof events.
+        // Track phase transitions.
         let current_phase = tictactoe_phase_name(&game);
         if Some(current_phase) != prev_phase {
             if let Some(prev) = prev_phase {
                 event_log.push(GameEvent::phase_change(prev, current_phase));
             }
             if game.is_over() {
-                event_log.push(GameEvent::result(game.status_string()));
+                if let Some(winner) = game.winner() {
+                    let w = if winner == Player::X { "X" } else { "O" };
+                    event_log.push(GameEvent::result(format!("🏆 {} wins!", w)));
+                } else {
+                    event_log.push(GameEvent::result("🤝 Draw — the board is full"));
+                }
             }
             prev_phase = Some(current_phase);
         }
-        let move_count = game.history().len();
-        if move_count > prev_move_count {
+
+        // Track individual moves with rich narration.
+        let history = game.history();
+        for (i, &pos) in history.iter().enumerate().skip(prev_move_count) {
+            let player = if i % 2 == 0 { "X" } else { "O" };
+            event_log.push(GameEvent::story(format!(
+                "  {} {} plays {}",
+                if player == "X" { "✕" } else { "◯" },
+                player,
+                pos.label(),
+            )));
             event_log.push(GameEvent::proof("LegalMove"));
-            prev_move_count = move_count;
         }
+        prev_move_count = history.len();
 
         // Once game is over, render final state and wait for any keypress.
         if game.is_over() {
@@ -493,74 +460,28 @@ where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
     use crossterm::event::KeyEventKind;
-    use ratatui::{
-        layout::{Alignment, Constraint, Direction, Layout},
-        style::{Color, Modifier, Style},
-        widgets::{Block, Borders, Paragraph},
-    };
     use tokio::time::{Duration, sleep};
 
     let ttt_nodes = tictactoe_nodes();
     let ttt_edges = tictactoe_edges();
     let active = tictactoe_active(game);
 
+    let status_text = format!(
+        "{}  •  Press any key to return to lobby",
+        game.status_string()
+    );
+
+    let graph = GraphState::new(show_typestate_graph, &ttt_nodes, &ttt_edges, active);
     terminal.draw(|f| {
-        let outer = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(0),
-                Constraint::Length(3),
-                Constraint::Length(3),
-            ])
-            .split(f.area());
-
-        let board_area = if show_typestate_graph {
-            let content = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-                .split(outer[1]);
-            f.render_widget(
-                TypestateGraphWidget::new(&ttt_nodes, &ttt_edges, active, event_log),
-                content[1],
-            );
-            content[0]
-        } else {
-            outer[1]
-        };
-
-        let title = Paragraph::new("Strictly Games - Tic Tac Toe")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        f.render_widget(title, outer[0]);
-
-        let board_lines = render_board_with_cursor(game.board(), cursor);
-        let board = Paragraph::new(board_lines)
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL).title("Board"));
-        f.render_widget(board, board_area);
-
-        let status_text = game.status_string();
-        let status = Paragraph::new(status_text)
-            .style(
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL).title("Result"));
-        f.render_widget(status, outer[2]);
-
-        let help = Paragraph::new("Press any key to return to lobby")
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        f.render_widget(help, outer[3]);
+        render_tictactoe_frame(
+            f,
+            game,
+            cursor,
+            event_log,
+            &graph,
+            &status_text,
+            Color::Green,
+        );
     })?;
 
     // Wait for any keypress.
@@ -589,92 +510,37 @@ where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
     use crate::games::tictactoe::Player;
-    use ratatui::{
-        layout::{Alignment, Constraint, Direction, Layout},
-        style::{Color, Modifier, Style},
-        widgets::{Block, Borders, Paragraph},
-    };
 
     let ttt_nodes = tictactoe_nodes();
     let ttt_edges = tictactoe_edges();
     let active = tictactoe_active(game);
 
+    let status_text = if let Some(ref error) = client.last_error {
+        format!("ERROR: {}  •  Arrow keys + Enter | Q: Quit", error)
+    } else if let Some(player) = game.to_move() {
+        let p = if player == Player::X { "X" } else { "O" };
+        format!("Player {} to move  •  Arrow keys + Enter | Q: Quit", p)
+    } else {
+        "Waiting…  •  Arrow keys + Enter | Q: Quit".to_string()
+    };
+
+    let status_color = if client.last_error.is_some() {
+        Color::Red
+    } else {
+        Color::Yellow
+    };
+
+    let graph = GraphState::new(show_typestate_graph, &ttt_nodes, &ttt_edges, active);
     terminal.draw(|f| {
-        let outer = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(0),
-                Constraint::Length(3),
-                Constraint::Length(3),
-            ])
-            .split(f.area());
-
-        let board_area = if show_typestate_graph {
-            let content = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-                .split(outer[1]);
-            f.render_widget(
-                TypestateGraphWidget::new(&ttt_nodes, &ttt_edges, active, event_log),
-                content[1],
-            );
-            content[0]
-        } else {
-            outer[1]
-        };
-
-        let title = Paragraph::new("Strictly Games - Tic Tac Toe")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        f.render_widget(title, outer[0]);
-
-        let board_lines = render_board_with_cursor(game.board(), cursor);
-        let board = Paragraph::new(board_lines)
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL).title("Board"));
-        f.render_widget(board, board_area);
-
-        let status_text = if let Some(player) = game.to_move() {
-            format!(
-                "Player {} to move. Use arrow keys + Enter",
-                if player == Player::X { "X" } else { "O" }
-            )
-        } else {
-            "Waiting...".to_string()
-        };
-
-        let status_color = if client.last_error.is_some() {
-            Color::Red
-        } else {
-            Color::Yellow
-        };
-        let status = Paragraph::new(status_text)
-            .style(Style::default().fg(status_color))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL).title("Status"));
-        f.render_widget(status, outer[2]);
-
-        let help_text = if let Some(ref error) = client.last_error {
-            format!("ERROR: {}", error)
-        } else {
-            "Arrow keys: Move | Enter: Place | Q: Quit".to_string()
-        };
-        let help_color = if client.last_error.is_some() {
-            Color::Red
-        } else {
-            Color::DarkGray
-        };
-        let help = Paragraph::new(help_text)
-            .style(Style::default().fg(help_color))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        f.render_widget(help, outer[3]);
+        render_tictactoe_frame(
+            f,
+            game,
+            cursor,
+            event_log,
+            &graph,
+            &status_text,
+            status_color,
+        );
     })?;
 
     Ok(())
@@ -732,4 +598,147 @@ fn render_board_with_cursor(board: &crate::games::tictactoe::Board, cursor: Posi
     }
 
     lines.join("\n")
+}
+
+/// Bundled typestate graph state passed to the frame renderer.
+struct GraphState<'a> {
+    /// Whether to show the typestate graph column.
+    show: bool,
+    /// Phase node definitions.
+    nodes: &'a [NodeDef],
+    /// Edge definitions between nodes.
+    edges: &'a [EdgeDef],
+    /// Index of the currently active phase node.
+    active: Option<usize>,
+}
+
+impl<'a> GraphState<'a> {
+    /// Creates a new graph state bundle.
+    fn new(show: bool, nodes: &'a [NodeDef], edges: &'a [EdgeDef], active: Option<usize>) -> Self {
+        Self {
+            show,
+            nodes,
+            edges,
+            active,
+        }
+    }
+}
+
+/// Renders the 3-column tic-tac-toe layout (Board | Game Story | Typestate).
+///
+/// When `graph.show` is false, uses a 2-column layout instead.
+/// The status bar combines game state and key hints into one row.
+#[instrument(skip_all)]
+fn render_tictactoe_frame(
+    f: &mut ratatui::Frame,
+    game: &AnyGame,
+    cursor: Position,
+    event_log: &[GameEvent],
+    graph: &GraphState,
+    status_text: &str,
+    status_color: Color,
+) {
+    use ratatui::{
+        layout::{Alignment, Constraint, Direction, Layout},
+        style::{Modifier, Style},
+        text::{Line, Span},
+        widgets::{Block, Borders, Paragraph},
+    };
+
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Title
+            Constraint::Min(0),    // Content (Board | Story | Typestate)
+            Constraint::Length(3), // Status bar
+        ])
+        .split(f.area());
+
+    // Title
+    let title = Paragraph::new("Strictly Games — Tic Tac Toe")
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
+    f.render_widget(title, outer[0]);
+
+    // Content: 3-column (with typestate) or 2-column layout
+    let content_areas = if graph.show {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(40), // Board
+                Constraint::Percentage(30), // Game Story
+                Constraint::Percentage(30), // Typestate
+            ])
+            .split(outer[1])
+    } else {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(55), // Board
+                Constraint::Percentage(45), // Game Story
+            ])
+            .split(outer[1])
+    };
+
+    // Board
+    let board_lines = render_board_with_cursor(game.board(), cursor);
+    let board = Paragraph::new(board_lines)
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL).title(" Board "));
+    f.render_widget(board, content_areas[0]);
+
+    // Game Story pane — shows the full event log, scrolled to bottom.
+    let story_block = Block::default().borders(Borders::ALL).title(" Game Story ");
+    let story_inner = story_block.inner(content_areas[1]);
+    f.render_widget(story_block, content_areas[1]);
+
+    let max_lines = story_inner.height as usize;
+    let story_lines: Vec<Line> = if event_log.is_empty() {
+        vec![Line::from(Span::styled(
+            "Waiting for first move…",
+            Style::default().fg(Color::DarkGray),
+        ))]
+    } else {
+        event_log
+            .iter()
+            .rev()
+            .take(max_lines)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .enumerate()
+            .map(|(i, ev)| {
+                let age = max_lines.saturating_sub(i + 1);
+                let style = if age == 0 {
+                    Style::default().fg(ev.color).add_modifier(Modifier::BOLD)
+                } else if age < 3 {
+                    Style::default().fg(ev.color)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+                Line::from(Span::styled(ev.text.clone(), style))
+            })
+            .collect()
+    };
+    f.render_widget(Paragraph::new(story_lines), story_inner);
+
+    // Typestate graph (right column, if enabled)
+    if graph.show && content_areas.len() > 2 {
+        f.render_widget(
+            TypestateGraphWidget::new(graph.nodes, graph.edges, graph.active, event_log),
+            content_areas[2],
+        );
+    }
+
+    // Status bar — combined game state + key hints
+    let status = Paragraph::new(status_text.to_string())
+        .style(Style::default().fg(status_color))
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL));
+    f.render_widget(status, outer[2]);
 }
