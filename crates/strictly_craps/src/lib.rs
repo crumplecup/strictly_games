@@ -20,6 +20,7 @@ mod error;
 mod ledger;
 mod lesson;
 mod payout;
+mod personality;
 mod point;
 mod table;
 mod typestate;
@@ -32,6 +33,7 @@ pub use error::{CrapsError, CrapsErrorKind};
 pub use ledger::{BetDeducted, CrapsLedger, RoundSettled};
 pub use lesson::LessonProgress;
 pub use payout::{BetOutcome, house_edge, payout_ratio, resolve_bet};
+pub use personality::AgentPersonality;
 pub use point::Point;
 pub use table::{CrapsSeat, CrapsTable, SeatRoundResult};
 pub use typestate::{

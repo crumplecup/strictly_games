@@ -30,9 +30,9 @@ use tracing::{debug, info, instrument, warn};
 use crate::AgentConfig;
 use crate::llm_client::LlmClient;
 
-/// System prompt given to all agent players.
-const BLACKJACK_SYSTEM_PROMPT: &str = "\
-You are an AI agent playing blackjack. You will be asked to make game decisions \
+/// Default system prompt for game agents (blackjack).
+const DEFAULT_SYSTEM_PROMPT: &str = "\
+You are an AI agent playing a casino game. You will be asked to make game decisions \
 (e.g. place a bet, hit or stand). Reply with ONLY the option number or option label — \
 no explanation, no punctuation, nothing else. \
 For example, if asked to choose between Hit and Stand, reply with '1' or 'Hit'.";
@@ -49,12 +49,16 @@ For example, if asked to choose between Hit and Stand, reply with '1' or 'Hit'."
 pub struct LlmElicitCommunicator {
     client: LlmClient,
     agent_name: String,
+    system_prompt: String,
     style_ctx: StyleContext,
     elicit_ctx: ElicitationContext,
 }
 
 impl LlmElicitCommunicator {
     /// Creates a new communicator from the given agent configuration.
+    ///
+    /// Uses the default system prompt. Call [`with_system_prompt`] to
+    /// customize for a specific game or personality.
     ///
     /// # Errors
     ///
@@ -68,9 +72,19 @@ impl LlmElicitCommunicator {
         Ok(Self {
             client,
             agent_name: config.name().clone(),
+            system_prompt: DEFAULT_SYSTEM_PROMPT.to_string(),
             style_ctx: StyleContext::default(),
             elicit_ctx: ElicitationContext::default(),
         })
+    }
+
+    /// Returns a clone with a custom system prompt.
+    ///
+    /// Use this to tailor agent behaviour for specific games or
+    /// personalities (e.g. conservative vs aggressive craps players).
+    pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.system_prompt = prompt.into();
+        self
     }
 }
 
@@ -87,12 +101,13 @@ impl ElicitCommunicator for LlmElicitCommunicator {
         let client = self.client.clone();
         let prompt_owned = prompt.to_string();
         let agent_name = self.agent_name.clone();
+        let system_prompt = self.system_prompt.clone();
 
         async move {
             debug!(agent = %agent_name, "Sending prompt to LLM");
 
             let response = client
-                .generate(BLACKJACK_SYSTEM_PROMPT, &prompt_owned)
+                .generate(&system_prompt, &prompt_owned)
                 .await
                 .map_err(|e| {
                     warn!(error = %e, agent = %agent_name, "LLM generation failed");

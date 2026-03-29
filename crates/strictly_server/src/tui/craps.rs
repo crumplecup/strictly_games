@@ -974,3 +974,617 @@ impl elicitation::style::ElicitationStyle for CrapsBetStyle {
         )
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+//  Multi-player support
+// ─────────────────────────────────────────────────────────────
+
+use crate::tui::chat_widget::{Participant, chat_channel};
+use crate::tui::mcp_communicator::LlmElicitCommunicator;
+use crate::{PlayerKind, PlayerSlot};
+use strictly_craps::AgentPersonality;
+
+/// A co-player slot for multi-seat craps, pairing a player with a personality.
+#[derive(Debug, Clone)]
+pub struct CrapsCoPlayer {
+    /// Base player slot (name, bankroll, kind).
+    pub slot: PlayerSlot,
+    /// Personality governing the AI's betting strategy.
+    pub personality: AgentPersonality,
+}
+
+/// Type-erased seat communicator for craps — dispatches to human TUI or AI LLM.
+enum CrapsSeatComm {
+    Human {
+        comm: ObservableCommunicator<TuiCommunicator>,
+    },
+    Agent {
+        comm: ObservableCommunicator<LlmElicitCommunicator>,
+        personality: AgentPersonality,
+    },
+}
+
+/// Elicits a valid bet (min..=max) from any communicator.
+///
+/// Returns `None` only if the communicator signals a cancellation.
+#[instrument(skip(comm))]
+async fn elicit_craps_bet<C: elicitation::ElicitCommunicator>(
+    comm: &C,
+    table_min: u64,
+    table_max: u64,
+    bankroll: u64,
+) -> Option<u64> {
+    let max_bet = bankroll.min(table_max);
+    let styled =
+        comm.with_style::<u64, CrapsBetStyle>(CrapsBetStyle::new(table_min, max_bet, bankroll));
+    loop {
+        match u64::elicit(&styled).await {
+            Ok(v) if v >= table_min && v <= max_bet => return Some(v),
+            Ok(_) => continue,
+            Err(_) => return None,
+        }
+    }
+}
+
+/// Runs a multi-seat craps session with one human and AI co-players.
+///
+/// All players bet independently on each round, share the same dice rolls,
+/// and have their results displayed in the story pane. The human player
+/// controls the flow (keypresses to roll, quit decisions).
+///
+/// AI co-players each have an [`AgentPersonality`] that shapes their
+/// system prompt and betting behaviour.
+#[instrument(skip_all, fields(num_players = co_players.len() + 1))]
+pub async fn run_multi_craps_session<B: Backend>(
+    terminal: &mut Terminal<B>,
+    player_name: String,
+    initial_bankroll: u64,
+    co_players: Vec<CrapsCoPlayer>,
+    show_typestate_graph: bool,
+) -> Result<CrapsSessionOutcome>
+where
+    <B as Backend>::Error: Send + Sync + 'static,
+{
+    info!("Starting multi-player craps session");
+
+    let (chat_tx, _chat_rx) = chat_channel();
+    let (prompt_tx, prompt_rx) = watch::channel(None::<String>);
+    let nodes = craps_nodes();
+    let edges = craps_edges();
+    let mut rng = SmallRng::from_entropy();
+    let mut event_log: Vec<GameEvent> = Vec::new();
+
+    // ── Build seat communicators ──────────────────────────────
+    let mut seat_comms: Vec<CrapsSeatComm> = Vec::new();
+    let mut seat_names: Vec<String> = Vec::new();
+
+    // Seat 0: human
+    let human_comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx)
+        .with_chat(chat_tx.clone(), Participant::Human);
+    seat_comms.push(CrapsSeatComm::Human { comm: human_comm });
+    seat_names.push(player_name.clone());
+
+    // AI co-players
+    for cp in &co_players {
+        let (agent_prompt_tx, _agent_prompt_rx) = watch::channel(None::<String>);
+        match &cp.slot.kind {
+            PlayerKind::Agent(config) => match LlmElicitCommunicator::new(config) {
+                Ok(base) => {
+                    let base = base.with_system_prompt(cp.personality.system_prompt());
+                    let participant = Participant::Agent(cp.slot.name.clone());
+                    let comm = ObservableCommunicator::new(base, agent_prompt_tx)
+                        .with_chat(chat_tx.clone(), participant);
+                    seat_comms.push(CrapsSeatComm::Agent {
+                        comm,
+                        personality: cp.personality,
+                    });
+                    seat_names.push(cp.slot.name.clone());
+                }
+                Err(e) => {
+                    warn!(
+                        agent = %cp.slot.name,
+                        error = %e,
+                        "Failed to create agent communicator — skipping"
+                    );
+                }
+            },
+            PlayerKind::Human => {
+                warn!("Multi-seat craps only supports one human — skipping extra");
+            }
+        }
+    }
+
+    // ── Initialize table ─────────────────────────────────────
+    let mut table = CrapsTable::new(3, 5, 500);
+
+    // Human seat
+    let seat =
+        strictly_craps::CrapsSeat::new(player_name.clone(), initial_bankroll).with_shooter(true);
+    table.add_seat(seat);
+
+    // AI seats
+    for cp in &co_players {
+        let ai_seat = strictly_craps::CrapsSeat::new(cp.slot.name.clone(), cp.slot.bankroll);
+        table.add_seat(ai_seat);
+    }
+
+    event_log.push(GameEvent::story(format!(
+        "🎲  Welcome to Craps! {} players at the table",
+        seat_comms.len()
+    )));
+    for (i, name) in seat_names.iter().enumerate() {
+        let bankroll = table.seats()[i].bankroll();
+        if i == 0 {
+            event_log.push(GameEvent::story(format!("  🧑 {name} (you) — ${bankroll}")));
+        } else {
+            let personality = match &seat_comms[i] {
+                CrapsSeatComm::Agent { personality, .. } => personality.label(),
+                _ => "Unknown",
+            };
+            event_log.push(GameEvent::story(format!(
+                "  🤖 {name} ({personality}) — ${bankroll}"
+            )));
+        }
+    }
+
+    // ── Main game loop ───────────────────────────────────────
+    loop {
+        let bankroll = *table.seats()[0].bankroll();
+        if bankroll == 0 {
+            info!("Human bankroll exhausted — ending session");
+            return Ok(CrapsSessionOutcome::Busted);
+        }
+
+        let mut ctx = RenderCtx {
+            terminal,
+            player_name: &player_name,
+            show_typestate_graph,
+            nodes: &nodes,
+            edges: &edges,
+            prompt_rx: prompt_rx.clone(),
+        };
+
+        // ── Collect bets from all seats ──────────────────────
+        let lesson = table.seats()[0].lesson();
+        let mut current_phase = "Betting".to_string();
+
+        event_log.push(GameEvent::story(format!(
+            "🂠  New round — your bankroll: ${bankroll}"
+        )));
+
+        render_craps(
+            &mut ctx,
+            DisplayPhase::Betting {
+                bankroll,
+                lesson_title: lesson.lesson_title(),
+                lesson_level: lesson.level(),
+                lesson_tip: lesson.lesson_text(),
+            },
+            craps_active(&current_phase),
+            &event_log,
+        )?;
+
+        // Human bet
+        let human_bet = {
+            let max_bet = bankroll.min(table.table_max());
+            let CrapsSeatComm::Human { ref comm, .. } = seat_comms[0] else {
+                unreachable!("seat 0 is always human");
+            };
+            match elicit_craps_bet(comm, table.table_min(), max_bet, bankroll).await {
+                Some(v) => v,
+                None => {
+                    let final_bankroll = *table.seats()[0].bankroll();
+                    return Ok(if final_bankroll > 0 {
+                        CrapsSessionOutcome::CashedOut(final_bankroll)
+                    } else {
+                        CrapsSessionOutcome::Abandoned
+                    });
+                }
+            }
+        };
+
+        // Deduct human bet
+        table
+            .seat_mut(0)
+            .expect("seat 0")
+            .deduct_wagers(human_bet)
+            .map_err(anyhow::Error::msg)?;
+
+        event_log.push(GameEvent::story(format!(
+            "💰  You bet ${human_bet} on Pass Line"
+        )));
+
+        // AI bets — each agent decides independently
+        let mut all_seat_bets: Vec<Vec<ActiveBet>> = Vec::new();
+        all_seat_bets.push(vec![ActiveBet::new(BetType::PassLine, human_bet)]);
+
+        for i in 1..seat_comms.len() {
+            let ai_bankroll = *table.seats()[i].bankroll();
+            if ai_bankroll == 0 {
+                event_log.push(GameEvent::story(format!(
+                    "  🤖 {} is busted — sitting out",
+                    seat_names[i]
+                )));
+                all_seat_bets.push(vec![]);
+                continue;
+            }
+
+            let ai_bet = match &seat_comms[i] {
+                CrapsSeatComm::Agent { comm, .. } => {
+                    let max = ai_bankroll.min(table.table_max());
+                    match elicit_craps_bet(comm, table.table_min(), max, ai_bankroll).await {
+                        Some(v) => v,
+                        None => table.table_min().min(ai_bankroll),
+                    }
+                }
+                CrapsSeatComm::Human { .. } => unreachable!(),
+            };
+
+            if let Err(e) = table
+                .seat_mut(i)
+                .expect("seat exists")
+                .deduct_wagers(ai_bet)
+            {
+                warn!(seat = i, error = %e, "AI bet deduction failed");
+                all_seat_bets.push(vec![]);
+                continue;
+            }
+
+            let personality_label = match &seat_comms[i] {
+                CrapsSeatComm::Agent { personality, .. } => personality.label(),
+                _ => "",
+            };
+            event_log.push(GameEvent::story(format!(
+                "  🤖 {} ({}) bets ${ai_bet} on Pass Line",
+                seat_names[i], personality_label
+            )));
+            all_seat_bets.push(vec![ActiveBet::new(BetType::PassLine, ai_bet)]);
+        }
+
+        event_log.push(GameEvent::proof("BetsPlaced"));
+
+        // ── Execute typestate flow ───────────────────────────
+        let setup = GameSetup::new(seat_comms.len(), table.max_odds());
+        let betting_state = setup.start_betting(table.bankroll_vec());
+        let (comeout_state, bets_proof) =
+            execute_place_bets(betting_state, all_seat_bets.clone()).map_err(anyhow::Error::msg)?;
+
+        current_phase = "ComeOut".to_string();
+        event_log.push(GameEvent::phase_change("Betting", "ComeOut"));
+
+        // ── Come-out roll ────────────────────────────────────
+        let roll = DiceRoll::random(&mut rng);
+        let sum = roll.sum();
+
+        render_craps(
+            &mut ctx,
+            DisplayPhase::ComeOut {
+                bankroll: *table.seats()[0].bankroll(),
+                bets: &all_seat_bets[0],
+                roll: Some(roll),
+            },
+            craps_active(&current_phase),
+            &event_log,
+        )?;
+
+        event_log.push(GameEvent::story(format!(
+            "🎲  Come-out roll: {} + {} = {sum}",
+            roll.die1(),
+            roll.die2(),
+        )));
+
+        match execute_comeout_roll(comeout_state, roll, bets_proof) {
+            ComeOutOutput::Resolved(resolved, _settled_proof) => {
+                current_phase = "Resolved".to_string();
+                let pass_won = resolved.pass_line_won();
+
+                // Settle all seats
+                let results = table.settle_round(&all_seat_bets, resolved.final_roll(), None, true);
+
+                // Narrate human result
+                if pass_won {
+                    table
+                        .seat_mut(0)
+                        .expect("seat 0")
+                        .credit_winnings(human_bet * 2);
+                    let natural_word = if sum == 7 { "Seven" } else { "Yo-leven" };
+                    event_log.push(GameEvent::story(format!(
+                        "✨  Natural {natural_word}! — Pass Line wins ${human_bet}"
+                    )));
+                } else {
+                    let craps_word = match sum {
+                        2 => "Snake Eyes",
+                        3 => "Ace-Deuce",
+                        12 => "Boxcars",
+                        _ => "Craps",
+                    };
+                    event_log.push(GameEvent::story(format!(
+                        "💀  {craps_word} ({sum})! — Pass Line loses ${human_bet}"
+                    )));
+                }
+
+                // Narrate AI results
+                for i in 1..seat_comms.len() {
+                    let ai_bet_amount = all_seat_bets[i].first().map(|b| b.amount()).unwrap_or(0);
+                    if ai_bet_amount == 0 {
+                        continue;
+                    }
+                    if pass_won {
+                        table
+                            .seat_mut(i)
+                            .expect("seat exists")
+                            .credit_winnings(ai_bet_amount * 2);
+                        event_log.push(GameEvent::story(format!(
+                            "  🤖 {} wins +${ai_bet_amount}",
+                            seat_names[i]
+                        )));
+                    } else {
+                        event_log.push(GameEvent::story(format!(
+                            "  🤖 {} loses -${ai_bet_amount}",
+                            seat_names[i]
+                        )));
+                    }
+                }
+
+                let seat_results = if !results.is_empty() {
+                    results[0]
+                        .outcomes()
+                        .iter()
+                        .map(|(b, o)| (b.clone(), *o))
+                        .collect()
+                } else {
+                    vec![]
+                };
+
+                event_log.push(GameEvent::phase_change("ComeOut", "Resolved"));
+                event_log.push(GameEvent::proof("RoundSettled"));
+
+                render_craps(
+                    &mut ctx,
+                    DisplayPhase::Resolved {
+                        bankroll: *table.seats()[0].bankroll(),
+                        results: &seat_results,
+                        pass_line_won: pass_won,
+                        point: None,
+                    },
+                    craps_active(&current_phase),
+                    &event_log,
+                )?;
+
+                for i in 0..seat_comms.len() {
+                    table.seat_mut(i).expect("seat").record_round();
+                }
+
+                let new_bankroll = *table.seats()[0].bankroll();
+                let net: i64 = if pass_won {
+                    human_bet as i64
+                } else {
+                    -(human_bet as i64)
+                };
+                let sign = if net >= 0 { "+" } else { "" };
+                event_log.push(GameEvent::result(format!(
+                    "Round over: {sign}${} · bankroll: ${new_bankroll}",
+                    net.unsigned_abs()
+                )));
+
+                let outcome = wait_for_continue(&mut ctx, &event_log).await?;
+                if matches!(outcome, RoundOutcome::Quit) {
+                    let final_bankroll = *table.seats()[0].bankroll();
+                    return Ok(if final_bankroll > 0 {
+                        CrapsSessionOutcome::CashedOut(final_bankroll)
+                    } else {
+                        CrapsSessionOutcome::Abandoned
+                    });
+                }
+            }
+            ComeOutOutput::PointSet(mut point_phase, point_proof) => {
+                let point = point_phase.point();
+                current_phase = "PointPhase".to_string();
+                let ways_point = ways_to_roll(point.value());
+                event_log.push(GameEvent::story(format!(
+                    "📍  Point is {point}! Puck ON — need {point} before 7"
+                )));
+                event_log.push(GameEvent::story(format!(
+                    "   {ways_point} ways to hit {point} vs 6 ways to roll 7"
+                )));
+                event_log.push(GameEvent::phase_change("ComeOut", "PointPhase"));
+                event_log.push(GameEvent::proof("PointEstablished"));
+
+                // ── Point phase rolls ────────────────────────
+                let mut current_proof = point_proof;
+                let mut roll_count: u32 = 0;
+                loop {
+                    render_craps(
+                        &mut ctx,
+                        DisplayPhase::PointPhase {
+                            bankroll: *table.seats()[0].bankroll(),
+                            bets: &all_seat_bets[0],
+                            point,
+                            roll: None,
+                        },
+                        craps_active(&current_phase),
+                        &event_log,
+                    )?;
+
+                    event_log.push(GameEvent::story("  Press any key to roll...".to_string()));
+                    render_craps(
+                        &mut ctx,
+                        DisplayPhase::PointPhase {
+                            bankroll: *table.seats()[0].bankroll(),
+                            bets: &all_seat_bets[0],
+                            point,
+                            roll: None,
+                        },
+                        craps_active(&current_phase),
+                        &event_log,
+                    )?;
+
+                    if matches!(wait_for_keypress_raw().await?, RoundOutcome::Quit) {
+                        let final_bankroll = *table.seats()[0].bankroll();
+                        return Ok(if final_bankroll > 0 {
+                            CrapsSessionOutcome::CashedOut(final_bankroll)
+                        } else {
+                            CrapsSessionOutcome::Abandoned
+                        });
+                    }
+
+                    roll_count += 1;
+                    let point_roll = DiceRoll::random(&mut rng);
+                    let point_sum = point_roll.sum();
+                    event_log.push(GameEvent::story(format!(
+                        "🎲  Roll #{roll_count}: {} + {} = {point_sum}",
+                        point_roll.die1(),
+                        point_roll.die2(),
+                    )));
+
+                    render_craps(
+                        &mut ctx,
+                        DisplayPhase::PointPhase {
+                            bankroll: *table.seats()[0].bankroll(),
+                            bets: &all_seat_bets[0],
+                            point,
+                            roll: Some(point_roll),
+                        },
+                        craps_active(&current_phase),
+                        &event_log,
+                    )?;
+
+                    match execute_point_roll(point_phase, point_roll, current_proof) {
+                        PointRollOutput::Continue(next, proof) => {
+                            event_log.push(GameEvent::story(format!(
+                                "   {point_sum} — no decision after {roll_count} rolls \
+                                 (need {point} or 7)"
+                            )));
+                            point_phase = next;
+                            current_proof = proof;
+                        }
+                        PointRollOutput::Resolved(resolved, _settled_proof) => {
+                            current_phase = "Resolved".to_string();
+                            let pass_won = resolved.pass_line_won();
+
+                            let results = table.settle_round(
+                                &all_seat_bets,
+                                resolved.final_roll(),
+                                Some(point),
+                                false,
+                            );
+
+                            // Narrate human result
+                            if pass_won {
+                                table
+                                    .seat_mut(0)
+                                    .expect("seat 0")
+                                    .credit_winnings(human_bet * 2);
+                                event_log.push(GameEvent::story(format!(
+                                    "🎯  Point {point} hit on roll #{roll_count}! \
+                                     Pass Line wins ${human_bet}"
+                                )));
+                            } else {
+                                event_log.push(GameEvent::story(format!(
+                                    "💀  Seven-out on roll #{roll_count}! \
+                                     Pass Line loses ${human_bet}"
+                                )));
+                            }
+
+                            // Narrate AI results
+                            for i in 1..seat_comms.len() {
+                                let ai_bet_amount =
+                                    all_seat_bets[i].first().map(|b| b.amount()).unwrap_or(0);
+                                if ai_bet_amount == 0 {
+                                    continue;
+                                }
+                                if pass_won {
+                                    table
+                                        .seat_mut(i)
+                                        .expect("seat exists")
+                                        .credit_winnings(ai_bet_amount * 2);
+                                    event_log.push(GameEvent::story(format!(
+                                        "  🤖 {} wins +${ai_bet_amount}",
+                                        seat_names[i]
+                                    )));
+                                } else {
+                                    event_log.push(GameEvent::story(format!(
+                                        "  🤖 {} loses -${ai_bet_amount}",
+                                        seat_names[i]
+                                    )));
+                                }
+                            }
+
+                            let seat_results = if !results.is_empty() {
+                                results[0]
+                                    .outcomes()
+                                    .iter()
+                                    .map(|(b, o)| (b.clone(), *o))
+                                    .collect()
+                            } else {
+                                vec![]
+                            };
+
+                            event_log.push(GameEvent::phase_change("PointPhase", "Resolved"));
+                            event_log.push(GameEvent::proof("RoundSettled"));
+
+                            render_craps(
+                                &mut ctx,
+                                DisplayPhase::Resolved {
+                                    bankroll: *table.seats()[0].bankroll(),
+                                    results: &seat_results,
+                                    pass_line_won: pass_won,
+                                    point: Some(point),
+                                },
+                                craps_active(&current_phase),
+                                &event_log,
+                            )?;
+
+                            for i in 0..seat_comms.len() {
+                                table.seat_mut(i).expect("seat").record_round();
+                            }
+
+                            let new_bankroll = *table.seats()[0].bankroll();
+                            let net: i64 = if pass_won {
+                                human_bet as i64
+                            } else {
+                                -(human_bet as i64)
+                            };
+                            let sign = if net >= 0 { "+" } else { "" };
+                            event_log.push(GameEvent::result(format!(
+                                "Round over: {sign}${} · bankroll: ${new_bankroll}",
+                                net.unsigned_abs()
+                            )));
+
+                            let outcome = wait_for_continue(&mut ctx, &event_log).await?;
+                            if matches!(outcome, RoundOutcome::Quit) {
+                                let final_bankroll = *table.seats()[0].bankroll();
+                                return Ok(if final_bankroll > 0 {
+                                    CrapsSessionOutcome::CashedOut(final_bankroll)
+                                } else {
+                                    CrapsSessionOutcome::Abandoned
+                                });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check lesson advancement for all seats
+        for (i, name) in seat_names.iter().enumerate().take(seat_comms.len()) {
+            if table.seats()[i].lesson().can_advance()
+                && let Some(seat) = table.seat_mut(i)
+                && seat.advance_round()
+            {
+                let new_title = seat.lesson().lesson_title();
+                let new_level = seat.lesson().level();
+                if i == 0 {
+                    event_log.push(GameEvent::story(format!(
+                        "🎓  Level up! Lesson {new_level}: {new_title}"
+                    )));
+                } else {
+                    event_log.push(GameEvent::story(format!(
+                        "  🤖 {name} leveled up to Lesson {new_level}"
+                    )));
+                }
+            }
+        }
+    }
+}

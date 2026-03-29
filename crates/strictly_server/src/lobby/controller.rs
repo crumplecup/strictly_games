@@ -17,7 +17,8 @@ use crate::lobby::settings::GameType;
 use crate::lobby::settings::LobbySettings;
 use crate::run_game_session;
 use crate::tui::{
-    BlackjackSessionOutcome, CrapsSessionOutcome, run_blackjack_session, run_craps_session,
+    BlackjackSessionOutcome, CrapsCoPlayer, CrapsSessionOutcome, run_blackjack_session,
+    run_craps_session, run_multi_craps_session,
 };
 use crate::{
     AgentConfig, AgentLibrary, AnyGame, FirstPlayer, GameOutcome, ProfileService, TicTacToePlayer,
@@ -452,13 +453,44 @@ impl LobbyController {
 
             // ── Craps ── local typestate game, progressive trainer ───────
             GameType::Craps => {
-                let outcome = run_craps_session(
-                    terminal,
-                    player_name.clone(),
-                    1_000, // default starting bankroll
-                    show_typestate_graph,
-                )
-                .await?;
+                // Collect available agents as co-players
+                let co_players: Vec<CrapsCoPlayer> = self
+                    .agent_library
+                    .agents()
+                    .iter()
+                    .take(3) // max 3 AI co-players at the table
+                    .enumerate()
+                    .map(|(i, config)| {
+                        let personality = strictly_craps::AgentPersonality::ALL
+                            [i % strictly_craps::AgentPersonality::ALL.len()];
+                        CrapsCoPlayer {
+                            slot: crate::PlayerSlot {
+                                name: config.name().clone(),
+                                bankroll: 1_000,
+                                kind: crate::PlayerKind::Agent(config.clone()),
+                            },
+                            personality,
+                        }
+                    })
+                    .collect();
+
+                let outcome = if co_players.is_empty() {
+                    run_craps_session(terminal, player_name.clone(), 1_000, show_typestate_graph)
+                        .await?
+                } else {
+                    info!(
+                        co_players = co_players.len(),
+                        "Starting multi-player craps with AI co-players"
+                    );
+                    run_multi_craps_session(
+                        terminal,
+                        player_name.clone(),
+                        1_000,
+                        co_players,
+                        show_typestate_graph,
+                    )
+                    .await?
+                };
 
                 if let Some(user) = &self.current_user {
                     let game_outcome = match outcome {
