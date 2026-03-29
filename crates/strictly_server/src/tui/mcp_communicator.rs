@@ -23,7 +23,7 @@
 
 use elicitation::{
     ElicitCommunicator, ElicitError, ElicitErrorKind, ElicitResult, ElicitationContext,
-    ElicitationStyle, StyleContext,
+    StyleMarker, StyleContext,
 };
 use tracing::{debug, info, instrument, warn};
 
@@ -138,7 +138,7 @@ impl ElicitCommunicator for LlmElicitCommunicator {
     }
 
     #[instrument(skip(self, style), level = "debug")]
-    fn with_style<T: 'static, S: ElicitationStyle>(&self, style: S) -> Self {
+    fn with_style<T: 'static, S: StyleMarker + elicitation::style::ElicitationStyle + 'static>(&self, style: S) -> Self {
         let mut new = self.clone();
         new.style_ctx.set_style::<T, S>(style).ok();
         new

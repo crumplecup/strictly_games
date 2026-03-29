@@ -39,7 +39,7 @@
 //! ```
 
 use elicitation::{
-    ElicitCommunicator, ElicitResult, ElicitationContext, ElicitationStyle, StyleContext,
+    ElicitCommunicator, ElicitResult, ElicitationContext, StyleMarker, StyleContext,
 };
 use tokio::sync::{mpsc, watch};
 use tracing::instrument;
@@ -142,7 +142,7 @@ impl<C: ElicitCommunicator> ElicitCommunicator for ObservableCommunicator<C> {
         self.inner.elicitation_context()
     }
 
-    fn with_style<T: 'static, S: ElicitationStyle>(&self, style: S) -> Self {
+    fn with_style<T: 'static, S: StyleMarker + elicitation::style::ElicitationStyle + 'static>(&self, style: S) -> Self {
         Self {
             inner: self.inner.with_style::<T, S>(style),
             sender: self.sender.clone(),
