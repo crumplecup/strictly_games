@@ -19,6 +19,7 @@ use crate::tui::{ChatMessage, LlmElicitCommunicator, Participant, chat_channel};
 use crate::{PlayerKind, PlayerSlot};
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
+use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
 use elicitation::contracts::Established;
 use ratatui::{
@@ -38,6 +39,12 @@ use strictly_blackjack::{
 use tokio::sync::watch;
 use tokio::time::{Duration, sleep};
 use tracing::{info, instrument, warn};
+
+/// Height of the dedicated prompt pane at the bottom of the game layout.
+///
+/// Sized for the largest prompt variant: the `BasicAction` enum prompt is
+/// 7 lines + 1 input line + 2 border lines = 10 rows.
+pub const PROMPT_PANE_HEIGHT: u16 = 10;
 
 /// Outcome of a complete blackjack session, from the player's perspective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,7 +189,10 @@ where
     )?;
 
     let bet = loop {
-        let raw: u64 = match u64::elicit(comm).await {
+        let styled = comm.with_style::<u64, BlackjackBetStyle>(
+            BlackjackBetStyle::new(betting.bankroll()),
+        );
+        let raw: u64 = match u64::elicit(&styled).await {
             Ok(v) => v,
             Err(_) => {
                 warn!("Elicitation cancelled during betting");
@@ -392,7 +402,15 @@ where
     let phase_ctx = build_phase_context(&phase).with_pending_prompt(pending_prompt);
 
     ctx.terminal.draw(|frame| {
-        let area = frame.area();
+        let full = frame.area();
+
+        // Split: game content on top, dedicated prompt pane at bottom.
+        let outer = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
+            .split(full);
+        let area = outer[0];
+        let prompt_area = outer[1];
 
         let main_chunks = if ctx.show_typestate_graph {
             Layout::default()
@@ -422,6 +440,13 @@ where
                 .with_context(&phase_ctx)
                 .render(main_chunks[1], frame.buffer_mut());
         }
+
+        // Prompt pane — bordered region for TuiCommunicator input.
+        let prompt_block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Input ")
+            .style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(prompt_block, prompt_area);
     })?;
     Ok(())
 }
@@ -674,7 +699,45 @@ enum SeatComm {
     },
 }
 
+/// Style override for blackjack bet prompts.
+///
+/// Replaces the generic "Please enter a u64:" with a game-specific prompt
+/// so AI agents can understand the expected input.
+#[derive(Debug, Clone)]
+struct BlackjackBetStyle {
+    max_bet: u64,
+}
+
+impl BlackjackBetStyle {
+    fn new(max_bet: u64) -> Self {
+        Self { max_bet }
+    }
+}
+
+impl Default for BlackjackBetStyle {
+    fn default() -> Self {
+        Self { max_bet: 100 }
+    }
+}
+
+impl elicitation::style::ElicitationStyle for BlackjackBetStyle {
+    fn prompt_for_field(
+        &self,
+        _field_name: &str,
+        _field_type: &str,
+        _context: &elicitation::style::PromptContext,
+    ) -> String {
+        format!(
+            "Place your bet (1-{}). Respond with a single number only:",
+            self.max_bet
+        )
+    }
+}
+
 /// Elicits a valid bet (1..=max_bet) from any communicator.
+///
+/// Uses a custom [`BlackjackBetStyle`] so AI agents see a game-specific prompt
+/// instead of the generic "Please enter a u64:".
 ///
 /// Returns `None` only if the communicator signals a cancellation.
 #[instrument(skip(comm))]
@@ -682,8 +745,9 @@ async fn elicit_bet_from<C: elicitation::ElicitCommunicator>(
     comm: &C,
     max_bet: u64,
 ) -> Option<u64> {
+    let styled = comm.with_style::<u64, BlackjackBetStyle>(BlackjackBetStyle::new(max_bet));
     loop {
-        match u64::elicit(comm).await {
+        match u64::elicit(&styled).await {
             Ok(v) if v > 0 && v <= max_bet => return Some(v),
             Ok(_) => continue,
             Err(_) => return None,
@@ -777,15 +841,30 @@ where
         // can map `results[j]` back to the correct `bankrolls[active_indices[j]]`.
         let mut active_indices: Vec<usize> = Vec::new();
 
+        // Render the betting phase so the player sees the table before prompts.
+        let empty_hand = strictly_blackjack::Hand::default();
+        render_multi(
+            terminal,
+            MultiRenderCtx {
+                seat_names: &seat_names,
+                bankrolls: &bankrolls,
+                dealer_hand: &empty_hand,
+                seats: &[],
+                active_seat: usize::MAX,
+                chat_messages: &chat_messages,
+                bj_nodes: &bj_nodes,
+                bj_edges: &bj_edges,
+                show_typestate_graph,
+                event_log: &event_log,
+                prompt: Some("Place your bets!"),
+            },
+        )?;
+
         for i in 0..num_seats {
             let bankroll = bankrolls[i];
             if bankroll == 0 {
                 continue;
             }
-            event_log.push(GameEvent::story(format!(
-                "💰  {} — {bankroll} chips",
-                seat_names[i]
-            )));
 
             let bet_opt = match &seat_comms[i] {
                 SeatComm::Human { comm, .. } => elicit_bet_from(comm, bankroll).await,
@@ -794,6 +873,11 @@ where
             let Some(bet) = bet_opt else {
                 break 'session;
             };
+
+            event_log.push(GameEvent::story(format!(
+                "💰  {} bets {bet} ({bankroll} chips)",
+                seat_names[i]
+            )));
 
             active_indices.push(i);
             seat_bets.push(SeatBet {
@@ -809,21 +893,49 @@ where
 
         // ── Deal ─────────────────────────────────────────────────────────
         let mut round = MultiRound::deal(seat_bets).map_err(anyhow::Error::msg)?;
-        event_log.push(GameEvent::story("🂠  Cards dealt".to_string()));
+
+        // Narrate the deal: each seat's opening hand and the dealer's up card.
+        let dealer_up = round
+            .dealer_hand
+            .cards()
+            .first()
+            .map(|c| c.to_string())
+            .unwrap_or_default();
+        event_log.push(GameEvent::story(format!(
+            "🂠  Cards dealt — dealer shows {dealer_up}"
+        )));
+        for seat in &round.seats {
+            let cards: Vec<String> = seat.hand.cards().iter().map(|c| c.to_string()).collect();
+            let total = seat.hand.value().best();
+            if seat.natural {
+                event_log.push(GameEvent::story(format!(
+                    "  ⭐ {} dealt {} — Blackjack!",
+                    seat.name,
+                    cards.join(" "),
+                )));
+            } else {
+                event_log.push(GameEvent::story(format!(
+                    "  {} dealt {} ({})",
+                    seat.name,
+                    cards.join(" "),
+                    total,
+                )));
+            }
+        }
         event_log.push(GameEvent::phase_change("Betting", "PlayerTurn"));
         event_log.push(GameEvent::proof("BetPlaced × all seats"));
 
         // ── Player turns (skip if dealer natural) ────────────────────────
         if !round.dealer_natural() {
-            for (i, &seat_idx) in active_indices.iter().enumerate() {
-                if round.seats[i].is_done() {
+            for (round_idx, &bankroll_idx) in active_indices.iter().enumerate() {
+                if round.seats[round_idx].is_done() {
                     // Natural — no action needed.
                     continue;
                 }
 
                 event_log.push(GameEvent::story(format!(
                     "🎯  {}'s turn",
-                    seat_names[seat_idx]
+                    seat_names[bankroll_idx]
                 )));
 
                 loop {
@@ -832,7 +944,7 @@ where
                         chat_messages.push(msg);
                     }
 
-                    let prompt_snapshot = match &seat_comms[seat_idx] {
+                    let prompt_snapshot = match &seat_comms[bankroll_idx] {
                         SeatComm::Human { prompt_rx, .. } => prompt_rx.borrow().clone(),
                         SeatComm::Agent { prompt_rx, .. } => prompt_rx.borrow().clone(),
                     };
@@ -844,7 +956,7 @@ where
                             bankrolls: &bankrolls,
                             dealer_hand: &round.dealer_hand,
                             seats: &round.seats,
-                            active_seat: i,
+                            active_seat: round_idx,
                             chat_messages: &chat_messages,
                             bj_nodes: &bj_nodes,
                             bj_edges: &bj_edges,
@@ -854,11 +966,11 @@ where
                         },
                     )?;
 
-                    if round.seats[i].is_done() {
+                    if round.seats[round_idx].is_done() {
                         break;
                     }
 
-                    let action_opt = match &seat_comms[seat_idx] {
+                    let action_opt = match &seat_comms[bankroll_idx] {
                         SeatComm::Human { comm, .. } => elicit_action_from(comm).await,
                         SeatComm::Agent { comm, .. } => elicit_action_from(comm).await,
                     };
@@ -869,27 +981,79 @@ where
                     match action {
                         BasicAction::Hit => {
                             let deck = &mut round.deck;
-                            round.seats[i].hit(deck).map_err(anyhow::Error::msg)?;
-                            event_log
-                                .push(GameEvent::story(format!("  {} hits", seat_names[seat_idx])));
+                            round.seats[round_idx].hit(deck).map_err(anyhow::Error::msg)?;
+                            let seat = &round.seats[round_idx];
+                            let new_card = seat.hand.cards().last().map(|c| c.to_string()).unwrap_or_default();
+                            let total = seat.hand.value().best();
+                            if seat.bust {
+                                event_log.push(GameEvent::story(format!(
+                                    "  🃏 {} hits → receives {new_card}, total {total} — bust!",
+                                    seat.name,
+                                )));
+                            } else {
+                                event_log.push(GameEvent::story(format!(
+                                    "  🃏 {} hits → receives {new_card}, total {total}",
+                                    seat.name,
+                                )));
+                            }
                         }
                         BasicAction::Stand => {
-                            round.seats[i].stand();
+                            round.seats[round_idx].stand();
+                            let total = round.seats[round_idx].hand.value().best();
                             event_log.push(GameEvent::story(format!(
-                                "  {} stands",
-                                seat_names[seat_idx]
+                                "  🖐 {} stands at {total}",
+                                round.seats[round_idx].name,
                             )));
                         }
                     }
                 }
             }
         } else {
-            event_log.push(GameEvent::story("⚡  Dealer natural blackjack".to_string()));
+            let dealer_cards: Vec<String> = round
+                .dealer_hand
+                .cards()
+                .iter()
+                .map(|c| c.to_string())
+                .collect();
+            event_log.push(GameEvent::story(format!(
+                "⚡  Dealer reveals {} — Natural Blackjack!",
+                dealer_cards.join(" "),
+            )));
         }
 
         // ── Dealer turn ──────────────────────────────────────────────────
         event_log.push(GameEvent::phase_change("PlayerTurn", "DealerTurn"));
+        let dealer_cards_before = round.dealer_hand.cards().len();
+        let dealer_cards_str: Vec<String> = round
+            .dealer_hand
+            .cards()
+            .iter()
+            .map(|c| c.to_string())
+            .collect();
+        event_log.push(GameEvent::story(format!(
+            "🎰  Dealer reveals hole card: {}",
+            dealer_cards_str.join(" "),
+        )));
+
         round.play_dealer();
+
+        // Narrate each card the dealer drew.
+        for card in round.dealer_hand.cards().iter().skip(dealer_cards_before) {
+            let total = round.dealer_hand.value().best();
+            event_log.push(GameEvent::story(format!(
+                "  🃏 Dealer draws {card}, total {total}",
+            )));
+        }
+        let dealer_final = round.dealer_hand.value().best();
+        if round.dealer_hand.is_bust() {
+            event_log.push(GameEvent::story(format!(
+                "  Dealer busts at {dealer_final}!",
+            )));
+        } else {
+            event_log.push(GameEvent::story(format!(
+                "  Dealer stands at {dealer_final}",
+            )));
+        }
         event_log.push(GameEvent::phase_change("DealerTurn", "Finished"));
 
         // ── Settle ───────────────────────────────────────────────────────
@@ -991,7 +1155,15 @@ where
     } = ctx;
 
     terminal.draw(|frame| {
-        let area = frame.area();
+        let full = frame.area();
+
+        // Split: game content on top, dedicated prompt pane at bottom.
+        let outer = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
+            .split(full);
+        let area = outer[0];
+        let prompt_area = outer[1];
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -1003,25 +1175,40 @@ where
             .split(area);
 
         // ── Left: all players' hands ─────────────────────────────────────
-        let mut hand_lines: Vec<Line<'static>> = Vec::new();
-        hand_lines.push(Line::from(Span::styled(
-            " Dealer ",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )));
+        // Split left pane vertically: dealer (fixed 4 lines) + seats (remaining).
+        let left_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(4),
+                Constraint::Min(0),
+            ])
+            .split(chunks[0]);
+
+        // Dealer hand (fixed section at top).
         let dealer_str = dealer_hand
             .cards()
             .iter()
             .map(|c| c.to_string())
             .collect::<Vec<_>>()
             .join(" ");
-        hand_lines.push(Line::from(format!("  {dealer_str}")));
-        hand_lines.push(Line::from(""));
+        let dealer_value = if dealer_hand.cards().is_empty() {
+            String::new()
+        } else {
+            format!("  ({})", dealer_hand.value().best())
+        };
+        let dealer_widget = Paragraph::new(vec![
+            Line::from(format!("  {dealer_str}{dealer_value}")),
+        ])
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Dealer "),
+        );
+        frame.render_widget(dealer_widget, left_chunks[0]);
 
+        // Player seats (scrollable).
+        let mut hand_lines: Vec<Line<'static>> = Vec::new();
         for (i, seat) in seats.iter().enumerate() {
-            let name = seat_names.get(i).map(|s| s.as_str()).unwrap_or("?");
-            let bankroll = bankrolls.get(i).copied().unwrap_or(0);
             let color = if i == active_seat {
                 Color::Green
             } else {
@@ -1030,7 +1217,7 @@ where
             let prefix = if i == active_seat { "► " } else { "  " };
 
             hand_lines.push(Line::from(Span::styled(
-                format!("{prefix}{name} ({bankroll} chips)"),
+                format!("{prefix}{} (bet {})  ", seat.name, seat.bet),
                 Style::default().fg(color).add_modifier(Modifier::BOLD),
             )));
             let cards_str = seat
@@ -1050,13 +1237,32 @@ where
             } else {
                 format!("({value})")
             };
-            hand_lines.push(Line::from(format!("  {cards_str}  {status}")));
-            hand_lines.push(Line::from(""));
+            hand_lines.push(Line::from(format!("    {cards_str}  {status}")));
         }
 
-        let hands_widget = Paragraph::new(hand_lines)
-            .block(Block::default().borders(Borders::ALL).title(" Table "));
-        frame.render_widget(hands_widget, chunks[0]);
+        // When no seats exist yet (betting phase), show bankrolls.
+        if seats.is_empty() {
+            for (i, name) in seat_names.iter().enumerate() {
+                let bankroll = bankrolls.get(i).copied().unwrap_or(0);
+                hand_lines.push(Line::from(format!("  {name}: {bankroll} chips")));
+            }
+        }
+
+        // Scroll to keep active seat visible (2 lines per seat).
+        let seats_height = left_chunks[1].height.saturating_sub(2) as usize;
+        let scroll_offset = if active_seat < seats.len() {
+            let seat_line = active_seat * 2;
+            seat_line.saturating_sub(seats_height / 2)
+        } else if hand_lines.len() > seats_height {
+            hand_lines.len().saturating_sub(seats_height)
+        } else {
+            0
+        };
+
+        let seats_widget = Paragraph::new(hand_lines)
+            .block(Block::default().borders(Borders::ALL).title(" Seats "))
+            .scroll((scroll_offset as u16, 0));
+        frame.render_widget(seats_widget, left_chunks[1]);
 
         // ── Center: typestate + log ───────────────────────────────────────
         if show_typestate_graph {
@@ -1074,7 +1280,7 @@ where
             let log_lines: Vec<Line<'static>> = event_log
                 .iter()
                 .rev()
-                .take(chunks[1].height as usize)
+                .take(chunks[1].height.saturating_sub(2) as usize)
                 .map(|e| Line::from(e.text.clone()))
                 .collect();
             let log = Paragraph::new(log_lines)
@@ -1085,10 +1291,38 @@ where
         // ── Right: chat log ───────────────────────────────────────────────
         let chat = ChatWidget::new(chat_messages);
         frame.render_widget(chat, chunks[2]);
+
+        // ── Bottom: dedicated prompt pane for TuiCommunicator input ──────
+        let prompt_block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Input ")
+            .style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(prompt_block, prompt_area);
     })?;
     Ok(())
 }
 async fn wait_for_keypress() -> Result<bool> {
+    use crossterm::{cursor::MoveTo, execute, style::{Color, Print, ResetColor, SetForegroundColor}};
+
+    // Show instruction in the prompt pane so the user knows to press a key.
+    let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+    let content_row = rows.saturating_sub(PROMPT_PANE_HEIGHT) + 1;
+    let content_left: u16 = 2;
+    let mut stdout = std::io::stdout();
+    // Clear interior of pane.
+    for row in content_row..rows.saturating_sub(1) {
+        execute!(stdout, MoveTo(1, row), Print(" ".repeat(cols.saturating_sub(2) as usize))).ok();
+    }
+    execute!(
+        stdout,
+        MoveTo(content_left, content_row),
+        SetForegroundColor(Color::Yellow),
+        Print("Press any key to continue (q to quit)..."),
+        ResetColor,
+    )
+    .ok();
+    let _ = std::io::Write::flush(&mut stdout);
+
     // Drain any events buffered during the previous input phase (e.g. the
     // Enter key from the bet prompt) before we start watching for fresh input.
     sleep(Duration::from_millis(100)).await;
@@ -1102,7 +1336,13 @@ async fn wait_for_keypress() -> Result<bool> {
             && let Event::Key(k) = event::read()?
             && k.code != KeyCode::Null
         {
-            // Q anywhere is a passive escape.
+            // Drain any remaining buffered events so they don't leak into
+            // the next elicitation prompt.
+            sleep(Duration::from_millis(50)).await;
+            while event::poll(std::time::Duration::ZERO)? {
+                let _ = event::read()?;
+            }
+
             let quit = matches!(k.code, KeyCode::Char('q') | KeyCode::Char('Q'));
             return Ok(!quit);
         }
