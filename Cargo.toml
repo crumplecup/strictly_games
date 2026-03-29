@@ -4,6 +4,7 @@ members = [
   "crates/strictly_games",
   "crates/strictly_tictactoe",
   "crates/strictly_blackjack",
+  "crates/strictly_craps",
   "crates/strictly_proofs",
   "crates/strictly_server",
 ]
@@ -18,6 +19,7 @@ repository = "https://github.com/crumplecup/strictly_games"
 # Core game logic
 strictly_tictactoe = { path = "crates/strictly_tictactoe" }
 strictly_blackjack = { path = "crates/strictly_blackjack" }
+strictly_craps = { path = "crates/strictly_craps" }
 strictly_server = { path = "crates/strictly_server" }
 
 # Elicitation framework (local dev)

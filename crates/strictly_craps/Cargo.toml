@@ -1,0 +1,46 @@
+[package]
+name = "strictly_craps"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Pure craps game logic with formal verification support"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
+[dependencies]
+# Serialization
+serde.workspace = true
+
+# Elicitation
+elicitation.workspace = true
+
+# Derive utilities
+derive_more.workspace = true
+derive-getters = { workspace = true }
+strum.workspace = true
+
+# Tracing (required by Elicit derive)
+tracing.workspace = true
+
+# MCP (required by Elicit derive for tool annotations)
+rmcp.workspace = true
+schemars.workspace = true
+
+# Proc macro support for verification code generation
+proc-macro2 = "1"
+quote = "1"
+
+# Random number generation (for dice rolls)
+rand = { version = "0.8", features = ["small_rng"], optional = true }
+
+# Verification
+kani-verifier = { workspace = true, optional = true }
+
+[features]
+default = ["roll"]
+kani = ["kani-verifier"]
+roll = ["rand"]
+proofs = []

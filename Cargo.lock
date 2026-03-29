@@ -4032,6 +4032,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "strictly_craps"
+version = "0.1.0"
+dependencies = [
+ "derive-getters",
+ "derive_more",
+ "elicitation",
+ "kani-verifier",
+ "proc-macro2",
+ "quote",
+ "rand 0.8.5",
+ "rmcp",
+ "schemars",
+ "serde",
+ "strum 0.28.0",
+ "tracing",
+]
+
+[[package]]
 name = "strictly_games"
 version = "0.1.0"
 dependencies = [
@@ -4063,6 +4081,7 @@ dependencies = [
  "creusot-std",
  "elicitation",
  "strictly_blackjack",
+ "strictly_craps",
  "strictly_tictactoe",
 ]
 
@@ -4089,6 +4108,7 @@ dependencies = [
  "hyper-util",
  "proc-macro2",
  "quote",
+ "rand 0.8.5",
  "ratatui",
  "reqwest 0.13.2",
  "rmcp",
@@ -4096,6 +4116,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strictly_blackjack",
+ "strictly_craps",
  "strictly_tictactoe",
  "strum 0.28.0",
  "tempfile",
