@@ -9,11 +9,10 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     style::{Color, Print, ResetColor, SetForegroundColor},
-    terminal::{Clear, ClearType},
 };
 use elicitation::{
     ElicitCommunicator, ElicitError, ElicitErrorKind, ElicitResult, ElicitationContext,
-    ElicitationStyle, StyleContext,
+    StyleMarker, StyleContext,
 };
 use std::io::{self, Write as _};
 use tracing::instrument;
@@ -62,10 +61,14 @@ impl Default for TuiCommunicator {
 }
 
 impl ElicitCommunicator for TuiCommunicator {
-    /// Print `prompt` to the terminal and block until the player presses Enter.
+    /// Print `prompt` inside the dedicated prompt pane and block until Enter.
     ///
-    /// The prompt text is rendered with cyan highlighting. The player's input is
-    /// echoed in place and returned verbatim (trimmed of leading/trailing whitespace).
+    /// The ratatui layout reserves [`PROMPT_PANE_HEIGHT`] rows at the bottom
+    /// of the screen with a bordered " Input " block. This method draws the
+    /// prompt text and `▶` input cursor inside that border, using [`MoveTo`]
+    /// so the game content above is never scrolled.
+    ///
+    /// [`PROMPT_PANE_HEIGHT`]: crate::tui::blackjack::PROMPT_PANE_HEIGHT
     #[instrument(skip(self), level = "debug", fields(prompt_len = prompt.len()))]
     fn send_prompt(
         &self,
@@ -73,20 +76,85 @@ impl ElicitCommunicator for TuiCommunicator {
     ) -> impl std::future::Future<Output = ElicitResult<String>> + Send {
         let prompt = prompt.to_string();
         async move {
+            use crate::tui::blackjack::PROMPT_PANE_HEIGHT;
+
             let mut stdout = io::stdout();
             let mut input = String::new();
 
-            // In raw mode, \n alone moves down but doesn't return to column 0.
-            // Normalise all bare \n to \r\n so multi-line prompts stay flush-left.
-            let prompt = prompt.replace('\n', "\r\n");
+            // Drain any stale key events so previous input doesn't leak in.
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            while event::poll(std::time::Duration::ZERO).unwrap_or(false) {
+                let _ = event::read();
+            }
 
+            let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
+            // The pane occupies the bottom PROMPT_PANE_HEIGHT rows with a
+            // 1-cell border on each side. Content area starts 1 row below
+            // the pane top and is inset 1 column on each side.
+            let pane_top = rows.saturating_sub(PROMPT_PANE_HEIGHT);
+            let content_top = pane_top + 1; // skip top border
+            let content_left: u16 = 2; // skip left border + 1 padding
+            let content_width = cols.saturating_sub(4) as usize; // borders + padding
+            // Content rows available: pane height - 2 (borders) - 1 (input row).
+            let max_prompt_lines = PROMPT_PANE_HEIGHT.saturating_sub(3) as usize;
+            let input_row = rows.saturating_sub(2); // last content row (above bottom border)
+
+            // Wrap prompt text into lines that fit the content width.
+            let mut wrapped: Vec<String> = Vec::new();
+            for line in prompt.lines() {
+                if line.is_empty() {
+                    wrapped.push(String::new());
+                } else if line.len() <= content_width {
+                    wrapped.push(line.to_string());
+                } else {
+                    let mut remaining = line;
+                    while !remaining.is_empty() {
+                        let end = remaining
+                            .char_indices()
+                            .take_while(|(i, _)| *i < content_width)
+                            .last()
+                            .map(|(i, c)| i + c.len_utf8())
+                            .unwrap_or(remaining.len());
+                        wrapped.push(remaining[..end].to_string());
+                        remaining = &remaining[end..];
+                    }
+                }
+            }
+            // Truncate to fit the available content rows.
+            if wrapped.len() > max_prompt_lines {
+                wrapped = wrapped.split_off(wrapped.len() - max_prompt_lines);
+            }
+
+            // Clear the interior of the pane (preserve the ratatui border).
+            for row in content_top..rows.saturating_sub(1) {
+                execute!(
+                    stdout,
+                    MoveTo(1, row),
+                    Print(" ".repeat(cols.saturating_sub(2) as usize)),
+                )
+                .ok();
+            }
+
+            // Draw prompt lines inside the pane.
+            for (i, line) in wrapped.iter().enumerate() {
+                execute!(
+                    stdout,
+                    MoveTo(content_left, content_top + i as u16),
+                    SetForegroundColor(Color::Cyan),
+                    Print(line),
+                    ResetColor,
+                )
+                .ok();
+            }
+
+            // Input cursor on the last content row.
             execute!(
                 stdout,
-                Print("\r\n"),
-                SetForegroundColor(Color::Cyan),
-                Print(&prompt),
+                MoveTo(content_left, input_row),
+                SetForegroundColor(Color::Green),
+                Print("▶ "),
                 ResetColor,
-                Print("\r\n▶ "),
             )
             .map_err(|e| {
                 ElicitError::new(ElicitErrorKind::ParseError(format!(
@@ -107,10 +175,7 @@ impl ElicitCommunicator for TuiCommunicator {
                     )))
                 })? {
                     match key.code {
-                        KeyCode::Enter => {
-                            execute!(stdout, Print("\r\n")).ok();
-                            break;
-                        }
+                        KeyCode::Enter => break,
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             tracing::warn!("Player cancelled TUI elicitation via Ctrl-C");
                             return Err(ElicitError::new(ElicitErrorKind::ParseError(
@@ -124,7 +189,6 @@ impl ElicitCommunicator for TuiCommunicator {
                         }
                         KeyCode::Backspace if !input.is_empty() => {
                             input.pop();
-                            // Erase the last character in place.
                             execute!(stdout, Print("\x08 \x08")).ok();
                             stdout.flush().ok();
                         }
@@ -135,10 +199,6 @@ impl ElicitCommunicator for TuiCommunicator {
 
             let result = input.trim().to_string();
             tracing::debug!(response = %result, "TUI elicitation response received");
-
-            // Clear everything printed by this prompt so the next ratatui
-            // draw() gets the full terminal back without accumulated scroll.
-            execute!(stdout, Clear(ClearType::All), MoveTo(0, 0)).ok();
 
             Ok(result)
         }
@@ -174,7 +234,7 @@ impl ElicitCommunicator for TuiCommunicator {
         &self.elicit_ctx
     }
 
-    fn with_style<T: 'static, S: ElicitationStyle>(&self, style: S) -> Self {
+    fn with_style<T: 'static, S: StyleMarker + elicitation::style::ElicitationStyle + 'static>(&self, style: S) -> Self {
         let mut new = self.clone();
         new.style_ctx.set_style::<T, S>(style).ok();
         new
