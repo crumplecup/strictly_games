@@ -4,6 +4,7 @@
 
 pub mod blackjack;
 pub mod chat_widget;
+pub mod craps;
 mod input; // Cursor movement
 pub mod mcp_communicator;
 pub mod observable_communicator;
@@ -14,6 +15,7 @@ mod typestate_widget;
 
 pub use blackjack::{BlackjackSessionOutcome, run_blackjack_session, run_multi_blackjack_session};
 pub use chat_widget::{ChatMessage, ChatWidget, Participant, chat_channel};
+pub use craps::{CrapsSessionOutcome, run_craps_session};
 pub use mcp_communicator::LlmElicitCommunicator;
 
 use anyhow::Result;

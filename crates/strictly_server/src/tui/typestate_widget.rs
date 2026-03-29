@@ -265,6 +265,65 @@ pub fn tictactoe_phase_name(game: &AnyGame) -> &'static str {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  Craps graph definition
+// ─────────────────────────────────────────────────────────────
+
+/// Node definitions for the craps typestate graph (in display order).
+pub fn craps_nodes() -> Vec<NodeDef> {
+    vec![
+        NodeDef { label: "Betting" },
+        NodeDef { label: "ComeOut" },
+        NodeDef {
+            label: "PointPhase",
+        },
+        NodeDef { label: "Resolved" },
+    ]
+}
+
+/// Edge definitions for the craps typestate graph.
+pub fn craps_edges() -> Vec<EdgeDef> {
+    vec![
+        EdgeDef {
+            from: 0,
+            to: 1,
+            label: None,
+        }, // place_bets → ComeOut
+        EdgeDef {
+            from: 1,
+            to: 2,
+            label: None,
+        }, // point established
+        EdgeDef {
+            from: 2,
+            to: 3,
+            label: None,
+        }, // point hit / seven-out
+        EdgeDef {
+            from: 1,
+            to: 3,
+            label: Some("(natural/craps)"),
+        }, // instant resolution
+        EdgeDef {
+            from: 3,
+            to: 0,
+            label: Some("(next round)"),
+        }, // next round
+    ]
+}
+
+/// Maps a craps phase name to the active node index.
+#[instrument(level = "trace")]
+pub fn craps_active(phase: &str) -> Option<usize> {
+    match phase {
+        "Betting" => Some(0),
+        "ComeOut" => Some(1),
+        "PointPhase" => Some(2),
+        "Resolved" => Some(3),
+        _ => None,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 //  Widget
 // ─────────────────────────────────────────────────────────────
 

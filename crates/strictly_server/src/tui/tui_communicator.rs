@@ -12,7 +12,7 @@ use crossterm::{
 };
 use elicitation::{
     ElicitCommunicator, ElicitError, ElicitErrorKind, ElicitResult, ElicitationContext,
-    StyleMarker, StyleContext,
+    StyleContext, StyleMarker,
 };
 use std::io::{self, Write as _};
 use tracing::instrument;
@@ -234,7 +234,10 @@ impl ElicitCommunicator for TuiCommunicator {
         &self.elicit_ctx
     }
 
-    fn with_style<T: 'static, S: StyleMarker + elicitation::style::ElicitationStyle + 'static>(&self, style: S) -> Self {
+    fn with_style<T: 'static, S: StyleMarker + elicitation::style::ElicitationStyle + 'static>(
+        &self,
+        style: S,
+    ) -> Self {
         let mut new = self.clone();
         new.style_ctx.set_style::<T, S>(style).ok();
         new

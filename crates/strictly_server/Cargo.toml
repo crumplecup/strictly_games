@@ -11,6 +11,7 @@ description = "Game server with MCP interface, REST API, and database persistenc
 # Core game types
 strictly_tictactoe = { workspace = true }
 strictly_blackjack = { workspace = true }
+strictly_craps = { workspace = true }
 
 # Elicitation framework
 elicitation = { workspace = true }
@@ -64,6 +65,7 @@ toml = { workspace = true }
 # Utilities
 async-trait = { workspace = true }
 strum = { workspace = true }
+rand = { version = "0.8", features = ["small_rng"] }
 
 # TUI
 ratatui = { workspace = true }

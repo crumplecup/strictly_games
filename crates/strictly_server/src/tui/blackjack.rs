@@ -189,9 +189,8 @@ where
     )?;
 
     let bet = loop {
-        let styled = comm.with_style::<u64, BlackjackBetStyle>(
-            BlackjackBetStyle::new(betting.bankroll()),
-        );
+        let styled =
+            comm.with_style::<u64, BlackjackBetStyle>(BlackjackBetStyle::new(betting.bankroll()));
         let raw: u64 = match u64::elicit(&styled).await {
             Ok(v) => v,
             Err(_) => {
@@ -981,9 +980,16 @@ where
                     match action {
                         BasicAction::Hit => {
                             let deck = &mut round.deck;
-                            round.seats[round_idx].hit(deck).map_err(anyhow::Error::msg)?;
+                            round.seats[round_idx]
+                                .hit(deck)
+                                .map_err(anyhow::Error::msg)?;
                             let seat = &round.seats[round_idx];
-                            let new_card = seat.hand.cards().last().map(|c| c.to_string()).unwrap_or_default();
+                            let new_card = seat
+                                .hand
+                                .cards()
+                                .last()
+                                .map(|c| c.to_string())
+                                .unwrap_or_default();
                             let total = seat.hand.value().best();
                             if seat.bust {
                                 event_log.push(GameEvent::story(format!(
@@ -1178,10 +1184,7 @@ where
         // Split left pane vertically: dealer (fixed 4 lines) + seats (remaining).
         let left_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(4),
-                Constraint::Min(0),
-            ])
+            .constraints([Constraint::Length(4), Constraint::Min(0)])
             .split(chunks[0]);
 
         // Dealer hand (fixed section at top).
@@ -1196,14 +1199,9 @@ where
         } else {
             format!("  ({})", dealer_hand.value().best())
         };
-        let dealer_widget = Paragraph::new(vec![
-            Line::from(format!("  {dealer_str}{dealer_value}")),
-        ])
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Dealer "),
-        );
+        let dealer_widget =
+            Paragraph::new(vec![Line::from(format!("  {dealer_str}{dealer_value}"))])
+                .block(Block::default().borders(Borders::ALL).title(" Dealer "));
         frame.render_widget(dealer_widget, left_chunks[0]);
 
         // Player seats (scrollable).
@@ -1302,7 +1300,11 @@ where
     Ok(())
 }
 async fn wait_for_keypress() -> Result<bool> {
-    use crossterm::{cursor::MoveTo, execute, style::{Color, Print, ResetColor, SetForegroundColor}};
+    use crossterm::{
+        cursor::MoveTo,
+        execute,
+        style::{Color, Print, ResetColor, SetForegroundColor},
+    };
 
     // Show instruction in the prompt pane so the user knows to press a key.
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -1311,7 +1313,12 @@ async fn wait_for_keypress() -> Result<bool> {
     let mut stdout = std::io::stdout();
     // Clear interior of pane.
     for row in content_row..rows.saturating_sub(1) {
-        execute!(stdout, MoveTo(1, row), Print(" ".repeat(cols.saturating_sub(2) as usize))).ok();
+        execute!(
+            stdout,
+            MoveTo(1, row),
+            Print(" ".repeat(cols.saturating_sub(2) as usize))
+        )
+        .ok();
     }
     execute!(
         stdout,

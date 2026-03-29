@@ -14,6 +14,8 @@ pub enum GameType {
     TicTacToe,
     /// Blackjack card game.
     Blackjack,
+    /// Craps dice game — progressive trainer.
+    Craps,
 }
 
 impl GameType {
@@ -23,6 +25,7 @@ impl GameType {
         match self {
             Self::TicTacToe => "Tic-Tac-Toe",
             Self::Blackjack => "Blackjack",
+            Self::Craps => "Craps",
         }
     }
 
@@ -32,13 +35,14 @@ impl GameType {
         match self {
             Self::TicTacToe => "tictactoe",
             Self::Blackjack => "blackjack",
+            Self::Craps => "craps",
         }
     }
 
     /// All available game types, in display order.
     #[instrument]
     pub fn all() -> &'static [GameType] {
-        &[Self::TicTacToe, Self::Blackjack]
+        &[Self::TicTacToe, Self::Blackjack, Self::Craps]
     }
 }
 

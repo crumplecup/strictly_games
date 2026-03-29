@@ -16,7 +16,9 @@ use crate::lobby::screens::{
 use crate::lobby::settings::GameType;
 use crate::lobby::settings::LobbySettings;
 use crate::run_game_session;
-use crate::tui::{BlackjackSessionOutcome, run_blackjack_session};
+use crate::tui::{
+    BlackjackSessionOutcome, CrapsSessionOutcome, run_blackjack_session, run_craps_session,
+};
 use crate::{
     AgentConfig, AgentLibrary, AnyGame, FirstPlayer, GameOutcome, ProfileService, TicTacToePlayer,
     User,
@@ -442,6 +444,37 @@ impl LobbyController {
                         "tui_session".to_string(),
                     ) {
                         tracing::warn!(error = %e, "Failed to record blackjack result");
+                    }
+                }
+
+                Ok(lobby_screen(&self.current_user))
+            }
+
+            // ── Craps ── local typestate game, progressive trainer ───────
+            GameType::Craps => {
+                let outcome = run_craps_session(
+                    terminal,
+                    player_name.clone(),
+                    1_000, // default starting bankroll
+                    show_typestate_graph,
+                )
+                .await?;
+
+                if let Some(user) = &self.current_user {
+                    let game_outcome = match outcome {
+                        CrapsSessionOutcome::CashedOut(_) => GameOutcome::Win,
+                        CrapsSessionOutcome::Busted => GameOutcome::Loss,
+                        CrapsSessionOutcome::Abandoned => GameOutcome::Draw,
+                    };
+                    if let Err(e) = self.profile_service.record_game_result(
+                        *user.id(),
+                        agent_name.to_string(),
+                        self.settings.selected_game.id().to_string(),
+                        game_outcome,
+                        1,
+                        "tui_session".to_string(),
+                    ) {
+                        tracing::warn!(error = %e, "Failed to record craps result");
                     }
                 }
 
