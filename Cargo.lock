@@ -1109,6 +1109,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "elicitation_rand"
+version = "0.9.1"
+dependencies = [
+ "elicitation",
+ "kani-verifier",
+ "rand 0.10.0",
+ "rand_chacha 0.10.0",
+]
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4038,10 +4048,11 @@ dependencies = [
  "derive-getters",
  "derive_more",
  "elicitation",
+ "elicitation_derive",
+ "elicitation_rand",
  "kani-verifier",
  "proc-macro2",
  "quote",
- "rand 0.8.5",
  "rmcp",
  "schemars",
  "serde",
@@ -4103,12 +4114,12 @@ dependencies = [
  "diesel_migrations",
  "dotenvy",
  "elicitation",
+ "elicitation_rand",
  "http-body-util",
  "hyper",
  "hyper-util",
  "proc-macro2",
  "quote",
- "rand 0.8.5",
  "ratatui",
  "reqwest 0.13.2",
  "rmcp",

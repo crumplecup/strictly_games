@@ -27,6 +27,8 @@ elicitation = { path = "../elicitation/crates/elicitation/", features = [
   "rand",
   "proofs",
 ] }
+elicitation_derive = { path = "../elicitation/crates/elicitation_derive/" }
+elicitation_rand = { path = "../elicitation/crates/elicitation_rand/" }
 # elicitation = { version = "0.8.2", features = ["rand"] }
 
 # Verification

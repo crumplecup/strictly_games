@@ -384,6 +384,126 @@ with `Established<P>` tokens, consuming typestate transitions, and a unified
 
 ---
 
+## Dice Generation with `#[derive(Rand)]`
+
+Craps is a canonical example of the elicitation
+framework's **generator system** — the same
+derive-based approach used for prompting and
+selection, but applied to random generation.
+
+### The Problem
+
+A naive dice implementation couples game logic
+to a specific RNG crate:
+
+```rust
+use rand::Rng;
+
+fn roll(rng: &mut impl Rng) -> u8 {
+    rng.gen_range(1..=6)
+}
+```
+
+This makes the game hard to test
+deterministically, impossible to replay, and
+tightly coupled to a particular `rand` version.
+
+### The Solution: `#[derive(Rand)]`
+
+The elicitation framework provides a `Generator`
+trait and a `Rand` derive macro. Adding
+`#[derive(Rand)]` to an enum generates a
+`random_generator(seed)` method that selects
+variants uniformly:
+
+```rust
+#[derive(Elicit, Rand)]
+pub enum DieFace {
+    One = 1,
+    Two = 2,
+    Three = 3,
+    Four = 4,
+    Five = 5,
+    Six = 6,
+}
+```
+
+This generates
+`DieFace::random_generator(seed: u64)`
+returning an `impl Generator<Target = DieFace>`.
+Each `.generate()` call produces the next face
+in a deterministic sequence.
+
+### Composing Generators: `DiceRoll`
+
+A craps roll needs *two* independent dice.
+`DiceRoll` composes two `DieFace` generators
+with split seeds to ensure independence:
+
+```rust
+impl DiceRoll {
+    pub fn random_generator(
+        seed: u64,
+    ) -> impl Generator<Target = Self> {
+        MapGenerator::new(
+            RandomGenerator::<u64>::with_seed(seed),
+            |inner_seed: u64| {
+                let g1 = DieFace::random_generator(
+                    inner_seed,
+                );
+                let g2 = DieFace::random_generator(
+                    inner_seed.wrapping_add(1),
+                );
+                DiceRoll::new(
+                    g1.generate(),
+                    g2.generate(),
+                )
+            },
+        )
+    }
+}
+```
+
+Each `.generate()` call draws a fresh
+`inner_seed` from a `RandomGenerator<u64>`, then
+creates two `DieFace` generators with adjacent
+seeds — die1 and die2 are never correlated.
+
+### Usage in the TUI
+
+The game loop creates one generator at session
+start and passes it through the round:
+
+```rust
+let dice = DiceRoll::random_generator(
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .as_nanos() as u64,
+);
+
+// Every roll is one call
+let roll = dice.generate();
+```
+
+### Why This Matters
+
+| Property       | Manual `rand`    | `#[derive(Rand)]`      |
+|----------------|------------------|------------------------|
+| Deterministic  | If you wire it   | By default (seeded)    |
+| Replayable     | Manual work      | Same seed → same game  |
+| Testable       | Mock the RNG     | Fixed seed in tests    |
+| Version-locked | Yes (`0.8`)      | Framework-managed      |
+| Type-safe      | Returns `u8`     | Returns `DieFace`      |
+
+The generator returns `DieFace`, not a raw
+integer — the type system guarantees every roll
+is in 1..=6, matching the Kani-verified
+invariant `dice_face_bounded`. The formal
+verification layer and the random generation
+layer agree on the same types.
+
+---
+
 ## The Elicitation Stack in One Diagram
 
 ```text

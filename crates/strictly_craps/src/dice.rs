@@ -3,14 +3,35 @@
 //! A craps roll uses two standard six-sided dice. [`DieFace`] represents a
 //! single die (1–6) and [`DiceRoll`] bundles two dice together, providing
 //! the sum and classification helpers.
+//!
+//! # Random Generation
+//!
+//! When the `roll` feature is enabled, both types integrate with the
+//! elicitation framework's [`Generator`] system via `#[derive(Rand)]`.
+//! This provides seeded, deterministic dice generation:
+//!
+//! ```rust,ignore
+//! use elicitation::Generator;
+//! use strictly_craps::{DieFace, DiceRoll};
+//!
+//! // Create a deterministic dice generator
+//! let dice = DiceRoll::random_generator(42);
+//!
+//! // Each call produces the next roll in the sequence
+//! let roll = dice.generate();
+//! println!("Rolled {} + {} = {}", roll.die1(), roll.die2(), roll.sum());
+//! ```
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::{Elicit, Generator, Prompt, Select};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 /// A single die face (1–6).
 ///
 /// Using an enum guarantees at the type level that a face can never be 0 or 7+.
+///
+/// With the `roll` feature, derives `Rand` for uniform random face selection
+/// via `DieFace::random_generator(seed)`.
 #[derive(
     Debug,
     Clone,
@@ -26,6 +47,7 @@ use tracing::instrument;
     Elicit,
     strum::EnumIter,
 )]
+#[cfg_attr(feature = "roll", derive(elicitation_derive::Rand))]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum DieFace {
     /// Face showing 1.
@@ -74,14 +96,6 @@ impl DieFace {
             _ => None,
         }
     }
-
-    /// Generates a random die face.
-    #[cfg(feature = "roll")]
-    #[instrument(skip(rng))]
-    pub fn random(rng: &mut impl rand::Rng) -> Self {
-        let v: u8 = rng.gen_range(1..=6);
-        Self::from_value(v).expect("gen_range(1..=6) always in range")
-    }
 }
 
 impl std::fmt::Display for DieFace {
@@ -94,6 +108,21 @@ impl std::fmt::Display for DieFace {
 ///
 /// The sum is always in 2..=12. Classification methods identify naturals,
 /// craps, and potential point values.
+///
+/// # Random Generation
+///
+/// With the `roll` feature, use `DiceRoll::random_generator(seed)` to create
+/// a deterministic dice generator. Each `generate()` call produces an
+/// independent roll by composing two [`DieFace`] generators with split seeds:
+///
+/// ```rust,ignore
+/// use elicitation::Generator;
+/// use strictly_craps::DiceRoll;
+///
+/// let dice = DiceRoll::random_generator(42);
+/// let roll = dice.generate(); // Independent, seeded roll
+/// assert!(roll.sum() >= 2 && roll.sum() <= 12);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct DiceRoll {
@@ -156,11 +185,34 @@ impl DiceRoll {
         crate::Point::from_sum(self.sum())
     }
 
-    /// Rolls two random dice.
+    /// Creates a seeded dice generator using the elicitation framework.
+    ///
+    /// The generator composes two independent [`DieFace`] generators with
+    /// split seeds, ensuring die1 and die2 are uncorrelated. Same seed
+    /// always produces the same sequence — ideal for replays and testing.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use elicitation::Generator;
+    /// use strictly_craps::DiceRoll;
+    ///
+    /// let dice = DiceRoll::random_generator(42);
+    /// let roll1 = dice.generate();
+    /// let roll2 = dice.generate();
+    /// // Deterministic: same seed → same sequence
+    /// ```
     #[cfg(feature = "roll")]
-    #[instrument(skip(rng))]
-    pub fn random(rng: &mut impl rand::Rng) -> Self {
-        Self::new(DieFace::random(rng), DieFace::random(rng))
+    pub fn random_generator(seed: u64) -> impl elicitation::Generator<Target = Self> {
+        elicitation_rand::generators::MapGenerator::new(
+            elicitation_rand::generators::RandomGenerator::<u64>::with_seed(seed),
+            |inner_seed: u64| {
+                // Split seed for independent dice
+                let gen1 = DieFace::random_generator(inner_seed);
+                let gen2 = DieFace::random_generator(inner_seed.wrapping_add(1));
+                DiceRoll::new(gen1.generate(), gen2.generate())
+            },
+        )
     }
 
     /// All 36 possible dice roll combinations.

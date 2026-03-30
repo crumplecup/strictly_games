@@ -17,8 +17,7 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
-use rand::SeedableRng as _;
-use rand::rngs::SmallRng;
+use elicitation::Generator as _;
 use ratatui::{
     Terminal,
     backend::Backend,
@@ -112,7 +111,12 @@ where
     let comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx);
     let nodes = craps_nodes();
     let edges = craps_edges();
-    let mut rng = SmallRng::from_entropy();
+    let dice = DiceRoll::random_generator(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64,
+    );
     let mut event_log: Vec<GameEvent> = Vec::new();
 
     // Initialize table with single human player
@@ -145,8 +149,7 @@ where
             prompt_rx: prompt_rx.clone(),
         };
 
-        let outcome =
-            run_single_round(&mut ctx, &mut table, &comm, &mut event_log, &mut rng).await?;
+        let outcome = run_single_round(&mut ctx, &mut table, &comm, &mut event_log, &dice).await?;
 
         if matches!(outcome, RoundOutcome::Quit) {
             let final_bankroll = *table.seats()[0].bankroll();
@@ -190,7 +193,7 @@ async fn run_single_round<B: Backend>(
     table: &mut CrapsTable,
     comm: &ObservableCommunicator<TuiCommunicator>,
     event_log: &mut Vec<GameEvent>,
-    rng: &mut SmallRng,
+    rng: &impl elicitation::Generator<Target = DiceRoll>,
 ) -> Result<RoundOutcome>
 where
     <B as Backend>::Error: Send + Sync + 'static,
@@ -273,7 +276,7 @@ where
     event_log.push(GameEvent::phase_change("Betting", "ComeOut"));
 
     // ── Come-out roll ─────────────────────────────────────────
-    let roll = DiceRoll::random(rng);
+    let roll = rng.generate();
     let sum = roll.sum();
 
     render_craps(
@@ -421,7 +424,7 @@ where
                 }
 
                 roll_count += 1;
-                let point_roll = DiceRoll::random(rng);
+                let point_roll = rng.generate();
                 let point_sum = point_roll.sum();
                 event_log.push(GameEvent::story(format!(
                     "🎲  Roll #{roll_count}: {} + {} = {point_sum}",
@@ -1051,7 +1054,12 @@ where
     let (prompt_tx, prompt_rx) = watch::channel(None::<String>);
     let nodes = craps_nodes();
     let edges = craps_edges();
-    let mut rng = SmallRng::from_entropy();
+    let dice = DiceRoll::random_generator(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64,
+    );
     let mut event_log: Vec<GameEvent> = Vec::new();
 
     // ── Build seat communicators ──────────────────────────────
@@ -1253,7 +1261,7 @@ where
         event_log.push(GameEvent::phase_change("Betting", "ComeOut"));
 
         // ── Come-out roll ────────────────────────────────────
-        let roll = DiceRoll::random(&mut rng);
+        let roll = dice.generate();
         let sum = roll.sum();
 
         render_craps(
@@ -1429,7 +1437,7 @@ where
                     }
 
                     roll_count += 1;
-                    let point_roll = DiceRoll::random(&mut rng);
+                    let point_roll = dice.generate();
                     let point_sum = point_roll.sum();
                     event_log.push(GameEvent::story(format!(
                         "🎲  Roll #{roll_count}: {} + {} = {point_sum}",
