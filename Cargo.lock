@@ -4204,6 +4204,7 @@ dependencies = [
 name = "strictly_tictactoe"
 version = "0.1.0"
 dependencies = [
+ "derive_more",
  "elicitation",
  "proc-macro2",
  "quote",

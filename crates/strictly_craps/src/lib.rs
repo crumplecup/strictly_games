@@ -17,6 +17,7 @@
 mod bet;
 mod dice;
 mod error;
+mod explore;
 mod ledger;
 mod lesson;
 mod payout;
@@ -24,12 +25,14 @@ mod personality;
 mod point;
 mod table;
 mod typestate;
+mod view;
 pub mod workflow;
 
 // Core types
 pub use bet::{ActiveBet, BetType, BettingAction};
 pub use dice::{DiceRoll, DieFace};
 pub use error::{CrapsError, CrapsErrorKind};
+pub use explore::CrapsAction;
 pub use ledger::{BetDeducted, CrapsLedger, RoundSettled};
 pub use lesson::LessonProgress;
 pub use payout::{BetOutcome, house_edge, payout_ratio, resolve_bet};
@@ -40,6 +43,7 @@ pub use typestate::{
     ComeOutResult, GameBetting, GameComeOut, GamePointPhase, GameResolved, GameSetup,
     MAX_BETS_PER_SEAT, MAX_ROLLS_PER_ROUND, MAX_SEATS, PointRollResult,
 };
+pub use view::CrapsTableView;
 pub use workflow::{
     BetsPlaced, ComeOutOutput, PointEstablished, PointRollOutput, execute_comeout_roll,
     execute_place_bets, execute_point_roll,

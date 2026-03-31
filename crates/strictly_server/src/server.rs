@@ -553,40 +553,74 @@ impl GameServer {
         }
     }
 
-    /// Elicit a position with board-state filtering (walled garden pattern).
+    /// Elicit a position with board-state filtering and agent exploration.
     ///
-    /// This demonstrates the pattern for context-aware selection using
-    /// the elicitation framework's Filter trait:
-    /// 1. Get current board state
-    /// 2. Use Position::elicit_valid_position() which internally filters
-    ///    using Position::select_with_filter(|pos| board.is_empty(*pos))
-    /// 3. Framework handles the prompt construction and response parsing
-    #[instrument(skip(self, _peer), fields(session_id))]
+    /// Agents see both commit (Play) and explore (ViewBoard, ViewLegalMoves,
+    /// ViewThreats) variants via [`TicTacToeAction`]. Explore selections
+    /// build a [`TicTacToeView`] snapshot, send the description through the
+    /// communicator, and re-elicit. When the agent selects Play(pos) the
+    /// position is returned.
+    #[instrument(skip(self, peer), fields(session_id))]
     async fn elicit_position_filtered(
         &self,
-        _peer: Peer<RoleServer>,
+        peer: Peer<RoleServer>,
         session_id: &str,
     ) -> Result<Position, McpError> {
-        // Get current board state for filtering
-        let session = self
-            .sessions
-            .get_session(session_id)
-            .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+        use elicitation::ElicitCommunicator as _;
+        use strictly_tictactoe::{TicTacToeAction, TicTacToeView};
 
-        let board = session.game.board();
+        let comm = ElicitServer::new(peer);
 
-        // Filter valid positions (empty squares)
-        let valid_positions = Position::valid_moves(board);
+        loop {
+            let action = TicTacToeAction::elicit(&comm)
+                .await
+                .map_err(|e| McpError::internal_error(format!("Elicitation failed: {e}"), None))?;
 
-        if valid_positions.is_empty() {
-            return Err(McpError::internal_error("No valid moves available", None));
+            if let Some(pos) = action.to_position() {
+                // Commit — validate the position is still legal
+                let session = self
+                    .sessions
+                    .get_session(session_id)
+                    .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+
+                let board = session.game.board();
+                if board.is_empty(pos) {
+                    tracing::info!(position = ?pos, "Position elicited and validated");
+                    return Ok(pos);
+                }
+                // Occupied despite agent choice — inform and retry
+                let _ = comm
+                    .send_prompt(&format!(
+                        "[Invalid Move] Position {} is occupied. Please choose an empty square.",
+                        pos
+                    ))
+                    .await;
+                continue;
+            }
+
+            // Explore — build view, describe, and loop
+            let category = action.explore_category().unwrap_or("unknown");
+            let session = self
+                .sessions
+                .get_session(session_id)
+                .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+
+            let current_player = session
+                .game
+                .to_move()
+                .ok_or_else(|| McpError::internal_error("No player to move", None))?;
+
+            let view = TicTacToeView::from_board(session.game.board(), current_player);
+            let description = view
+                .describe_category(category)
+                .unwrap_or_else(|| "No information available".to_string());
+
+            tracing::debug!(category, "Agent exploring game state");
+
+            let _ = comm
+                .send_prompt(&format!("[Game State — {category}] {description}"))
+                .await;
         }
-
-        // Use first valid position for now - TODO: implement proper elicitation
-        let position = valid_positions[0];
-
-        tracing::info!(position = ?position, "Position selected");
-        Ok(position)
     }
 
     /// Play a complete game of blackjack with elicitation.

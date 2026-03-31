@@ -28,8 +28,9 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 use strictly_craps::{
-    ActiveBet, BetOutcome, BetType, ComeOutOutput, CrapsTable, DiceRoll, GameSetup, Point,
-    PointRollOutput, execute_comeout_roll, execute_place_bets, execute_point_roll,
+    ActiveBet, BetOutcome, BetType, ComeOutOutput, CrapsAction, CrapsTable, CrapsTableView,
+    DiceRoll, GameSetup, Point, PointRollOutput, execute_comeout_roll, execute_place_bets,
+    execute_point_roll,
 };
 use tokio::sync::watch;
 use tracing::{info, instrument, warn};
@@ -1029,6 +1030,55 @@ async fn elicit_craps_bet<C: elicitation::ElicitCommunicator>(
     }
 }
 
+/// Elicits a bet from an agent, allowing exploration of table state first.
+///
+/// The agent sees both commit (PlaceBet / Done) and explore variants via
+/// [`CrapsAction`].  Explore selections build a [`CrapsTableView`] snapshot,
+/// send the description through the communicator, and re-elicit.  When the
+/// agent commits to `PlaceBet`, the actual bet amount is elicited via the
+/// styled `u64` prompt.  `Done` returns `None`.
+#[instrument(skip(comm, event_log))]
+async fn elicit_agent_craps_bet<C: elicitation::ElicitCommunicator>(
+    comm: &C,
+    table_min: u64,
+    table_max: u64,
+    bankroll: u64,
+    seat_name: &str,
+    event_log: &mut Vec<GameEvent>,
+) -> Option<u64> {
+    loop {
+        let action = CrapsAction::elicit(comm).await.ok()?;
+
+        match action {
+            CrapsAction::PlaceBet => {
+                return elicit_craps_bet(comm, table_min, table_max, bankroll).await;
+            }
+            CrapsAction::Done => return None,
+            _ => {
+                let category = action.explore_category().unwrap_or("unknown");
+                let view = CrapsTableView::from_betting(bankroll);
+                let description = view
+                    .describe_category(category)
+                    .unwrap_or_else(|| "No information available".to_string());
+
+                let narration = match action {
+                    CrapsAction::ViewPoint => "checks the point",
+                    CrapsAction::ViewActiveBets => "reviews their bets",
+                    CrapsAction::ViewOtherBets => "looks at other bets",
+                    CrapsAction::ViewRollHistory => "checks roll history",
+                    CrapsAction::ViewBankroll => "checks bankroll",
+                    _ => "explores",
+                };
+                event_log.push(GameEvent::story(format!("  🔍 {seat_name} {narration}")));
+
+                let _ = comm
+                    .send_prompt(&format!("[Table State — {category}] {description}"))
+                    .await;
+            }
+        }
+    }
+}
+
 /// Runs a multi-seat craps session with one human and AI co-players.
 ///
 /// All players bet independently on each round, share the same dice rolls,
@@ -1220,7 +1270,16 @@ where
             let ai_bet = match &seat_comms[i] {
                 CrapsSeatComm::Agent { comm, .. } => {
                     let max = ai_bankroll.min(table.table_max());
-                    match elicit_craps_bet(comm, table.table_min(), max, ai_bankroll).await {
+                    match elicit_agent_craps_bet(
+                        comm,
+                        table.table_min(),
+                        max,
+                        ai_bankroll,
+                        &seat_names[i],
+                        &mut event_log,
+                    )
+                    .await
+                    {
                         Some(v) => v,
                         None => table.table_min().min(ai_bankroll),
                     }

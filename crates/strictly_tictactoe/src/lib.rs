@@ -14,10 +14,14 @@
 #![warn(missing_docs)]
 
 mod complete;
+mod explore;
 pub mod position;
 pub mod rules;
 pub mod types;
+mod view;
 
 // Re-export core types
+pub use explore::TicTacToeAction;
 pub use position::Position;
 pub use types::{Board, Player, Square};
+pub use view::TicTacToeView;

@@ -33,9 +33,9 @@ use ratatui::{
 };
 use std::time::SystemTime;
 use strictly_blackjack::{
-    BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup, Hand, MultiRound,
-    Outcome, PlaceBetOutput, PlayActionOutput, PlayActionResult, SeatBet, execute_dealer_turn,
-    execute_place_bet, execute_play_action,
+    BasicAction, BetPlaced, BlackjackAction, BlackjackPlayerView, GameBetting, GameFinished,
+    GamePlayerTurn, GameSetup, Hand, MultiRound, Outcome, PlaceBetOutput, PlayActionOutput,
+    PlayActionResult, SeatBet, execute_dealer_turn, execute_place_bet, execute_play_action,
 };
 use tokio::sync::watch;
 use tokio::time::{Duration, sleep};
@@ -767,6 +767,57 @@ async fn elicit_action_from<C: elicitation::ElicitCommunicator>(comm: &C) -> Opt
     BasicAction::elicit(comm).await.ok()
 }
 
+/// Elicits a commit action from an agent, allowing exploration of game state.
+///
+/// Agents see both commit (Hit / Stand) and explore (ViewHand, etc.)
+/// variants via [`BlackjackAction`].  When the agent selects an explore
+/// variant the corresponding [`BlackjackPlayerView`] category is formatted
+/// and sent back through
+/// [`send_prompt`](elicitation::ElicitCommunicator::send_prompt) so it
+/// accumulates in the LLM context.  Elicitation then restarts.  The loop
+/// ends when the agent commits.
+#[instrument(skip(comm, round, event_log))]
+async fn elicit_agent_action<C: elicitation::ElicitCommunicator>(
+    comm: &C,
+    round: &MultiRound,
+    seat_idx: usize,
+    bankroll: u64,
+    event_log: &mut Vec<GameEvent>,
+) -> Option<BasicAction> {
+    loop {
+        let action = BlackjackAction::elicit(comm).await.ok()?;
+
+        if action.is_commit() {
+            return action.to_basic_action();
+        }
+
+        let category = action.explore_category().unwrap_or("unknown");
+        let view = BlackjackPlayerView::from_multi_round(round, seat_idx, bankroll);
+        let description = view
+            .describe_category(category)
+            .unwrap_or_else(|| "No information available".to_string());
+
+        let narration = match action {
+            BlackjackAction::ViewHand => "checks their hand",
+            BlackjackAction::ViewDealerCard => "checks dealer's up card",
+            BlackjackAction::ViewOtherPlayers => "looks at other players",
+            BlackjackAction::ViewShoeStatus => "checks the shoe",
+            BlackjackAction::ViewBankroll => "checks bankroll",
+            _ => "explores",
+        };
+        event_log.push(GameEvent::story(format!(
+            "  🔍 {} {}",
+            round.seats[seat_idx].name, narration
+        )));
+
+        // Deliver the explore result to the agent's LLM context before
+        // looping back to re-elicit.
+        let _ = comm
+            .send_prompt(&format!("[Game State — {category}] {description}"))
+            .await;
+    }
+}
+
 /// Runs a multi-player blackjack session with one human and zero or more AI agents.
 ///
 /// All players compete independently against the house from a single shared shoe.
@@ -978,7 +1029,16 @@ where
 
                     let action_opt = match &seat_comms[bankroll_idx] {
                         SeatComm::Human { comm, .. } => elicit_action_from(comm).await,
-                        SeatComm::Agent { comm, .. } => elicit_action_from(comm).await,
+                        SeatComm::Agent { comm, .. } => {
+                            elicit_agent_action(
+                                comm,
+                                &round,
+                                round_idx,
+                                bankrolls[bankroll_idx],
+                                &mut event_log,
+                            )
+                            .await
+                        }
                     };
                     let Some(action) = action_opt else {
                         break 'session;
