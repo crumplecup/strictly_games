@@ -2,60 +2,62 @@
 //!
 //! Uses "cloud of assumptions" pattern:
 //! - Trust: Rust's type system (enums, bounds checks, fixed arrays)
-//! - Verify: Game semantics (deck integrity, hand values, game rules)
+//! - Verify: Game semantics (shoe integrity, hand values, game rules)
 
-use strictly_blackjack::{Card, Deck, Hand, HandValue, MAX_DECK_CARDS, Rank, Suit};
+#[cfg(kani)]
+use elicitation::Generator;
+use strictly_blackjack::{Card, Hand, HandValue, Rank, Shoe, Suit};
 
-/// Verifies a new deck has exactly 52 cards.
+/// Verifies a new shoe has exactly 52 cards.
 ///
-/// Property: |Deck::new_shuffled().remaining()| = 52
+/// Property: |Shoe::default().total()| = 52
 ///
-/// Cloud: Trust fixed-array indexing and RNG
-/// Verify: Our deck initialization creates 52 cards
+/// Cloud: Trust Vec allocation and card generation
+/// Verify: Our shoe initialization creates 52 cards
 #[cfg(kani)]
 #[kani::proof]
-fn deck_has_52_cards() {
-    let deck = Deck::new_shuffled();
-    assert_eq!(deck.remaining(), 52, "New deck has 52 cards");
+fn shoe_has_52_cards() {
+    let shoe = Shoe::default();
+    assert_eq!(shoe.remaining(), 52, "New shoe has 52 cards");
 }
 
-/// Verifies dealing reduces remaining card count.
+/// Verifies generating reduces remaining card count.
 ///
-/// Property: deal(deck) ⟹ remaining(deck') = remaining(deck) - 1
+/// Property: generate(shoe) ⟹ remaining(shoe') = remaining(shoe) - 1
 ///
-/// Cloud: Trust fixed-array indexing and `dealt` counter
-/// Verify: Our deal tracking logic
+/// Cloud: Trust Cell<usize> counter and Vec indexing
+/// Verify: Our generate tracking logic
 #[cfg(kani)]
 #[kani::proof]
-fn deal_reduces_remaining() {
-    let mut deck = Deck::new_shuffled();
-    let initial = deck.remaining();
+fn generate_reduces_remaining() {
+    let shoe = Shoe::default();
+    let initial = shoe.remaining();
 
-    if let Some(_card) = deck.deal() {
-        let after = deck.remaining();
-        assert_eq!(after, initial - 1, "Dealing reduces count by 1");
+    if let Some(_card) = shoe.generate() {
+        let after = shoe.remaining();
+        assert_eq!(after, initial - 1, "Generating reduces count by 1");
     }
 }
 
-/// Verifies dealing from exhausted deck returns None.
+/// Verifies generating from exhausted shoe returns None.
 ///
-/// Property: remaining(deck) = 0 ⟹ deal(deck) = None
+/// Property: remaining(shoe) = 0 ⟹ generate(shoe) = None
 #[cfg(kani)]
 #[kani::proof]
-fn exhausted_deck_returns_none() {
-    let mut deck = Deck::new_shuffled();
+fn exhausted_shoe_returns_none() {
+    let shoe = Shoe::default();
 
-    // Deal all MAX_DECK_CARDS cards — concrete constant, Kani auto-determines bound.
-    for _ in 0..MAX_DECK_CARDS {
-        let card = deck.deal();
+    // Generate all 52 cards — concrete constant, Kani auto-determines bound.
+    for _ in 0..52 {
+        let card = shoe.generate();
         assert!(card.is_some(), "Cards available while remaining > 0");
     }
 
-    assert_eq!(deck.remaining(), 0, "Deck exhausted");
+    assert_eq!(shoe.remaining(), 0, "Shoe exhausted");
 
-    // Try to deal from exhausted deck
-    let card = deck.deal();
-    assert!(card.is_none(), "Exhausted deck returns None");
+    // Try to generate from exhausted shoe
+    let card = shoe.generate();
+    assert!(card.is_none(), "Exhausted shoe returns None");
 }
 
 /// Verifies Card::value() returns correct range.
@@ -427,35 +429,35 @@ fn soft_hard_exact_relation() {
     }
 }
 
-/// Verifies the deck (unshuffled) contains no duplicate cards.
+/// Verifies the shoe (unshuffled) contains no duplicate cards.
 ///
-/// Property: ∀i ≠ j in 0..52, deal_i(deck) ≠ deal_j(deck)
+/// Property: ∀i ≠ j in 0..52, generate_i(shoe) ≠ generate_j(shoe)
 ///
-/// In Kani, the shuffle feature is disabled so `new_shuffled()` produces
-/// a deterministic ordered deck.  Each of the 52 (Rank × Suit) pairs
+/// In Kani, the shuffle feature is disabled so `Shoe::default()` produces
+/// a deterministic ordered shoe.  Each of the 52 (Rank × Suit) pairs
 /// appears exactly once — proven by exhaustive pairwise comparison.
 #[cfg(kani)]
 #[kani::proof]
-fn deck_all_cards_unique() {
-    let mut deck = Deck::new_shuffled();
+fn shoe_all_cards_unique() {
+    let shoe = Shoe::default();
 
-    // Deal all cards into a fixed-size array — MAX_DECK_CARDS is a constant so
+    // Generate all cards into a fixed-size array — 52 is a constant so
     // Kani auto-determines the loop bound without an unwind annotation.
-    let mut cards = [Card::default(); MAX_DECK_CARDS];
-    for i in 0..MAX_DECK_CARDS {
-        let card = deck.deal();
-        assert!(card.is_some(), "All 52 cards available on fresh deck");
+    let mut cards = [Card::default(); 52];
+    for i in 0..52 {
+        let card = shoe.generate();
+        assert!(card.is_some(), "All 52 cards available on fresh shoe");
         cards[i] = card.unwrap();
     }
 
-    assert_eq!(deck.remaining(), 0, "Deck has exactly MAX_DECK_CARDS cards");
+    assert_eq!(shoe.remaining(), 0, "Shoe has exactly 52 cards");
 
     // Verify no two positions hold the same card.
-    // Both loop bounds are the constant MAX_DECK_CARDS — Kani unrolls them automatically.
-    for i in 0..MAX_DECK_CARDS {
-        for j in 0..MAX_DECK_CARDS {
+    // Both loop bounds are the constant 52 — Kani unrolls them automatically.
+    for i in 0..52 {
+        for j in 0..52 {
             if i != j {
-                assert_ne!(cards[i], cards[j], "No duplicate cards in deck");
+                assert_ne!(cards[i], cards[j], "No duplicate cards in shoe");
             }
         }
     }

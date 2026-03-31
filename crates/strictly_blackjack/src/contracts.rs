@@ -3,6 +3,7 @@
 //! Instead of runtime-only validation, we use the elicitation framework's
 //! contract system to carry proofs through the program.
 
+use elicitation::Generator;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::{And, Established, both};
 use tracing::instrument;
@@ -92,7 +93,7 @@ pub fn execute_action(
 ) -> Result<(), ActionError> {
     match action.action() {
         BasicAction::Hit => {
-            if let Some(card) = game.deck.deal() {
+            if let Some(card) = game.shoe.generate() {
                 game.player_hands[action.hand_index()].add_card(card);
                 Ok(())
             } else {

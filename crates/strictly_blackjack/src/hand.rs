@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// Maximum number of cards a hand can hold.
 ///
-/// With a single 52-card deck, the longest possible non-busted hand is 11 cards:
+/// With a single 52-card shoe, the longest possible non-busted hand is 11 cards:
 /// 4 Aces (4) + 4 Twos (8) + 3 Threes (9) = 21.  Any 12th card would bust.
 /// Using a fixed-size array lets Kani auto-determine loop bounds without
 /// per-harness `#[kani::unwind]` annotations.

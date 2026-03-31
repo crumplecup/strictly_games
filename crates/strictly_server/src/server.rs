@@ -621,7 +621,11 @@ impl GameServer {
             result_messages.push(format!("\n💰 Current bankroll: ${}\n", bankroll));
 
             // Create new betting state
-            let game = GameSetup::new().start_betting(bankroll);
+            let seed = std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(42);
+            let game = GameSetup::new(seed).start_betting(bankroll);
 
             // Elicit bet amount
             let bet = self.elicit_bet(peer.clone(), bankroll).await?;

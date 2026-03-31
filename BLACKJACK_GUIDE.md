@@ -260,9 +260,78 @@ Because the game logic lives in pure functions (`execute_place_bet`, etc.) that 
 
 ---
 
+## Card Generation with `Shoe`
+
+Blackjack showcases **stateful generation** — a fundamentally different pattern
+from the stateless dice generators in craps.
+
+### The Problem with Manual Card Management
+
+Traditional blackjack implementations pass `&mut Deck` through every function
+that deals cards. This creates borrow-checker friction in multi-player
+scenarios where multiple seats and the dealer all draw from the same deck.
+
+### The Elicitation Solution: `Shoe` as a `Generator`
+
+`Shoe` implements `elicitation::Generator<Target = Option<Card>>`, using
+`AtomicUsize` interior mutability so `generate(&self)` works without `&mut`:
+
+```rust
+pub struct Shoe {
+    cards: Vec<Card>,
+    dealt: AtomicUsize,  // Interior mutability for &self generate
+}
+
+impl Generator for Shoe {
+    type Target = Option<Card>;
+
+    fn generate(&self) -> Option<Card> {
+        let d = self.dealt.fetch_add(1, Ordering::Relaxed);
+        if d < self.cards.len() {
+            Some(self.cards[d])
+        } else {
+            None
+        }
+    }
+}
+```
+
+### Building Blocks: `#[derive(Rand)]` on Rank and Suit
+
+Both `Rank` and `Suit` derive `Rand` (feature-gated), giving them
+`random_generator(seed)` methods for uniform selection. `Shoe` composes these
+to build full decks, then shuffles using a seeded RNG from `elicitation_rand`.
+
+### Ergonomic Win in Multi-Player Code
+
+The `&self` signature dramatically simplifies the multi-player table:
+
+```rust
+// Before (Deck): borrow checker friction
+fn hit(&mut self, deck: &mut Deck) -> Result<(), ActionError>
+
+// After (Shoe): clean shared reference
+fn hit(&mut self, shoe: &Shoe) -> Result<(), ActionError>
+```
+
+Multiple seats share `&Shoe` without fighting over mutable borrows.
+
+### Dice vs Cards: Two Generator Patterns
+
+| Aspect       | Craps Dice              | Blackjack Cards          |
+| ------------ | ----------------------- | ------------------------ |
+| Pattern      | i.i.d. (independent)    | Without replacement      |
+| State        | Stateless generator     | Stateful (pool shrinks)  |
+| Interior mut | `RefCell<StdRng>` (rand)| `AtomicUsize` (counter)  |
+| Derive       | `#[derive(Rand)]`       | Manual `Generator` impl  |
+| Target       | `DiceRoll`              | `Option<Card>`           |
+| Exhaustion   | Never                   | Returns `None` when empty|
+
+---
+
 ## The Elicitation Stack in One Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    run_blackjack_session                      │
 │  (multi-round loop — renders TUI between each elicitation)   │

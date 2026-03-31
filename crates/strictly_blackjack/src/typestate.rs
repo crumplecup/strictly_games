@@ -5,12 +5,12 @@
 //! without first having `Established<PlayerTurnComplete>`, etc.
 
 use elicitation::contracts::Established;
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::{Elicit, Generator, Prompt, Select};
 use tracing::instrument;
 
 use crate::{
-    ActionError, BankrollLedger, BasicAction, BetDeducted, Deck, Hand, Outcome, PayoutSettled,
-    PlayerAction, execute_action, validate_action,
+    ActionError, BankrollLedger, BasicAction, BetDeducted, Hand, Outcome, PayoutSettled,
+    PlayerAction, Shoe, execute_action, validate_action,
 };
 use crate::{MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 
@@ -19,33 +19,33 @@ use crate::{MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 // ─────────────────────────────────────────────────────────────
 
 /// Game in setup phase — ready to start.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Default, Elicit)]
 pub struct GameSetup {
-    deck: Deck,
+    shoe: Shoe,
 }
 
 impl GameSetup {
-    /// Creates a new game in setup phase with a shuffled deck.
+    /// Creates a new game in setup phase with a shuffled single-deck shoe.
+    #[cfg(feature = "shuffle")]
     #[instrument]
-    pub fn new() -> Self {
+    pub fn new(seed: u64) -> Self {
         Self {
-            deck: Deck::new_shuffled(),
+            shoe: Shoe::new(seed, 1),
         }
+    }
+
+    /// Creates a new game from a pre-built shoe (for testing / formal verification).
+    pub fn with_shoe(shoe: Shoe) -> Self {
+        Self { shoe }
     }
 
     /// Starts betting phase with initial bankroll (consumes setup, returns betting).
     #[instrument(skip(self))]
     pub fn start_betting(self, initial_bankroll: u64) -> GameBetting {
         GameBetting {
-            deck: self.deck,
+            shoe: self.shoe,
             bankroll: initial_bankroll,
         }
-    }
-}
-
-impl Default for GameSetup {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -56,17 +56,17 @@ impl Default for GameSetup {
 /// Game in betting phase — player places bet.
 #[derive(Debug, Clone, Elicit)]
 pub struct GameBetting {
-    deck: Deck,
+    shoe: Shoe,
     bankroll: u64,
 }
 
 impl GameBetting {
-    /// Creates a new betting phase with the given deck and bankroll.
+    /// Creates a new betting phase with the given shoe and bankroll.
     ///
     /// Primarily useful for formal verification harnesses where a deterministic
-    /// deck is required.
-    pub fn new(deck: Deck, bankroll: u64) -> Self {
-        Self { deck, bankroll }
+    /// shoe is required.
+    pub fn new(shoe: Shoe, bankroll: u64) -> Self {
+        Self { shoe, bankroll }
     }
 
     /// Returns the current bankroll (before any bet is placed).
@@ -79,17 +79,17 @@ impl GameBetting {
     pub fn place_bet(self, bet: u64) -> Result<GameResult, ActionError> {
         let (ledger, bet_deducted) = BankrollLedger::debit(self.bankroll, bet)?;
 
-        let mut deck = self.deck;
+        let shoe = self.shoe;
         let mut player_hand = Hand::empty();
         let mut dealer_hand = Hand::empty();
 
         for _ in 0..2 {
-            if let Some(card) = deck.deal() {
+            if let Some(card) = shoe.generate() {
                 player_hand.add_card(card);
             } else {
                 return Err(ActionError::DeckExhausted);
             }
-            if let Some(card) = deck.deal() {
+            if let Some(card) = shoe.generate() {
                 dealer_hand.add_card(card);
             } else {
                 return Err(ActionError::DeckExhausted);
@@ -164,7 +164,7 @@ impl GameBetting {
         let mut bets_arr = [0u64; MAX_PLAYER_HANDS];
         bets_arr[0] = bet;
         Ok(GameResult::PlayerTurn(GamePlayerTurn {
-            deck,
+            shoe,
             player_hands,
             num_hands: 1,
             current_hand_index: 0,
@@ -183,7 +183,7 @@ impl GameBetting {
 /// Game in player turn phase — player takes actions.
 #[derive(Clone, Elicit)]
 pub struct GamePlayerTurn {
-    pub(crate) deck: Deck,
+    pub(crate) shoe: Shoe,
     pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
     pub(crate) num_hands: usize,
     pub(crate) current_hand_index: usize,
@@ -247,7 +247,7 @@ impl GamePlayerTurn {
 
         if self.current_hand_index >= self.num_hands {
             Ok(GameResult::DealerTurn(GameDealerTurn {
-                deck: self.deck,
+                shoe: self.shoe,
                 player_hands: self.player_hands,
                 num_hands: self.num_hands,
                 dealer_hand: self.dealer_hand,
@@ -283,7 +283,7 @@ impl GamePlayerTurn {
 /// Game in dealer turn phase — dealer plays by fixed rules.
 #[derive(Clone, Elicit)]
 pub struct GameDealerTurn {
-    pub(crate) deck: Deck,
+    pub(crate) shoe: Shoe,
     pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
     pub(crate) num_hands: usize,
     pub(crate) dealer_hand: Hand,
@@ -321,7 +321,7 @@ impl GameDealerTurn {
             if self.dealer_hand.value().best() >= 17 {
                 break;
             }
-            if let Some(card) = self.deck.deal() {
+            if let Some(card) = self.shoe.generate() {
                 self.dealer_hand.add_card(card);
             } else {
                 break;

@@ -30,8 +30,9 @@ schemars.workspace = true
 proc-macro2 = "1"
 quote = "1"
 
-# Random number generation (for shuffling)
-rand = { version = "0.8", features = ["small_rng"], optional = true }
+# Random number generation (for shuffling via elicitation generators)
+elicitation_derive = { workspace = true, optional = true }
+elicitation_rand = { workspace = true, optional = true }
 
 # Verification
 kani-verifier = { workspace = true, optional = true }
@@ -39,6 +40,6 @@ kani-verifier = { workspace = true, optional = true }
 [features]
 default = ["shuffle"]
 kani = ["kani-verifier"]
-shuffle = ["rand"]
+shuffle = ["elicitation_derive", "elicitation_rand"]
 # Enable proof generation methods (requires elicitation/proofs)
 proofs = []

@@ -31,9 +31,10 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
+use std::time::SystemTime;
 use strictly_blackjack::{
-    BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup, Hand, Outcome,
-    PlaceBetOutput, PlayActionOutput, PlayActionResult, SeatBet, execute_dealer_turn,
+    BasicAction, BetPlaced, GameBetting, GameFinished, GamePlayerTurn, GameSetup, Hand, MultiRound,
+    Outcome, PlaceBetOutput, PlayActionOutput, PlayActionResult, SeatBet, execute_dealer_turn,
     execute_place_bet, execute_play_action,
 };
 use tokio::sync::watch;
@@ -178,7 +179,11 @@ where
     let mut current_phase = "Betting".to_string();
 
     // ── Betting phase ─────────────────────────────────────────
-    let game = GameSetup::new();
+    let seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(42);
+    let game = GameSetup::new(seed);
     let betting = game.start_betting(bankroll);
 
     render_blackjack(
@@ -764,7 +769,7 @@ async fn elicit_action_from<C: elicitation::ElicitCommunicator>(comm: &C) -> Opt
 
 /// Runs a multi-player blackjack session with one human and zero or more AI agents.
 ///
-/// All players compete independently against the house from a single shared deck.
+/// All players compete independently against the house from a single shared shoe.
 /// Chat messages from all seats are collected and displayed in the right panel.
 ///
 /// # Round flow
@@ -785,8 +790,6 @@ pub async fn run_multi_blackjack_session<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
-    use strictly_blackjack::MultiRound;
-
     info!("Starting multi-player blackjack session");
 
     let (chat_tx, mut chat_rx) = chat_channel();
@@ -891,7 +894,11 @@ where
         }
 
         // ── Deal ─────────────────────────────────────────────────────────
-        let mut round = MultiRound::deal(seat_bets).map_err(anyhow::Error::msg)?;
+        let seed = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(42);
+        let mut round = MultiRound::deal(seat_bets, seed).map_err(anyhow::Error::msg)?;
 
         // Narrate the deal: each seat's opening hand and the dealer's up card.
         let dealer_up = round
@@ -979,9 +986,9 @@ where
 
                     match action {
                         BasicAction::Hit => {
-                            let deck = &mut round.deck;
+                            let shoe = &round.shoe;
                             round.seats[round_idx]
-                                .hit(deck)
+                                .hit(shoe)
                                 .map_err(anyhow::Error::msg)?;
                             let seat = &round.seats[round_idx];
                             let new_card = seat

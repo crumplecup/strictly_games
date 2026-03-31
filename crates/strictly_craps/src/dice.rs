@@ -22,7 +22,9 @@
 //! println!("Rolled {} + {} = {}", roll.die1(), roll.die2(), roll.sum());
 //! ```
 
-use elicitation::{Elicit, Generator, Prompt, Select};
+#[cfg(feature = "roll")]
+use elicitation::Generator;
+use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

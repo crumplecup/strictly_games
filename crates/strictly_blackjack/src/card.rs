@@ -1,9 +1,14 @@
 //! Card types for blackjack.
 
+#[cfg(feature = "shuffle")]
+use elicitation::Generator;
 use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 
 /// Rank of a playing card.
+///
+/// With the `shuffle` feature, derives `Rand` for uniform random rank selection
+/// via `Rank::random_generator(seed)`.
 #[derive(
     Debug,
     Clone,
@@ -18,6 +23,7 @@ use serde::{Deserialize, Serialize};
     Deserialize,
     Elicit,
 )]
+#[cfg_attr(feature = "shuffle", derive(elicitation_derive::Rand))]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Rank {
     /// Ace (value 1 or 11).
@@ -113,6 +119,9 @@ impl std::fmt::Display for Rank {
 }
 
 /// Suit of a playing card.
+///
+/// With the `shuffle` feature, derives `Rand` for uniform random suit selection
+/// via `Suit::random_generator(seed)`.
 #[derive(
     Debug,
     Clone,
@@ -127,6 +136,7 @@ impl std::fmt::Display for Rank {
     Deserialize,
     Elicit,
 )]
+#[cfg_attr(feature = "shuffle", derive(elicitation_derive::Rand))]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Suit {
     /// Hearts (♥).

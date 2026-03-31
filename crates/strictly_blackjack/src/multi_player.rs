@@ -1,6 +1,6 @@
 //! Multi-player blackjack table engine.
 //!
-//! A single shuffled [`Deck`] is shared across all seats and the dealer.
+//! A single [`Shoe`] is shared across all seats and the dealer.
 //! Each seat carries its own [`BankrollLedger`] and `Established<BetDeducted>`
 //! proof token, preserving the single-seat financial invariants at scale: a
 //! bet is deducted exactly once per seat and settlement occurs exactly once.
@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! 1. Caller collects one SeatBet per player (via elicitation).
-//! 2. MultiRound::deal(bets) → debit each bankroll, deal in casino rotation.
+//! 2. MultiRound::deal(bets, seed) → debit each bankroll, deal in casino rotation.
 //! 3. Check dealer_natural(): if true, settle immediately (skip player turns).
 //! 4. For each seat (!is_done()): elicit Hit/Stand; call seat.hit()/seat.stand().
 //! 5. multi_round.play_dealer()
@@ -28,11 +28,12 @@
 //!                             (final_bankroll, Established<PayoutSettled>)
 //! ```
 
+use elicitation::Generator;
 use elicitation::contracts::Established;
 use tracing::instrument;
 
 use crate::MAX_HAND_CARDS;
-use crate::{ActionError, BankrollLedger, BetDeducted, Deck, Hand, Outcome};
+use crate::{ActionError, BankrollLedger, BetDeducted, Hand, Outcome, Shoe};
 
 // ─────────────────────────────────────────────────────────────
 //  Constants
@@ -85,20 +86,23 @@ pub struct SeatPlay {
 }
 
 impl SeatPlay {
-    /// Deals one card from `deck` into this seat's hand.
+    /// Deals one card from `shoe` into this seat's hand.
     ///
     /// Sets `bust` to `true` if the hand exceeds 21.
     /// Has no effect (returns `Ok`) if the seat is already [`is_done`][Self::is_done].
     ///
+    /// Takes `&Shoe` (not `&mut`) because [`Shoe`] uses interior mutability
+    /// via [`Generator::generate(&self)`](elicitation::Generator::generate).
+    ///
     /// # Errors
     ///
-    /// Returns [`ActionError::DeckExhausted`] if the deck has no more cards.
-    #[instrument(skip(self, deck), fields(seat = %self.name))]
-    pub fn hit(&mut self, deck: &mut Deck) -> Result<(), ActionError> {
+    /// Returns [`ActionError::DeckExhausted`] if the shoe has no more cards.
+    #[instrument(skip(self, shoe), fields(seat = %self.name))]
+    pub fn hit(&mut self, shoe: &Shoe) -> Result<(), ActionError> {
         if self.is_done() {
             return Ok(());
         }
-        let card = deck.deal().ok_or(ActionError::DeckExhausted)?;
+        let card = shoe.generate().ok_or(ActionError::DeckExhausted)?;
         self.hand.add_card(card);
         if self.hand.is_bust() {
             self.bust = true;
@@ -198,12 +202,12 @@ pub struct SeatResult {
 //  Multi-player round
 // ─────────────────────────────────────────────────────────────
 
-/// Active multi-player round: shared deck, all seats, and the dealer's hand.
+/// Active multi-player round: shared shoe, all seats, and the dealer's hand.
 ///
 /// Created via [`MultiRound::deal`]; consumed via [`MultiRound::settle`].
 pub struct MultiRound {
-    /// Shared deck serving all seats and the dealer.
-    pub deck: Deck,
+    /// Shared shoe serving all seats and the dealer.
+    pub shoe: Shoe,
     /// Active seats in deal order.
     pub seats: Vec<SeatPlay>,
     /// Dealer's hand (face-up card visible; second card hidden until dealer plays).
@@ -222,12 +226,19 @@ impl MultiRound {
     ///
     /// # Errors
     ///
-    /// Returns [`ActionError`] if any bet is invalid/insufficient or the deck
-    /// runs out mid-deal (structurally impossible with a fresh 52-card deck and
+    /// Returns [`ActionError`] if any bet is invalid/insufficient or the shoe
+    /// runs out mid-deal (structurally impossible with a fresh 52-card shoe and
     /// ≤ [`MAX_SEATS`] players, but guarded against for safety).
+    #[cfg(feature = "shuffle")]
     #[instrument(skip(bets), fields(num_seats = bets.len()))]
-    pub fn deal(bets: Vec<SeatBet>) -> Result<Self, ActionError> {
-        let mut deck = Deck::new_shuffled();
+    pub fn deal(bets: Vec<SeatBet>, seed: u64) -> Result<Self, ActionError> {
+        let shoe = Shoe::new(seed, 1);
+        Self::deal_with_shoe(bets, shoe)
+    }
+
+    /// Deals a new round using a pre-built shoe (for testing / formal verification).
+    #[instrument(skip(bets, shoe), fields(num_seats = bets.len()))]
+    pub fn deal_with_shoe(bets: Vec<SeatBet>, shoe: Shoe) -> Result<Self, ActionError> {
         let num_seats = bets.len();
 
         // Debit all bankrolls before any cards are dealt so we don't deal to a
@@ -251,18 +262,18 @@ impl MultiRound {
 
         // Round 1: one card to every seat, then one to the dealer.
         for seat in &mut seats {
-            let card = deck.deal().ok_or(ActionError::DeckExhausted)?;
+            let card = shoe.generate().ok_or(ActionError::DeckExhausted)?;
             seat.hand.add_card(card);
         }
-        let card = deck.deal().ok_or(ActionError::DeckExhausted)?;
+        let card = shoe.generate().ok_or(ActionError::DeckExhausted)?;
         dealer_hand.add_card(card);
 
         // Round 2: second card to every seat, then second to the dealer.
         for seat in &mut seats {
-            let card = deck.deal().ok_or(ActionError::DeckExhausted)?;
+            let card = shoe.generate().ok_or(ActionError::DeckExhausted)?;
             seat.hand.add_card(card);
         }
-        let card = deck.deal().ok_or(ActionError::DeckExhausted)?;
+        let card = shoe.generate().ok_or(ActionError::DeckExhausted)?;
         dealer_hand.add_card(card);
 
         // Flag naturals.
@@ -280,7 +291,7 @@ impl MultiRound {
         );
 
         Ok(Self {
-            deck,
+            shoe,
             seats,
             dealer_hand,
         })
@@ -304,7 +315,7 @@ impl MultiRound {
             if self.dealer_hand.value().best() >= 17 {
                 break;
             }
-            if let Some(card) = self.deck.deal() {
+            if let Some(card) = self.shoe.generate() {
                 self.dealer_hand.add_card(card);
             } else {
                 break;

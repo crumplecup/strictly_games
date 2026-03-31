@@ -33,7 +33,7 @@ pub enum ActionError {
     #[display("Invalid bet amount: {}", _0)]
     InvalidBet(#[error(not(source))] u64),
 
-    /// Deck exhausted.
-    #[display("No cards remaining in deck")]
+    /// Shoe exhausted.
+    #[display("No cards remaining in shoe")]
     DeckExhausted,
 }
