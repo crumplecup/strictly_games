@@ -152,6 +152,24 @@ impl RestGameClient {
         Ok(game)
     }
 
+    /// Fetches the current explore/play stats from the server.
+    #[instrument(skip(self))]
+    pub async fn get_explore_stats(&self) -> Result<crate::session::ExploreStats> {
+        let url = format!(
+            "{}/api/sessions/{}/explore_stats",
+            self.base_url, self.session_id
+        );
+        let stats = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("Failed to deserialize explore stats")?;
+        Ok(stats)
+    }
+
     /// Makes a move via MCP tool.
     #[instrument(skip(self), fields(position = ?position))]
     pub async fn make_move(&mut self, position: Position) -> Result<()> {

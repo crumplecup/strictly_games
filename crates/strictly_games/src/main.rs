@@ -126,6 +126,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
 
     // Clone sessions for different uses (cheap - clones internal Arc)
     let rest_sessions = game_sessions.clone();
+    let explore_sessions = game_sessions.clone();
     let mcp_game_sessions = game_sessions.clone();
 
     debug!("About to create StreamableHttpService");
@@ -169,6 +170,20 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                     match rest_sessions.restart_game(&session_id) {
                         Ok(()) => StatusCode::OK,
                         Err(_) => StatusCode::NOT_FOUND,
+                    }
+                }
+            }),
+        )
+        .route(
+            "/api/sessions/{session_id}/explore_stats",
+            axum::routing::get({
+                let sessions = explore_sessions.clone();
+                move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
+                    use axum::Json;
+                    if let Some(session) = sessions.get_session(&session_id) {
+                        Json(session.explore_stats.clone())
+                    } else {
+                        Json(strictly_server::ExploreStats::default())
                     }
                 }
             }),

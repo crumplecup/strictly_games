@@ -1033,12 +1033,13 @@ async fn elicit_craps_bet<C: elicitation::ElicitCommunicator>(
 /// Elicits a bet from an agent, allowing exploration of table state first.
 ///
 /// The agent sees both commit (PlaceBet / Done) and explore variants via
-/// [`CrapsAction`].  Explore selections build a [`CrapsTableView`] snapshot,
-/// send the description through the communicator, and re-elicit.  When the
-/// agent commits to `PlaceBet`, the actual bet amount is elicited via the
-/// styled `u64` prompt.  `Done` returns `None`.
+/// [`CrapsAction`].  Explore selections build a [`CrapsTableView`] snapshot
+/// and cache the description in a [`KnowledgeCache`] that is prepended to
+/// every subsequent prompt.  When the agent commits to `PlaceBet`, the
+/// actual bet amount is elicited via the styled `u64` prompt.  `Done`
+/// returns `None`.
 #[instrument(skip(comm, event_log))]
-async fn elicit_agent_craps_bet<C: elicitation::ElicitCommunicator>(
+async fn elicit_agent_craps_bet<C: elicitation::ElicitCommunicator + Clone>(
     comm: &C,
     table_min: u64,
     table_max: u64,
@@ -1046,12 +1047,17 @@ async fn elicit_agent_craps_bet<C: elicitation::ElicitCommunicator>(
     seat_name: &str,
     event_log: &mut Vec<GameEvent>,
 ) -> Option<u64> {
+    use crate::tui::contextual_communicator::{ContextualCommunicator, knowledge_cache};
+
+    let knowledge = knowledge_cache();
+    let ctx_comm = ContextualCommunicator::new(comm.clone(), knowledge.clone());
+
     loop {
-        let action = CrapsAction::elicit(comm).await.ok()?;
+        let action = CrapsAction::elicit(&ctx_comm).await.ok()?;
 
         match action {
             CrapsAction::PlaceBet => {
-                return elicit_craps_bet(comm, table_min, table_max, bankroll).await;
+                return elicit_craps_bet(&ctx_comm, table_min, table_max, bankroll).await;
             }
             CrapsAction::Done => return None,
             _ => {
@@ -1071,7 +1077,12 @@ async fn elicit_agent_craps_bet<C: elicitation::ElicitCommunicator>(
                 };
                 event_log.push(GameEvent::story(format!("  🔍 {seat_name} {narration}")));
 
-                let _ = comm
+                knowledge
+                    .lock()
+                    .unwrap()
+                    .push(format!("[{category}] {description}"));
+
+                let _ = ctx_comm
                     .send_prompt(&format!("[Table State — {category}] {description}"))
                     .await;
             }

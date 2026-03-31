@@ -566,10 +566,12 @@ impl GameServer {
         peer: Peer<RoleServer>,
         session_id: &str,
     ) -> Result<Position, McpError> {
+        use crate::tui::contextual_communicator::{ContextualCommunicator, knowledge_cache};
         use elicitation::ElicitCommunicator as _;
         use strictly_tictactoe::{TicTacToeAction, TicTacToeView};
 
-        let comm = ElicitServer::new(peer);
+        let knowledge = knowledge_cache();
+        let comm = ContextualCommunicator::new(ElicitServer::new(peer), knowledge.clone());
 
         loop {
             let action = TicTacToeAction::elicit(&comm)
@@ -585,10 +587,15 @@ impl GameServer {
 
                 let board = session.game.board();
                 if board.is_empty(pos) {
+                    self.sessions.record_play(session_id);
                     tracing::info!(position = ?pos, "Position elicited and validated");
                     return Ok(pos);
                 }
                 // Occupied despite agent choice — inform and retry
+                knowledge
+                    .lock()
+                    .unwrap()
+                    .push(format!("[Invalid Move] Position {} is occupied.", pos));
                 let _ = comm
                     .send_prompt(&format!(
                         "[Invalid Move] Position {} is occupied. Please choose an empty square.",
@@ -598,7 +605,8 @@ impl GameServer {
                 continue;
             }
 
-            // Explore — build view, describe, and loop
+            // Explore — record, build view, cache knowledge, and loop
+            self.sessions.record_explore(session_id);
             let category = action.explore_category().unwrap_or("unknown");
             let session = self
                 .sessions
@@ -616,6 +624,13 @@ impl GameServer {
                 .unwrap_or_else(|| "No information available".to_string());
 
             tracing::debug!(category, "Agent exploring game state");
+
+            // Add to the growing knowledge cache so the agent sees it
+            // in every subsequent prompt until it commits.
+            knowledge
+                .lock()
+                .unwrap()
+                .push(format!("[{category}] {description}"));
 
             let _ = comm
                 .send_prompt(&format!("[Game State — {category}] {description}"))

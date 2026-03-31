@@ -4,6 +4,7 @@
 
 pub mod blackjack;
 pub mod chat_widget;
+pub mod contextual_communicator;
 pub mod craps;
 mod input; // Cursor movement
 pub mod mcp_communicator;
@@ -34,8 +35,8 @@ use crate::{AnyGame, FirstPlayer, TicTacToePlayer};
 use crate::games::tictactoe::Position;
 use rest_client::RestGameClient;
 use typestate_widget::{
-    EdgeDef, GameEvent, NodeDef, TypestateGraphWidget, tictactoe_active, tictactoe_edges,
-    tictactoe_nodes, tictactoe_phase_name,
+    EdgeDef, ExploreStats, GameEvent, NodeDef, TypestateGraphWidget, tictactoe_active,
+    tictactoe_edges, tictactoe_nodes, tictactoe_phase_name,
 };
 
 /// Run the TUI client
@@ -146,12 +147,18 @@ where
     let mut event_log: Vec<GameEvent> = vec![GameEvent::story("🎮 Game begins — X moves first")];
     let mut prev_phase: Option<&'static str> = None;
     let mut prev_move_count: usize = 0;
+    let mut explore_stats = ExploreStats::default();
     let ttt_nodes = tictactoe_nodes();
     let ttt_edges = tictactoe_edges();
 
     loop {
         // Get game state (type-safe!)
         let game = client.get_game().await?;
+
+        // Fetch explore stats (best-effort).
+        if let Ok(stats) = client.get_explore_stats().await {
+            explore_stats = stats;
+        }
 
         // Track phase transitions.
         let current_phase = tictactoe_phase_name(&game);
@@ -213,7 +220,7 @@ where
         };
 
         // Render UI
-        let graph = GraphState::new(true, &ttt_nodes, &ttt_edges, active);
+        let graph = GraphState::new(true, &ttt_nodes, &ttt_edges, active, &explore_stats);
         terminal.draw(|f| {
             render_tictactoe_frame(
                 f,
@@ -360,9 +367,15 @@ where
     let mut event_log: Vec<GameEvent> = vec![GameEvent::story("🎮 Game begins — X moves first")];
     let mut prev_phase: Option<&'static str> = None;
     let mut prev_move_count: usize = 0;
+    let mut explore_stats = ExploreStats::default();
 
     loop {
         let game = client.get_game().await?;
+
+        // Fetch explore stats (best-effort, ignore errors).
+        if let Ok(stats) = client.get_explore_stats().await {
+            explore_stats = stats;
+        }
 
         // Track phase transitions.
         let current_phase = tictactoe_phase_name(&game);
@@ -403,6 +416,7 @@ where
                 cursor,
                 &event_log,
                 show_typestate_graph,
+                &explore_stats,
             )
             .await;
         }
@@ -415,6 +429,7 @@ where
             cursor,
             &event_log,
             show_typestate_graph,
+            &explore_stats,
         )?;
 
         // Handle input.
@@ -457,6 +472,7 @@ async fn render_game_over_and_wait<B: ratatui::backend::Backend>(
     cursor: Position,
     event_log: &[GameEvent],
     show_typestate_graph: bool,
+    explore_stats: &ExploreStats,
 ) -> Result<AnyGame>
 where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
@@ -473,7 +489,13 @@ where
         game.status_string()
     );
 
-    let graph = GraphState::new(show_typestate_graph, &ttt_nodes, &ttt_edges, active);
+    let graph = GraphState::new(
+        show_typestate_graph,
+        &ttt_nodes,
+        &ttt_edges,
+        active,
+        explore_stats,
+    );
     terminal.draw(|f| {
         render_tictactoe_frame(
             f,
@@ -507,6 +529,7 @@ fn render_active_game<B: ratatui::backend::Backend>(
     cursor: Position,
     event_log: &[GameEvent],
     show_typestate_graph: bool,
+    explore_stats: &ExploreStats,
 ) -> Result<()>
 where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
@@ -532,7 +555,13 @@ where
         Color::Yellow
     };
 
-    let graph = GraphState::new(show_typestate_graph, &ttt_nodes, &ttt_edges, active);
+    let graph = GraphState::new(
+        show_typestate_graph,
+        &ttt_nodes,
+        &ttt_edges,
+        active,
+        explore_stats,
+    );
     terminal.draw(|f| {
         render_tictactoe_frame(
             f,
@@ -612,16 +641,25 @@ struct GraphState<'a> {
     edges: &'a [EdgeDef],
     /// Index of the currently active phase node.
     active: Option<usize>,
+    /// Agent explore/play tracking stats.
+    explore_stats: &'a ExploreStats,
 }
 
 impl<'a> GraphState<'a> {
     /// Creates a new graph state bundle.
-    fn new(show: bool, nodes: &'a [NodeDef], edges: &'a [EdgeDef], active: Option<usize>) -> Self {
+    fn new(
+        show: bool,
+        nodes: &'a [NodeDef],
+        edges: &'a [EdgeDef],
+        active: Option<usize>,
+        explore_stats: &'a ExploreStats,
+    ) -> Self {
         Self {
             show,
             nodes,
             edges,
             active,
+            explore_stats,
         }
     }
 }
@@ -731,10 +769,9 @@ fn render_tictactoe_frame(
 
     // Typestate graph (right column, if enabled)
     if graph.show && content_areas.len() > 2 {
-        f.render_widget(
-            TypestateGraphWidget::new(graph.nodes, graph.edges, graph.active, event_log),
-            content_areas[2],
-        );
+        let widget = TypestateGraphWidget::new(graph.nodes, graph.edges, graph.active, event_log)
+            .with_explore_stats(graph.explore_stats);
+        f.render_widget(widget, content_areas[2]);
     }
 
     // Status bar — combined game state + key hints

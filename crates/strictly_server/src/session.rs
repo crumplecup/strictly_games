@@ -10,6 +10,48 @@ use tracing::{debug, info, instrument, warn};
 /// Unique identifier for a game session.
 pub type SessionId = String;
 
+/// Tracks how many explore vs play actions an agent has taken.
+///
+/// Surfaced in the typestate graph and story pane so the human player
+/// can tell at a glance whether the agent is exploring productively
+/// or stuck in an explore whirlpool.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExploreStats {
+    /// Cumulative explore actions this game.
+    pub total_explores: usize,
+    /// Cumulative commit (play) actions this game.
+    pub total_plays: usize,
+    /// Explore count in the current turn (resets each commit).
+    pub turn_explores: usize,
+}
+
+impl ExploreStats {
+    /// Records an explore action.
+    pub fn record_explore(&mut self) {
+        self.total_explores += 1;
+        self.turn_explores += 1;
+    }
+
+    /// Records a commit (play) action, resetting the per-turn counter.
+    pub fn record_play(&mut self) {
+        self.total_plays += 1;
+        self.turn_explores = 0;
+    }
+
+    /// Formats a compact status line for the story pane or callout.
+    ///
+    /// Example: `"🔍 3 explores / 2 plays (1 this turn)"`
+    pub fn status_line(&self) -> String {
+        if self.total_explores == 0 && self.total_plays == 0 {
+            return String::new();
+        }
+        format!(
+            "🔍 {} explores / {} plays ({} this turn)",
+            self.total_explores, self.total_plays, self.turn_explores
+        )
+    }
+}
+
 /// Unique identifier for a player.
 pub type PlayerId = String;
 
@@ -54,6 +96,8 @@ pub struct GameSession {
     pub cancellation_tx: watch::Sender<bool>,
     /// Receiver for cancellation signal.
     cancellation_rx: watch::Receiver<bool>,
+    /// Agent explore/play tracking stats.
+    pub explore_stats: ExploreStats,
 }
 
 impl GameSession {
@@ -71,6 +115,7 @@ impl GameSession {
             player_o: None,
             cancellation_tx,
             cancellation_rx,
+            explore_stats: ExploreStats::default(),
         }
     }
 
@@ -369,8 +414,36 @@ impl SessionManager {
         session.game = GameSetup::new()
             .start(crate::games::tictactoe::Player::X)
             .into();
+        session.explore_stats = ExploreStats::default();
         info!("Game restarted with same players");
         Ok(())
+    }
+
+    /// Records an agent explore action on a session.
+    #[instrument(skip(self))]
+    pub fn record_explore(&self, session_id: &str) {
+        let mut sessions = self.sessions.lock().unwrap();
+        if let Some(session) = sessions.get_mut(session_id) {
+            session.explore_stats.record_explore();
+            debug!(
+                total_explores = session.explore_stats.total_explores,
+                turn_explores = session.explore_stats.turn_explores,
+                "Recorded explore action"
+            );
+        }
+    }
+
+    /// Records an agent commit (play) action on a session.
+    #[instrument(skip(self))]
+    pub fn record_play(&self, session_id: &str) {
+        let mut sessions = self.sessions.lock().unwrap();
+        if let Some(session) = sessions.get_mut(session_id) {
+            session.explore_stats.record_play();
+            debug!(
+                total_plays = session.explore_stats.total_plays,
+                "Recorded play action"
+            );
+        }
     }
 }
 

@@ -772,20 +772,24 @@ async fn elicit_action_from<C: elicitation::ElicitCommunicator>(comm: &C) -> Opt
 /// Agents see both commit (Hit / Stand) and explore (ViewHand, etc.)
 /// variants via [`BlackjackAction`].  When the agent selects an explore
 /// variant the corresponding [`BlackjackPlayerView`] category is formatted
-/// and sent back through
-/// [`send_prompt`](elicitation::ElicitCommunicator::send_prompt) so it
-/// accumulates in the LLM context.  Elicitation then restarts.  The loop
-/// ends when the agent commits.
+/// and cached in a [`KnowledgeCache`] that is prepended to every subsequent
+/// prompt.  This way the agent sees all previously gathered knowledge in
+/// each new elicitation request.  The loop ends when the agent commits.
 #[instrument(skip(comm, round, event_log))]
-async fn elicit_agent_action<C: elicitation::ElicitCommunicator>(
+async fn elicit_agent_action<C: elicitation::ElicitCommunicator + Clone>(
     comm: &C,
     round: &MultiRound,
     seat_idx: usize,
     bankroll: u64,
     event_log: &mut Vec<GameEvent>,
 ) -> Option<BasicAction> {
+    use crate::tui::contextual_communicator::{ContextualCommunicator, knowledge_cache};
+
+    let knowledge = knowledge_cache();
+    let ctx_comm = ContextualCommunicator::new(comm.clone(), knowledge.clone());
+
     loop {
-        let action = BlackjackAction::elicit(comm).await.ok()?;
+        let action = BlackjackAction::elicit(&ctx_comm).await.ok()?;
 
         if action.is_commit() {
             return action.to_basic_action();
@@ -810,9 +814,14 @@ async fn elicit_agent_action<C: elicitation::ElicitCommunicator>(
             round.seats[seat_idx].name, narration
         )));
 
-        // Deliver the explore result to the agent's LLM context before
-        // looping back to re-elicit.
-        let _ = comm
+        // Add to growing knowledge cache so agent sees everything it
+        // has learned in every subsequent prompt.
+        knowledge
+            .lock()
+            .unwrap()
+            .push(format!("[{category}] {description}"));
+
+        let _ = ctx_comm
             .send_prompt(&format!("[Game State — {category}] {description}"))
             .await;
     }

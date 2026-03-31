@@ -151,6 +151,9 @@ impl GameEvent {
     }
 }
 
+// Re-export ExploreStats from session for use in the widget
+pub use crate::session::ExploreStats;
+
 // ─────────────────────────────────────────────────────────────
 //  Blackjack graph definition
 // ─────────────────────────────────────────────────────────────
@@ -212,12 +215,14 @@ pub fn blackjack_active(phase: &str) -> Option<usize> {
 // ─────────────────────────────────────────────────────────────
 
 /// Node definitions for the tictactoe typestate graph (in display order).
+///
+/// The `InProgress` phase is split into `X Turn` and `O Turn` sub-nodes
+/// so the graph reflects whose move it is.
 pub fn tictactoe_nodes() -> Vec<NodeDef> {
     vec![
         NodeDef { label: "GameSetup" },
-        NodeDef {
-            label: "InProgress",
-        },
+        NodeDef { label: "X Turn" },
+        NodeDef { label: "O Turn" },
         NodeDef {
             label: "GameFinished",
         },
@@ -227,39 +232,66 @@ pub fn tictactoe_nodes() -> Vec<NodeDef> {
 /// Edge definitions for the tictactoe typestate graph.
 pub fn tictactoe_edges() -> Vec<EdgeDef> {
     vec![
+        // Setup → X Turn (X always moves first)
         EdgeDef {
             from: 0,
             to: 1,
             label: None,
-        }, // .start()
+        },
+        // X Turn → O Turn
         EdgeDef {
             from: 1,
             to: 2,
             label: None,
-        }, // .make_move() → terminal
+        },
+        // O Turn → X Turn (alternation loop)
         EdgeDef {
             from: 2,
-            to: 0,
+            to: 1,
             label: None,
-        }, // .restart()
+        },
+        // X Turn → GameFinished (X wins or draws)
+        EdgeDef {
+            from: 1,
+            to: 3,
+            label: Some("(end)"),
+        },
+        // O Turn → GameFinished (O wins or draws)
+        EdgeDef {
+            from: 2,
+            to: 3,
+            label: Some("(end)"),
+        },
     ]
 }
 
 /// Maps the current `AnyGame` to the active node index in the tictactoe graph.
 #[instrument(skip(game))]
 pub fn tictactoe_active(game: &AnyGame) -> Option<usize> {
+    use crate::games::tictactoe::Player;
+
     match game {
         AnyGame::Setup { .. } => Some(0),
-        AnyGame::InProgress { .. } => Some(1),
-        AnyGame::Won { .. } | AnyGame::Draw { .. } | AnyGame::Finished { .. } => Some(2),
+        AnyGame::InProgress { .. } => match game.to_move() {
+            Some(Player::X) => Some(1),
+            Some(Player::O) => Some(2),
+            None => Some(1),
+        },
+        AnyGame::Won { .. } | AnyGame::Draw { .. } | AnyGame::Finished { .. } => Some(3),
     }
 }
 
 /// Returns the phase name string for an `AnyGame` (used for event logging).
 pub fn tictactoe_phase_name(game: &AnyGame) -> &'static str {
+    use crate::games::tictactoe::Player;
+
     match game {
         AnyGame::Setup { .. } => "Setup",
-        AnyGame::InProgress { .. } => "InProgress",
+        AnyGame::InProgress { .. } => match game.to_move() {
+            Some(Player::X) => "X Turn",
+            Some(Player::O) => "O Turn",
+            None => "InProgress",
+        },
         _ => "Finished",
     }
 }
@@ -344,6 +376,8 @@ pub struct TypestateGraphWidget<'a> {
     pub events: &'a [GameEvent],
     /// Live phase context for the callout — `None` hides the callout.
     pub context: Option<&'a PhaseContext>,
+    /// Agent explore/play stats — `None` hides the stats bar.
+    pub explore_stats: Option<&'a ExploreStats>,
 }
 
 impl<'a> TypestateGraphWidget<'a> {
@@ -360,12 +394,19 @@ impl<'a> TypestateGraphWidget<'a> {
             active,
             events,
             context: None,
+            explore_stats: None,
         }
     }
 
     /// Attaches a live phase context that renders as a callout under the active node.
     pub fn with_context(mut self, ctx: &'a PhaseContext) -> Self {
         self.context = Some(ctx);
+        self
+    }
+
+    /// Attaches explore/play tracking stats.
+    pub fn with_explore_stats(mut self, stats: &'a ExploreStats) -> Self {
+        self.explore_stats = Some(stats);
         self
     }
 }
@@ -387,16 +428,34 @@ impl Widget for TypestateGraphWidget<'_> {
         let callout_lines = self.callout_height();
         let connector_rows: usize = if callout_lines > 0 { 1 } else { 0 };
         let needed_graph_h = (box_h + connector_rows + callout_lines + 1) as u16;
-        let graph_h = needed_graph_h.max(5).min(inner.height.saturating_sub(3)); // leave at least 3 rows for the log
-        let log_h = inner.height.saturating_sub(graph_h);
+        let has_stats = self
+            .explore_stats
+            .is_some_and(|s| s.total_explores > 0 || s.total_plays > 0);
+        let stats_h: u16 = if has_stats { 1 } else { 0 };
+        let graph_h = needed_graph_h
+            .max(5)
+            .min(inner.height.saturating_sub(3 + stats_h));
+        let log_h = inner.height.saturating_sub(graph_h + stats_h);
+
+        let mut constraints = vec![Constraint::Length(graph_h)];
+        if has_stats {
+            constraints.push(Constraint::Length(stats_h));
+        }
+        constraints.push(Constraint::Length(log_h));
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(graph_h), Constraint::Length(log_h)])
+            .constraints(constraints)
             .split(inner);
 
         self.render_graph(chunks[0], buf);
-        self.render_log(chunks[1], buf);
+
+        if has_stats {
+            self.render_explore_stats(chunks[1], buf);
+            self.render_log(chunks[2], buf);
+        } else {
+            self.render_log(chunks[1], buf);
+        }
     }
 }
 
@@ -783,6 +842,29 @@ impl TypestateGraphWidget<'_> {
         if row < area.y + area.height {
             let bot = format!("└{}┘", "─".repeat(inner_w));
             buf.set_string(cx, row, &bot, border_style);
+        }
+    }
+
+    /// Renders the explore/play stats bar between graph and story log.
+    ///
+    /// Shows a compact line like: `🔍 3 explores / 2 plays (1 this turn)`
+    /// The bar turns yellow when per-turn explores exceed 3 (potential whirlpool).
+    fn render_explore_stats(&self, area: Rect, buf: &mut Buffer) {
+        if area.height == 0 || area.width < 4 {
+            return;
+        }
+        if let Some(stats) = self.explore_stats {
+            let text = stats.status_line();
+            let whirlpool = stats.turn_explores > 3;
+            let style = if whirlpool {
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Yellow)
+            };
+            let suffix = if whirlpool { " ⚠ whirlpool?" } else { "" };
+            let full = format!("{text}{suffix}");
+            let line = Line::from(Span::styled(full, style));
+            Paragraph::new(line).render(area, buf);
         }
     }
 
