@@ -15,7 +15,7 @@ This codebase is the **proof of concept**.
 
 ## 📐 Verification Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────────┐
 │ Elicitation Framework (321 Kani Proofs)           │
 │ ✓ Select mechanism correctness                    │
@@ -62,6 +62,7 @@ This codebase is the **proof of concept**.
 **Key insight**: These proofs are **auto-generated** by `#[derive(Elicit)]`. We get verification for free by using the framework.
 
 **Running**:
+
 ```bash
 cargo kani --harness verify_tictactoe_compositional
 ```
@@ -80,6 +81,7 @@ cargo kani --harness verify_tictactoe_compositional
 **Key insight**: These go beyond type safety to prove **game semantics** are correct.
 
 **Running**:
+
 ```bash
 cargo kani --harness board_never_has_both_winners
 cargo kani --harness winner_detection_is_deterministic
@@ -103,6 +105,7 @@ cargo kani --harness player_opponent_is_involutive
 **Key insight**: This verifies a **novel pattern** (passive-Affirm) that enables human-in-the-loop control without annoying prompts.
 
 **Running**:
+
 ```bash
 cargo kani --harness affirm_continue_always_returns
 cargo kani --harness cancellation_is_monotonic
@@ -135,6 +138,7 @@ just verify-kani-tracked
 ```
 
 This records results to `verification_results.csv`:
+
 ```csv
 verifier,harness,status,checks,time_seconds,timestamp,error_message
 kani,verify_tictactoe_compositional,Success,10603,8.52,2026-02-23T04:13:45Z,
@@ -142,12 +146,14 @@ kani,player_opponent_is_involutive,Success,10469,7.89,2026-02-23T04:14:12Z,
 ```
 
 View current status:
+
 ```bash
 just verify-status
 ```
 
 Output:
-```
+
+```text
 KANI: 20/20 passing
   ✅ affirm_continue_always_returns              10234 checks    7.2s
   ✅ player_opponent_is_involutive               10469 checks    7.9s
@@ -156,6 +162,7 @@ KANI: 20/20 passing
 ```
 
 **Why track verification?**
+
 - Continuous monitoring (when proofs last passed)
 - Performance tracking (detect slowdowns)
 - CI/CD integration (automated pipelines)
@@ -167,21 +174,26 @@ KANI: 20/20 passing
 Strictly Games showcases formal verification across **three verifiers**:
 
 ### 1. Kani (Symbolic Execution) - ✅ Complete
+
 - 20+ proof harnesses in `src/kani_proofs/`
 - 200K+ verification checks
 - Bounded model checking with CBMC
 - Tracked with CSV timestamps
 
 ### 2. Verus (Specification-Based) - ✅ Complete
+
 - Executable specifications in `src/verus_proofs/`
 - `ensures` clauses with Z3 SMT solver
 - See `src/verus_proofs/README.md` for setup
 
 ### 3. Creusot (Deductive) - 🔲 Planned
+
 - `#[trusted]` annotations
 - Pattern from elicitation's 456 proofs
 
 **Result:** Demonstrates elicitation works with entire Rust formal verification ecosystem.
+
+```bash
 cargo kani --features verification
 
 # Run specific harness
@@ -195,7 +207,7 @@ cargo install --locked kani-verifier
 cargo kani setup
 ```
 
-See: https://model-checking.github.io/kani/install-guide.html
+See: <https://model-checking.github.io/kani/install-guide.html>
 
 ## 📊 What Gets Verified
 
@@ -225,7 +237,7 @@ See: https://model-checking.github.io/kani/install-guide.html
 
 When an LLM is asked to make a move in this game:
 
-```
+```text
 Agent: "I'll place at position 15"
 Framework: ❌ Type error - Position enum has 9 variants
 
@@ -247,6 +259,7 @@ This pattern enables LLMs in:
 - **Safety**: User can always override agent (escape hatch proven)
 
 The framework makes this **practical**, not just theoretical:
+
 - Zero runtime cost (proofs are PhantomData)
 - Compositional verification (scales to complex systems)
 - Developer-friendly (just use `#[derive(Elicit)]`)
@@ -268,7 +281,7 @@ The framework makes this **practical**, not just theoretical:
 ## 🔗 Related Work
 
 - **Typestate pattern**: Compile-time phase enforcement (Setup, InProgress, Finished)
-- **Proof-carrying code**: Execute only with proof tokens (Established<P>)
+- **Proof-carrying code**: Execute only with proof tokens (`Established<P>`)
 - **Dependent types**: Type-level computation (contracts as types)
 - **Formal methods**: Mathematical verification (Kani symbolic execution)
 
@@ -276,7 +289,7 @@ The framework makes this **practical**, not just theoretical:
 
 If using this approach in research:
 
-```
+```bibtex
 @software{strictly_games_verification,
   title={Formally Verified LLM Interactions: The Strictly Games Showcase},
   author={Rose, Erik},

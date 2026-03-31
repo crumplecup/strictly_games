@@ -7,12 +7,14 @@ The `Select` trait requires `&'static [Self]` options, making it impossible to f
 ## Current Server-Side Solution
 
 **Pattern:** Retry loop with validation
+
 - Elicitation provides ALL options (type safety)
 - Server validates each selection (semantic correctness)
 - Retry if invalid
 - Demonstrates clean separation: `Elicitation ≠ Validation`
 
 **Code:**
+
 ```rust
 let position = loop {
     let candidate = self.elicit_position(peer.clone()).await?;
@@ -24,11 +26,13 @@ let position = loop {
 ```
 
 **Pros:**
+
 - Works today
 - Clean layering
 - Pedagogically valuable (shows composition)
 
 **Cons:**
+
 - Wastes LLM calls on invalid options
 - Poor UX (agent doesn't know why selection failed)
 
@@ -37,6 +41,7 @@ let position = loop {
 ### Option 1: Select with Filter Associated Type
 
 **Add to `Select` trait:**
+
 ```rust
 pub trait Select: Prompt + Sized {
     // Existing methods
@@ -56,6 +61,7 @@ pub trait Select: Prompt + Sized {
 ```
 
 **Position implementation:**
+
 ```rust
 impl Select for Position {
     type Filter = Board;
@@ -69,6 +75,7 @@ impl Select for Position {
 ```
 
 **Server wrapper:**
+
 ```rust
 async fn elicit_position_filtered(
     &self,
@@ -82,6 +89,7 @@ async fn elicit_position_filtered(
 ```
 
 **Benefits:**
+
 - Minimal framework change (one associated type + one method)
 - Backward compatible (default Filter = ())
 - Types opt-in to filtering
@@ -89,7 +97,7 @@ async fn elicit_position_filtered(
 - No context threading through elicitation stack
 - Framework stays stateless (filter is parameter, not state)
 
-### Option 2: Blanket impl Select for Vec<T>
+### Option 2: Blanket impl Select for Vec\<T\>
 
 Even simpler - just implement Select for Vec of selectable items:
 
@@ -113,12 +121,14 @@ impl<T: Select + Clone> Elicit for Vec<T> {
 ```
 
 **Usage becomes trivial:**
+
 ```rust
 let valid_positions = Position::valid_moves(board);  // Vec<Position>
 let position = valid_positions.elicit(peer).await?;   // Position
 ```
 
 **Benefits:**
+
 - Works for ANY type that implements Select
 - No wrapper structs needed
 - Natural Rust idiom (Vec as container)
@@ -130,6 +140,7 @@ let position = valid_positions.elicit(peer).await?;   // Position
 ## Architecture
 
 Three layers with filtering:
+
 1. **Elicitation** - Type safety + contextual filtering
 2. **Contracts** - Proof-carrying validation
 3. **Typestate** - Phase enforcement
@@ -139,6 +150,7 @@ Filtering moves LEFT (into elicitation) while maintaining clean separation.
 ## Implementation Notes
 
 Current workaround in `src/server.rs`:
+
 - `elicit_position_filtered()` wraps filtering logic
 - Still calls base `elicit_position()` (TODO)
 - Retry loop catches any that slip through

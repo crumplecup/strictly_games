@@ -99,21 +99,21 @@ and Kani proves the type system is sound.
 
 **Every new deck has exactly 52 cards.**
 
-```
+```text
 Property: |Deck::new_shuffled().remaining()| = 52
 Result:   PROVED for all shuffles ✓
 ```
 
 **Dealing a card reduces the count by exactly 1.**
 
-```
+```text
 Property: deal(deck) ⟹ remaining(deck') = remaining(deck) − 1
 Result:   PROVED for all deck states with ≥ 1 card remaining ✓
 ```
 
 **Dealing from an empty deck returns nothing, not a crash.**
 
-```
+```text
 Property: remaining(deck) = 0 ⟹ deal(deck) = None
 Result:   PROVED — no out-of-bounds access, no panic ✓
 ```
@@ -122,7 +122,7 @@ Result:   PROVED — no out-of-bounds access, no panic ✓
 
 **Every card has a value between 1 and 11.**
 
-```
+```text
 Property: ∀c ∈ Card, value(c) ∈ {1, 2, ..., 11}
 Result:   PROVED for all 52 possible cards ✓
 ```
@@ -132,7 +132,7 @@ Number cards count at face value. Ten, Jack, Queen, King all count as 10.
 
 **Face cards (Ten, Jack, Queen, King) all map to exactly 10 — for every suit.**
 
-```
+```text
 Property: ∀s ∈ Suit, value(Card(Ten|Jack|Queen|King, s)) = 10
 Result:   PROVED parametrically over all four suits ✓
 ```
@@ -142,7 +142,7 @@ provably equivalent regardless of suit.
 
 **The deck has no duplicate cards.**
 
-```
+```text
 Property: ∀i ≠ j ∈ 0..52, dealt_card(i) ≠ dealt_card(j)
 Result:   PROVED — no (Rank × Suit) pair appears more than once ✓
 ```
@@ -153,7 +153,7 @@ same card — the same Ace of Spades cannot appear twice.
 
 **Ace detection is correct.**
 
-```
+```text
 Property: is_ace(Card(Ace, _)) = true
 Property: is_ace(Card(other, _)) = false for all non-Ace ranks
 Result:   PROVED ✓
@@ -167,14 +167,14 @@ verify the specific semantics:
 
 **Two non-ace cards sum correctly:**
 
-```
+```text
 Property: value([2♠, 3♥]) = HandValue { hard: 5, soft: None }
 Result:   PROVED ✓
 ```
 
 **Ace + six creates a soft total:**
 
-```
+```text
 Property: value([A♠, 6♥]) = HandValue { hard: 7, soft: Some(17) }
 Result:   PROVED ✓
 ```
@@ -183,7 +183,7 @@ Result:   PROVED ✓
 
 **Three-card hands where the Ace must count as 1:**
 
-```
+```text
 Property: value([A♠, 10♥, 5♦]) = HandValue { hard: 16, soft: None }
 Result:   PROVED ✓
 ```
@@ -193,7 +193,7 @@ must count as 1, giving 16, and there is no soft total.)
 
 **The soft/hard exact relation — only one Ace can be promoted.**
 
-```
+```text
 Property: ∀h ∈ Hand, soft(h) = Some(s) ⟹ s = hard(h) + 10
 Result:   PROVED for all hands up to 7 cards ✓
 ```
@@ -205,7 +205,7 @@ count two Aces as 11 simultaneously, which would give an unearned advantage.
 
 **Ace raw value and hard total:**
 
-```
+```text
 Property: ∀s ∈ Suit, Card(Ace, s).rank_value() = 11     (card level)
 Property: value([A♠]).hard = 1,  value([A♠]).soft = Some(11)
 Result:   PROVED ✓
@@ -213,14 +213,14 @@ Result:   PROVED ✓
 
 **Two-Ace hand:**
 
-```
+```text
 Property: value([A♠, A♥]) = HandValue { hard: 2, soft: Some(12) }
 Result:   PROVED ✓  (one Ace promoted to 11: 1+1+10=12)
 ```
 
 **Hand value bounds — no overflow:**
 
-```
+```text
 Property: ∀h ∈ Hand, hard(h) ≤ 127 ∧ (soft(h) = Some(s) ⟹ s ≤ 21)
 Result:   PROVED for all hands up to 7 cards ✓
 ```
@@ -233,7 +233,7 @@ benefit to the soft count). Kani proves this is always the case.
 A blackjack (natural) is specifically a two-card hand totalling 21. A
 three-card 21 is not a blackjack and pays at a different rate.
 
-```
+```text
 Forward:   is_blackjack(h) ⟹ |h| = 2 ∧ value(h) = 21        ✓
 Converse:  |h| = 2 ∧ value(h) = 21 ⟹ is_blackjack(h)        ✓
 Together:  is_blackjack(h) ⟺ |h| = 2 ∧ value(h) = 21
@@ -251,7 +251,7 @@ silently fail to be detected as blackjack.
 
 #### Bust detection
 
-```
+```text
 Property: hard(h) > 21 ⟹ is_bust(h)      ✓
 Property: hard(h) ≤ 21 ⟹ ¬is_bust(h)    ✓
 Property: hard(h) = 21 ⟹ ¬is_bust(h)    ✓  (exactly 21 is not a bust)
@@ -262,7 +262,7 @@ Property: hard(h) = 21 ⟹ ¬is_bust(h)    ✓  (exactly 21 is not a bust)
 Casino rules permit splitting only when the first two cards are of the
 same rank. Kani proves the implementation is exact:
 
-```
+```text
 Property: can_split(h) ⟹ |h| = 2 ∧ rank(h[0]) = rank(h[1])
 Property: rank(h[0]) ≠ rank(h[1]) ⟹ ¬can_split(h)
 Property: |h| ≠ 2 ⟹ ¬can_split(h)
@@ -302,7 +302,7 @@ integer overflow).
 
 The engine rejects invalid bets before any money moves:
 
-```
+```text
 Property: ∀ bankroll, debit(bankroll, 0) = Err(InvalidBet(0))
 Result:   PROVED — zero bets always rejected ✓
 
@@ -312,7 +312,7 @@ Result:   PROVED — overdrafts always rejected ✓
 
 #### Debit arithmetic
 
-```
+```text
 Property: ∀ bankroll, bet | bet > 0 ∧ bet ≤ bankroll ⟹
           debit(bankroll, bet).post_bet_balance = bankroll − bet
 Result:   PROVED ✓
@@ -325,28 +325,28 @@ no rounding, no fee, no additional deduction — just the stated bet.
 
 **Loss — the player forfeits the bet, receives nothing:**
 
-```
+```text
 Property: debit(b, x) |> settle(Loss).final = b − x
 Result:   PROVED for all u64 b, x where 0 < x ≤ b ✓
 ```
 
 **Push — original stake returned, net zero:**
 
-```
+```text
 Property: debit(b, x) |> settle(Push).final = b
 Result:   PROVED ✓
 ```
 
 **Win — player receives original stake plus equal profit:**
 
-```
+```text
 Property: debit(b, x) |> settle(Win).final = b + x
 Result:   PROVED for all valid b, x ✓
 ```
 
 **Blackjack — 3:2 payout:**
 
-```
+```text
 Property: settle(Blackjack).final = post_bet_balance + x + floor(x × 1.5)
           Equivalently: gross return = x + (x × 3) / 2
 Result:   PROVED ✓
@@ -356,14 +356,14 @@ Note on integer arithmetic: casino blackjack on odd bets (e.g., $101 at
 3:2) conventionally floors the half-chip. Kani proves the implementation
 matches this convention exactly:
 
-```
+```text
 bet = 100 → gross return = 100 + 150 = 250 → net gain = +150
 bet = 101 → gross return = 101 + 151 = 252 → net gain = +151  (not 151.5)
 ```
 
 **Surrender — half stake returned:**
 
-```
+```text
 Property: debit(b, x) |> settle(Surrender).final = b − ceil(x / 2)
           Equivalently: final = (b − x) + floor(x / 2)
 Result:   PROVED ✓
@@ -393,7 +393,7 @@ This was a real defect in earlier versions of this engine.
 The fix is not a runtime check. It is a *type system guarantee* enforced
 at compile time using the *elicitation framework*:
 
-```
+```text
 BankrollLedger::debit(bankroll, bet)
     → (BankrollLedger, Established<BetDeducted>)
 
@@ -410,7 +410,7 @@ non-Copy value can be used exactly once. After `settle` takes the token,
 it is gone. Any attempt to call `settle` a second time with the same token
 is a *compile error* — the program will not build:
 
-```
+```text
 let (ledger, token) = BankrollLedger::debit(bankroll, bet)?;
 ledger.settle(Outcome::Win, token);   // token moved here ✓
 ledger.settle(Outcome::Win, token);   // ERROR: use of moved value 'token'
@@ -426,7 +426,7 @@ time, not guarded against at runtime.
 The structural token guarantee rules out double settlement. Kani proves
 the arithmetic side — that `settle` itself can only add to the balance:
 
-```
+```text
 Property: final_balance ≥ post_bet_balance
           (settlement is always additive — never subtracts)
 Property: debit(b, x) |> settle(Win).final = b + x
@@ -462,7 +462,7 @@ placing exactly the cards needed to produce a specific scenario.
 
 #### Player natural (fast-finish path)
 
-```
+```text
 Deck:    [Ace♠, Two♥, King♠, Three♥]
          Player gets: Ace + King = 21 (blackjack)
          Dealer gets: Two + Three = 5  (no natural)
@@ -476,7 +476,7 @@ Result:   PROVED ✓
 
 #### Dealer natural (fast-finish path)
 
-```
+```text
 Deck:    [Seven♠, Ace♣, Eight♥, King♣]
          Player gets: Seven + Eight = 15 (no natural)
          Dealer gets: Ace + King = 21 (blackjack)
@@ -489,7 +489,7 @@ Result:   PROVED ✓
 
 #### Both naturals (push, fast-finish)
 
-```
+```text
 Deck:    [Ace♠, Ace♣, King♠, Queen♣]
          Player gets: Ace + King = 21
          Dealer gets: Ace + Queen = 21
@@ -501,7 +501,7 @@ Result:   PROVED ✓
 
 #### Normal stand path (full chain)
 
-```
+```text
 Deck:    [King♠, Six♣, King♥, Ten♦, Two♣]
          Player: King+King=20 → Stands
          Dealer: Six+Ten=16 → Hits Two → 18
@@ -515,7 +515,7 @@ Result:   PROVED ✓
 
 #### Player bust path
 
-```
+```text
 Deck:    [Six♠, Two♣, Seven♥, Three♦, Ten♣]
          Player: Six+Seven=13 → Hits Ten → 23 (bust)
          Dealer: Two+Three=5
@@ -528,7 +528,7 @@ Result:   PROVED ✓
 
 #### Dealer bust path
 
-```
+```text
 Deck:    [Eight♠, Six♣, Nine♥, Seven♦, King♣]
          Player: Eight+Nine=17 → Stands
          Dealer: Six+Seven=13 → Hits King → 23 (bust)
@@ -545,7 +545,7 @@ This harness proves the bankroll conservation law holds end-to-end through
 the full workflow for a concrete Win scenario: bankroll=1000, bet=100,
 player King+King=20 vs dealer Six+Ten+Two=18.
 
-```
+```text
 bankroll_before = 1000, bet = 100, outcome = Win
   → gross_return = bet × 2 = 200
   → final_bankroll = (1000 − 100) + 200 = 1100

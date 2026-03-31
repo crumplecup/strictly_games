@@ -29,11 +29,13 @@ Total: **1,023 formal verification proofs** across the ecosystem.
 ### Mechanism Contracts (Verified in Framework)
 
 **Select mechanism** (what tic-tac-toe uses):
+
 - Finite action space: Agent selection is one of declared enum variants
 - Exhaustive enumeration: All variants are explorable
 - Injective mapping: Each variant maps to unique index
 
 **Verification status**:
+
 - ✅ Kani: Symbolic execution proves across all inputs
 - ✅ Verus: SMT solver validates specifications
 - ✅ Creusot: Trusted axioms establish contracts
@@ -41,11 +43,13 @@ Total: **1,023 formal verification proofs** across the ecosystem.
 ### Type Safety Contracts (Verified in Framework)
 
 For domain types (Position, Player, Move):
+
 - Bounds checking: Position ∈ [0,8]
 - Type safety: No invalid enum states
 - Composition: struct { player, position } inherits guarantees
 
 **Verification status**:
+
 - ✅ Kani: 321 proofs covering all primitive types
 - ✅ Verus: 246 executable specifications
 - ✅ Creusot: 456 trusted contracts
@@ -143,6 +147,7 @@ impl Contract<GameInProgress, Move> for MoveContract {
 ```
 
 **Formal guarantee** (inherited from elicitation):
+
 - `action.position` is a valid Position (1 of 9 squares)
 - `action.player` is a valid Player (X or O)
 - No type confusion possible
@@ -162,7 +167,7 @@ fn post(_before: &GameInProgress, after: &GameInProgress) -> Result<(), MoveErro
 
 ## The Verification Hierarchy
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │ Elicitation Framework (321 Kani proofs) │
 │ ✓ Select mechanism correctness          │
@@ -263,6 +268,7 @@ pub enum Position {
 **Proven**: Agents cannot propose invalid positions.
 
 Even a malicious or buggy agent cannot:
+
 - Suggest position 10 (doesn't exist in enum)
 - Suggest position "three" (type mismatch)
 - Suggest position `(1, 1)` (wrong type - we use enum, not coordinates)
@@ -274,6 +280,7 @@ This is guaranteed by elicitation's `Select` mechanism proofs.
 **Proven**: `Move` values are deterministically serializable.
 
 Because:
+
 - `Position` is an enum (finite, enumerable)
 - `Player` is an enum (finite, enumerable)
 - No floating-point, no pointers, no concurrency
@@ -285,6 +292,7 @@ Elicitation's contract system guarantees this.
 **Proven**: Adding new positions requires explicit enum variants.
 
 Want a 4x4 board?
+
 - Add 7 new `Position` variants
 - Compiler forces update of `to_index()`
 - Elicitation's proofs automatically cover new variants
@@ -326,6 +334,7 @@ pub enum Position { /* ... */ }
 **Tic-tac-toe is formally verified by construction through the Elicitation Framework.**
 
 By using `#[derive(Elicit)]` on `Position` and `Player`, we inherit:
+
 - ✅ Finite action space guarantees (proven by framework)
 - ✅ Type safety proofs (proven by framework)
 - ✅ Mechanism correctness (proven by framework)
@@ -341,6 +350,7 @@ You just need to use the framework - verification comes for free.
 ## Key Insight
 
 Traditional approach:
+
 ```rust
 // Write domain types
 pub enum Position { /* ... */ }
@@ -355,6 +365,7 @@ fn verify_position() { /* proof code */ }
 ```
 
 Elicitation approach:
+
 ```rust
 // Write domain types with framework
 #[derive(Elicit)]  // ← Verification done

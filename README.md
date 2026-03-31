@@ -14,15 +14,15 @@ Strictly Games demonstrates the [Elicitation Framework](https://github.com/crump
 
 ## Why This Matters
 
-**Traditional approach: Validate after the fact**
+### Traditional approach: Validate after the fact
 
-```
+```text
 Prompt: "Only make legal moves in tic-tac-toe"
 Reality: Agent tries position 10 or occupied square
 Response: Return error, hope agent learns
 ```
 
-**Elicitation approach: Make invalid moves unrepresentable**
+### Elicitation approach: Make invalid moves unrepresentable
 
 ```rust
 // Agent calls play_game - enters walled garden
@@ -64,6 +64,7 @@ pub async fn play_game(
 ```
 
 **What the agent sees:**
+
 - "Choose position: 1. TopLeft, 2. Center, 5. BottomRight"
 - Occupied squares are **not in the list**
 - Agent **cannot express** an invalid move
@@ -86,6 +87,7 @@ pub async fn make_move(
 ```
 
 **Why two interfaces?**
+
 - Agents benefit from **structural prevention** (better UX, fewer retries)
 - Humans need **direct control** (faster input, familiar interaction)
 
@@ -181,6 +183,7 @@ pub struct Board {
 ```
 
 **Key insight:** Types used in MCP tools need:
+
 - `Serialize` + `Deserialize` - For JSON over the wire
 - `JsonSchema` - For MCP tool parameter schemas (on tool parameters only)
 - `Elicit` - For elicitation framework integration
@@ -243,6 +246,7 @@ impl Position {
 ```
 
 **Key changes in elicitation 0.8.0:**
+
 - `Select::options()` returns `Vec<Self>` instead of `&'static [Self]`
 - `Select::labels()` returns `Vec<String>` instead of `Vec<&'static str>`
 - New `Filter` trait enables runtime filtering: `Type::select_with_filter(predicate)`
@@ -452,12 +456,14 @@ cargo run tui
 ```
 
 **Controls:**
+
 - **Arrow keys** - Move cursor to select position
 - **Enter** - Place your move
 - **r** - Restart game
 - **q** - Quit
 
 The TUI automatically:
+
 1. Spawns HTTP game server on port 3000
 2. Spawns AI agent connected to the server
 3. Connects you as the human player
@@ -507,7 +513,7 @@ After editing, restart Claude Desktop.
 
 **Playing via Claude:**
 
-```
+```text
 You: Let's play tic-tac-toe!
 
 Claude: I'll start a new game.
@@ -578,7 +584,7 @@ When connected via Claude Desktop or Copilot CLI, agents have access to:
 
 **The walled garden tool** - Agents enter an elicitation loop where only valid moves are shown:
 
-```
+```text
 Tool: play_game
 Arguments: { "session_id": "game1", "player_name": "Agent" }
 ```
@@ -588,6 +594,7 @@ The agent is prompted for each move with ONLY valid (empty) positions. The loop 
 ### For Inspection: `get_board`
 
 Returns current game state:
+
 - Board display
 - Current player
 - Move count
@@ -603,7 +610,7 @@ Returns current game state:
 
 Direct move submission with runtime validation:
 
-```
+```text
 Tool: make_move
 Arguments: { 
   "session_id": "game1", 
@@ -662,19 +669,19 @@ See existing games for patterns. All code must follow the architecture principle
 - ✅ Tic-tac-toe with move validation
 - ✅ Full observability via tracing
 
-**Phase 2: Contracts**
+### Phase 2: Contracts
 
 - Add Kani-verified contracts for move legality
 - Demonstrate proof-carrying code pattern
 - Contract composition for complex operations
 
-**Phase 3: Expanded Games**
+### Phase 3: Expanded Games
 
 - Blackjack (probabilistic verification)
 - Checkers (game tree search)
 - Chess (complex state space)
 
-**Phase 4: Elicitation Integration**
+### Phase 4: Elicitation Integration
 
 - Interactive game configuration
 - Tournament organization
@@ -698,11 +705,13 @@ let position = elicit_from_filtered(valid).await?;
 ### 2. Agents and Humans Have Different Needs
 
 **Agents benefit from structural prevention:**
+
 - Fewer retries (better token efficiency)
 - Clearer action space (better decisions)
 - Self-documenting interface (what's valid is what's shown)
 
 **Humans benefit from direct control:**
+
 - Faster input (no prompts, no roundtrips)
 - Familiar patterns (just call the function)
 - Error feedback (learn from mistakes)
@@ -761,7 +770,7 @@ Each layer catches different classes of errors at different times.
 - **Flexibility** - Same domain logic, multiple interfaces
 - **Observability** - Elicitation loops are visible, traceable
 
-## Roadmap
+## Elicitation Roadmap
 
 **Phase 1: Foundation** (current)
 
@@ -770,19 +779,19 @@ Each layer catches different classes of errors at different times.
 - ✅ Typestate state machines (compile-time phase safety)
 - ✅ Dual interfaces (agents vs humans)
 
-**Phase 2: Framework Integration**
+### Phase 2: Framework Integration
 
 - Support for nested elicitation (choose piece, then position)
 - Multi-agent coordination via elicitation
 - Richer filtering strategies (combined predicates)
 
-**Phase 3: Expanded Games**
+### Phase 3: Additional Games
 
 - Blackjack (probabilistic states, hidden information)
 - Checkers (multi-step moves, larger state space)
 - Chess (complex rules, piece-specific moves)
 
-**Phase 4: Advanced Patterns**
+### Phase 4: Advanced Patterns
 
 - Tournament organization via elicitation
 - Strategy elicitation and comparison
@@ -793,7 +802,7 @@ Each layer catches different classes of errors at different times.
 
 The implementation demonstrates the walled garden pattern:
 
-```
+```text
 src/
 ├── games/tictactoe/
 │   ├── position.rs       # Position enum with valid_moves filtering
@@ -821,15 +830,18 @@ examples/
 ### Navigation Guide
 
 **For understanding elicitation:**
+
 1. **src/server.rs** - See `play_game` (walled garden) vs `make_move` (direct)
 2. **src/games/tictactoe/position.rs** - See `Position::elicit_valid_position()` using Filter trait
 3. **src/main.rs** - See how agents call `play_game` in test mode
 
 **For understanding contracts:**
+
 1. **src/games/tictactoe/contracts.rs** - See proof-carrying validation
 2. **src/games/tictactoe/typestate.rs** - See how contracts are used in `make_move`
 
 **For understanding typestate:**
+
 1. **src/games/tictactoe/phases.rs** - See phase markers
 2. **src/games/tictactoe/typestate.rs** - See phase-specific methods
 
@@ -848,6 +860,6 @@ Built with the [Elicitation](https://github.com/crumplecup/elicitation) framewor
 
 ---
 
-**"We're not validating agent moves after the fact. We're making invalid moves structurally impossible."**
+> "We're not validating agent moves after the fact. We're making invalid moves structurally impossible."
 
 **Key Insight:** The walled garden pattern—filter the action space BEFORE elicitation, so the agent cannot even express an invalid move. This is the Elicitation Framework in action.

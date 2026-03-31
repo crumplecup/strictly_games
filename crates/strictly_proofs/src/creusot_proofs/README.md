@@ -24,7 +24,7 @@ pub fn verify_opponent_involutive(p: Player) -> Player {
 - Game invariants: 3 proofs  
 - Passive-Affirm: 2 proofs
 
-**Total: 7 Creusot proofs**
+### Total: 7 Creusot proofs
 
 ## Running
 

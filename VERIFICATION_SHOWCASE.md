@@ -24,6 +24,7 @@ fn verify_opponent_involutive() {
 ```
 
 **How it works:**
+
 - `kani::any()` creates symbolic value representing ALL possible `Player` variants
 - Kani's CBMC backend explores both `Player::X` and `Player::O`
 - Proof succeeds if assertion holds for **every possible input**
@@ -57,6 +58,7 @@ pub proof fn verify_opponent_involutive(p: Player)
 ```
 
 **How it works:**
+
 - `ensures` clause states the postcondition (what must be true)
 - Match exhaustively handles both cases
 - Z3 SMT solver validates specification is satisfied
@@ -81,6 +83,7 @@ pub fn verify_opponent_involutive(p: Player) -> Player {
 ```
 
 **How it works:**
+
 - `#[trusted]` marks this as axiomatic (cloud of assumptions)
 - `#[requires]` states precondition (always true here)
 - `#[ensures]` states postcondition (the involution property)
@@ -95,7 +98,7 @@ pub fn verify_opponent_involutive(p: Player) -> Player {
 ## Comparison Table
 
 | Aspect | Kani | Verus | Creusot |
-|--------|------|-------|---------|
+| -------- | ------ | ------- | --------- |
 | **Approach** | Bounded model checking | SMT solver | Deductive logic |
 | **Input Space** | Symbolic (`kani::any()`) | Forall quantifier | Axiomatic |
 | **Verification** | CBMC backend explores paths | Z3 validates specifications | Trust contracts |
@@ -139,6 +142,7 @@ just verify-dashboard
 The **same property** (`opponent_involutive`) is proven three different ways, each with different tradeoffs. This is the power of the elicitation framework: **it provides verification primitives that work regardless of which formal methods tools you prefer.**
 
 For safety-critical applications, use all three:
+
 - Kani finds bugs during development
 - Verus provides mathematical proof for auditors
 - Creusot documents contracts for mature code

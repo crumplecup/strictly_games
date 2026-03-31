@@ -3,11 +3,13 @@
 ## Types in this crate are mirrored for formal verification
 
 The following types have **duplicate definitions** in:
-```
+
+```text
 strictly_proofs/src/verus_proofs/game_invariants.rs
 ```
 
-### Mirrored Types:
+### Mirrored Types
+
 - `Player` enum (`types.rs`)
 - `Position` enum (`position.rs`)
 - `Square` enum (`types.rs`)

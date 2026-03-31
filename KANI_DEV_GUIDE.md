@@ -71,7 +71,7 @@ make the intent obvious.
 ### Real examples from this codebase
 
 | Location | Before (broken) | After (correct) |
-|---|---|---|
+| --- | --- | --- |
 | `hand.rs` `Hand::value()` | `for card in &self.cards[..self.len]` | `for i in 0..MAX_HAND_CARDS { if i >= self.len { break; } }` |
 | `typestate.rs` `play_dealer_turn` | `while dealer < 17 { … }` | `for _ in 0..MAX_HAND_CARDS { if dealer >= 17 { break; } }` |
 | `typestate.rs` `resolve` | `for i in 0..self.num_hands` | `for i in 0..MAX_PLAYER_HANDS { if i >= self.num_hands { break; } }` |
@@ -105,7 +105,7 @@ struct Hand {
 Choose the constant to be the tightest provably-correct bound:
 
 | Constant | Value | Justification |
-|---|---|---|
+| --- | --- | --- |
 | `MAX_DECK_CARDS` | 52 | One standard deck, 4 suits × 13 ranks |
 | `MAX_HAND_CARDS` | 11 | Longest non-bust hand: 4A + 4×2 + 3×3 = 21 |
 | `MAX_PLAYER_HANDS` | 4 | 1 initial hand + up to 3 splits |
@@ -253,7 +253,7 @@ find.
 This codebase separates harnesses into two files:
 
 | File | Layer | Inputs | Purpose |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `blackjack_invariants.rs` | Unit | `kani::any()` or trivial concrete | Card math, deck tracking, hand value, split rules |
 | `blackjack_scenarios.rs` | Integration | Fully concrete `Deck::new_ordered` | End-to-end workflow, financial conservation |
 
@@ -372,7 +372,7 @@ Split rules: `can_split_matching_ranks`, `cannot_split_different_ranks`,
 
 ### Financial harnesses (`blackjack_invariants.rs`) — ~12–25s each
 
-### Financial harnesses (`blackjack_invariants.rs`) — ~12–25s each
+### Compositional and financial harnesses (`blackjack_invariants.rs`) — ~12–25s each
 
 `verify_rank_compositional`, `verify_suit_compositional`,
 `verify_card_compositional`, `verify_outcome_compositional`,

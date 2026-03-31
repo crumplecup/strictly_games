@@ -6,7 +6,7 @@
 | ------------- | ---------------------------------------------------------- | ------------------------------------------------- |
 | **Testing**   | No `#[cfg(test)]` in source files → use `tests/` directory | [Testing](#testing)                               |
 | **Errors**    | Use `derive_more::Display` + `derive_more::Error`          | [Error Handling](#error-handling)                 |
-| **Tracing**   | All functions have `#[instrument]`                  | [Logging](#logging-and-tracing)                   |
+| **Tracing**   | All functions have `#[instrument]`                         | [Logging](#logging-and-tracing)                   |
 | **Builders**  | Always use builders, never struct literals                 | [Type Construction](#type-construction)           |
 | **Imports**   | `use crate::{Type}` not `use crate::module::Type`          | [Module Organization](#module-organization)       |
 | **lib.rs**    | Only `mod` and `pub use` statements                        | [Module Organization](#module-organization)       |
@@ -561,7 +561,7 @@ info!(table = %table_name, "Creating");          // Display format
 
 Without tracing:
 
-```
+```text
 Human: "Bot command failed"
 AI: "Run with RUST_LOG=debug"
 Human: <500 lines>
@@ -573,7 +573,7 @@ Result: 3+ messages, 10+ minutes
 
 With tracing:
 
-```
+```text
 Human: "Bot command failed"
 Human: <5 lines>
 ERROR discord.execute: Missing arg command="server.get_stats" missing_arg="guild_id"
@@ -692,7 +692,7 @@ Guideline: When file exceeds ~500-1000 lines
 
 Structure:
 
-```
+```text
 src/mymodule/
 ├── mod.rs           # ONLY mod + pub use
 ├── core.rs
@@ -753,7 +753,7 @@ lib.rs only contains `mod` declarations and `pub use` exports.
 
 Even small crates (100-200 lines) should separate into modules:
 
-```
+```text
 crates/my_crate/src/
 ├── lib.rs       # mod + pub use only
 ├── role.rs
@@ -937,7 +937,7 @@ AI systems operate on probabilistic pattern matching, not deterministic rules. `
 
 No amount of documentation creates "hard rules" in probabilistic systems.
 
-### Workflow
+### Linting Workflow
 
 - Let linter complete (don't deny all warnings immediately)
 - Fix all issues in single pass - address root causes, never add `#[allow]`
