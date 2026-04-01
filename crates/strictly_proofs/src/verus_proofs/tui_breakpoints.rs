@@ -52,7 +52,7 @@ pub open spec fn truncated_width(input_width: u64, max_cols: u64) -> u64 {
 ///
 /// A `Block` widget consumes 1 column on each side.
 pub open spec fn inner_width(cell_width: u64) -> u64 {
-    if cell_width >= 2 { cell_width - 2 } else { 0 }
+    if cell_width >= 2 { (cell_width - 2) as u64 } else { 0u64 }
 }
 
 /// `LabelContained` invariant: `label_width` fits inside a bordered cell.
@@ -140,24 +140,24 @@ pub proof fn node_box_width_no_overflow(label_width: u64, terminal_cols: u64)
     ensures
         // Capped node-box width ≤ terminal_cols ≤ 200 ≤ u16::MAX
         {
-            let box_w = if label_width + 4 <= terminal_cols {
+            let box_w = if label_width + 4 <= terminal_cols as int {
                 label_width + 4
             } else {
-                terminal_cols
+                terminal_cols as int
             };
-            box_w <= terminal_cols && box_w <= 65535
+            box_w <= terminal_cols as int && box_w <= 65535
         },
 {
-    let box_w = if label_width + 4 <= terminal_cols {
+    let box_w = if label_width + 4 <= terminal_cols as int {
         label_width + 4
     } else {
-        terminal_cols
+        terminal_cols as int
     };
-    assert(box_w <= terminal_cols);
+    assert(box_w <= terminal_cols as int);
     assert(terminal_cols <= 200);
-    assert(box_w <= 200);
-    assert(200u64 <= 65535u64);
-    assert(box_w <= 65535);
+    assert(box_w <= 200int);
+    assert(200int <= 65535int);
+    assert(box_w <= 65535int);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ pub proof fn symbolic_must_pass_range(cols: u64, rows: u64)
     assert(slot >= 20u64) by {
         assert(cols >= 80u64);
         // integer division: 80/4 = 20, and cols/4 is monotone
-        assert(cols / 4 >= 80 / 4) by {
+        assert(cols / 4 >= 80int / 4) by {
             assert(cols >= 80u64);
         };
     };

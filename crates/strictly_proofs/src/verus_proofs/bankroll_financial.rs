@@ -52,13 +52,13 @@ impl Outcome {
     /// - `Push`      → bet     (breakeven)
     /// - `Win`       → bet*2   (1:1 payout)
     /// - `Blackjack` → bet + (bet*3)/2  (3:2 payout)
-    pub open spec fn gross_return(self, bet: u64) -> u64 {
+    pub open spec fn gross_return(self, bet: u64) -> int {
         match self {
-            Outcome::Win       => bet * 2,
-            Outcome::Blackjack => bet + (bet * 3) / 2,
-            Outcome::Push      => bet,
-            Outcome::Loss      => 0,
-            Outcome::Surrender => bet / 2,
+            Outcome::Win       => bet as int * 2,
+            Outcome::Blackjack => bet as int + (bet as int * 3) / 2,
+            Outcome::Push      => bet as int,
+            Outcome::Loss      => 0int,
+            Outcome::Surrender => bet as int / 2,
         }
     }
 }
@@ -79,12 +79,12 @@ impl Ledger {
         if bet == 0 || bet > bankroll {
             None
         } else {
-            Some(Ledger { post_bet_balance: bankroll - bet, bet })
+            Some(Ledger { post_bet_balance: (bankroll - bet) as u64, bet })
         }
     }
 
     /// Settle and return the final balance.
-    pub open spec fn settle(self, outcome: Outcome) -> u64 {
+    pub open spec fn settle(self, outcome: Outcome) -> int {
         self.post_bet_balance + outcome.gross_return(self.bet)
     }
 }
@@ -104,7 +104,7 @@ pub proof fn verify_debit_arithmetic(bankroll: u64, bet: u64)
         Ledger::debit(bankroll, bet).unwrap().bet == bet,
 {
     assert(Ledger::debit(bankroll, bet) == Some(Ledger {
-        post_bet_balance: bankroll - bet,
+        post_bet_balance: (bankroll - bet) as u64,
         bet,
     }));
 }

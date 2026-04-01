@@ -451,13 +451,11 @@ verify-verus-tracked csv="verus_verification_results.csv" timeout="600":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if [ -f .env ]; then
-        export $(grep -v '^#' .env | grep VERUS_PATH | xargs 2>/dev/null) || true
-    fi
-    VERUS_BIN="${VERUS_PATH/#\~/$HOME}"
-    if [ ! -f "$VERUS_BIN" ]; then
-        echo "❌ Verus not found at: $VERUS_BIN"
-        echo "   Set VERUS_PATH in .env (see .env)"
+    RAW_VERUS=$(grep -v '^#' .env 2>/dev/null | grep '^VERUS_PATH=' | sed 's/^VERUS_PATH=//' | tr -d '"' || true)
+    VERUS_BIN="${RAW_VERUS/\~/$HOME}"
+    if [ -z "$VERUS_BIN" ] || [ ! -f "$VERUS_BIN" ]; then
+        echo "❌ Verus not found at: '${VERUS_BIN}'"
+        echo "   Set VERUS_PATH in .env"
         exit 1
     fi
 
@@ -499,12 +497,10 @@ verify-verus-resume csv="verus_verification_results.csv" timeout="600":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if [ -f .env ]; then
-        export $(grep -v '^#' .env | grep VERUS_PATH | xargs 2>/dev/null) || true
-    fi
-    VERUS_BIN="${VERUS_PATH/#\~/$HOME}"
-    if [ ! -f "$VERUS_BIN" ]; then
-        echo "❌ Verus not found at: $VERUS_BIN. Set VERUS_PATH in .env"; exit 1
+    RAW_VERUS=$(grep -v '^#' .env 2>/dev/null | grep '^VERUS_PATH=' | sed 's/^VERUS_PATH=//' | tr -d '"' || true)
+    VERUS_BIN="${RAW_VERUS/\~/$HOME}"
+    if [ -z "$VERUS_BIN" ] || [ ! -f "$VERUS_BIN" ]; then
+        echo "❌ Verus not found at: '${VERUS_BIN}'. Set VERUS_PATH in .env"; exit 1
     fi
 
     CSV="{{csv}}"
