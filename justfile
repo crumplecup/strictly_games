@@ -146,7 +146,7 @@ verify-passive-affirm:
     cargo kani -p strictly_proofs --harness affirm_continue_always_returns
     cargo kani -p strictly_proofs --harness cancellation_is_monotonic
 
-# Run TUI breakpoint truth-table proofs (NoOverflow layout arithmetic)
+# Run TUI breakpoint truth-table proofs (NoOverflow layout arithmetic) — Kani
 verify-tui-breakpoints:
     @echo "Verifying TUI layout contracts across all 7 terminal breakpoints..."
     cargo kani -p strictly_proofs --harness truncation_always_satisfies_label_contained
@@ -161,6 +161,32 @@ verify-tui-breakpoints:
     cargo kani -p strictly_proofs --harness breakpoint_tiny_graceful_degrade
     cargo kani -p strictly_proofs --harness breakpoint_micro_expected_failure
     cargo kani -p strictly_proofs --harness symbolic_must_pass_range_safe
+
+# Run TUI breakpoint proofs — Creusot (Why3 deductive verification)
+# Requires: cargo install cargo-creusot
+verify-tui-breakpoints-creusot:
+    @echo "Verifying TUI layout contracts with Creusot (Why3)..."
+    @echo "Properties: truncation_output_bounded, truncation_identity,"
+    @echo "            truncation_satisfies_label_contained (universal),"
+    @echo "            node_box_no_overflow, area_sufficient checks,"
+    @echo "            breakpoint witnesses (minimum, micro, tiny)"
+    cargo creusot -p strictly_proofs
+
+# Run TUI breakpoint proofs — Verus (Z3 SMT specification-based)
+# Requires: verus binary on PATH  (see crates/strictly_proofs/src/verus_proofs/README.md)
+verify-tui-breakpoints-verus:
+    @echo "Verifying TUI layout contracts with Verus (Z3)..."
+    @echo "Properties: truncation_output_bounded, truncation_identity,"
+    @echo "            truncation_always_satisfies_label_contained (universal),"
+    @echo "            node_box_no_overflow, area_sufficient_{fails,passes},"
+    @echo "            breakpoint_{minimum,ultrawide,micro,tiny}, symbolic_must_pass_range"
+    verus --crate-type=lib crates/strictly_proofs/src/verus_proofs/tui_breakpoints.rs
+
+# Run TUI breakpoint proofs with all three verifiers (Kani + Creusot + Verus)
+verify-tui-breakpoints-all:
+    just verify-tui-breakpoints
+    just verify-tui-breakpoints-creusot
+    just verify-tui-breakpoints-verus
 
 # Check that verification code compiles (fast check before running Kani)
 verify-check:

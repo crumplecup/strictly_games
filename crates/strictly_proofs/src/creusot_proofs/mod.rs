@@ -8,3 +8,6 @@ pub mod compositional_proof;
 
 #[cfg(creusot)]
 pub mod game_invariants;
+
+#[cfg(creusot)]
+pub mod tui_breakpoints;

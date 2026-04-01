@@ -57,6 +57,21 @@ Proves escape hatch pattern:
 - `verify_new_session_not_cancelled`: Correct initialization
 - `verify_multiple_cancels_idempotent`: Idempotency
 
+### 4. `tui_breakpoints.rs`
+
+Proves NoOverflow TUI layout arithmetic using Z3 SMT:
+
+- `truncation_output_bounded`: `truncated_width(w, m) ≤ m` (universal, no assumptions)
+- `truncation_identity`: `w ≤ m → truncated_width(w, m) = w`
+- `truncation_always_satisfies_label_contained`: truncation satisfies LabelContained for ALL inputs — the Z3 counterpart to Kani's bounded-model-check proof
+- `node_box_width_no_overflow`: `(label+4).min(cols) ≤ u16::MAX` for terminals ≤ 200 cols
+- `area_zero_height_triggers_failure` / `area_nonzero_height_does_not_fail`: AreaSufficient prop
+- `breakpoint_minimum_layout`: 80×24 column + row arithmetic
+- `breakpoint_ultrawide_layout`: 200×60 column + row arithmetic
+- `breakpoint_micro_expected_failure`: 40×12 provably too small
+- `breakpoint_tiny_graceful_degrade`: 60×20 exhausts row budget
+- `symbolic_must_pass_range`: ∀ (cols,rows) ∈ [80..200]×[24..60]: both invariants hold
+
 ## Running Verus
 
 Install Verus:
