@@ -8,6 +8,7 @@
 //! `execute_place_bets` → `execute_comeout_roll` → `execute_point_roll`.
 //! The compiler enforces correct phase ordering via `Established<P>` contracts.
 
+use crate::tui::contracts::{CrapsRoundActive, NoOverflow};
 use crate::tui::observable_communicator::ObservableCommunicator;
 use crate::tui::tui_communicator::TuiCommunicator;
 use crate::tui::typestate_widget::{
@@ -18,6 +19,7 @@ use crossterm::event::{self, Event, KeyCode};
 use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
 use elicitation::Generator as _;
+use elicitation::contracts::{And, Established, Prop, both};
 use ratatui::{Terminal, backend::Backend, prelude::Widget};
 use strictly_craps::{
     ActiveBet, BetOutcome, BetType, ComeOutOutput, CrapsAction, CrapsTable, CrapsTableView,
@@ -212,7 +214,7 @@ where
     }
 
     // ── Betting phase ─────────────────────────────────────────
-    render_craps(
+    let _ = render_craps(
         ctx,
         DisplayPhase::Betting {
             bankroll,
@@ -222,6 +224,7 @@ where
         },
         craps_active(&current_phase),
         event_log,
+        Established::<CrapsRoundActive>::assert(),
     )?;
 
     let bet_amount = loop {
@@ -272,7 +275,7 @@ where
     let roll = rng.generate();
     let sum = roll.sum();
 
-    render_craps(
+    let _ = render_craps(
         ctx,
         DisplayPhase::ComeOut {
             bankroll: *table.seats()[0].bankroll(),
@@ -281,6 +284,7 @@ where
         },
         craps_active(&current_phase),
         event_log,
+        Established::<CrapsRoundActive>::assert(),
     )?;
 
     event_log.push(GameEvent::story(format!(
@@ -341,7 +345,7 @@ where
             event_log.push(GameEvent::phase_change("ComeOut", "Resolved"));
             event_log.push(GameEvent::proof("RoundSettled"));
 
-            render_craps(
+            let _ = render_craps(
                 ctx,
                 DisplayPhase::Resolved {
                     bankroll: *table.seats()[0].bankroll(),
@@ -351,6 +355,7 @@ where
                 },
                 craps_active(&current_phase),
                 event_log,
+                Established::<CrapsRoundActive>::assert(),
             )?;
 
             table.seat_mut(0).expect("seat 0").record_round();
@@ -386,7 +391,7 @@ where
             let mut current_proof = point_proof;
             let mut roll_count: u32 = 0;
             loop {
-                render_craps(
+                let _ = render_craps(
                     ctx,
                     DisplayPhase::PointPhase {
                         bankroll: *table.seats()[0].bankroll(),
@@ -396,11 +401,12 @@ where
                     },
                     craps_active(&current_phase),
                     event_log,
+                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 // Wait for keypress to roll
                 event_log.push(GameEvent::story("  Press any key to roll...".to_string()));
-                render_craps(
+                let _ = render_craps(
                     ctx,
                     DisplayPhase::PointPhase {
                         bankroll: *table.seats()[0].bankroll(),
@@ -410,6 +416,7 @@ where
                     },
                     craps_active(&current_phase),
                     event_log,
+                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 if matches!(wait_for_keypress_raw().await?, RoundOutcome::Quit) {
@@ -425,7 +432,7 @@ where
                     point_roll.die2(),
                 )));
 
-                render_craps(
+                let _ = render_craps(
                     ctx,
                     DisplayPhase::PointPhase {
                         bankroll: *table.seats()[0].bankroll(),
@@ -435,6 +442,7 @@ where
                     },
                     craps_active(&current_phase),
                     event_log,
+                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 match execute_point_roll(point_phase, point_roll, current_proof) {
@@ -494,7 +502,7 @@ where
                         event_log.push(GameEvent::phase_change("PointPhase", "Resolved"));
                         event_log.push(GameEvent::proof("RoundSettled"));
 
-                        render_craps(
+                        let _ = render_craps(
                             ctx,
                             DisplayPhase::Resolved {
                                 bankroll: *table.seats()[0].bankroll(),
@@ -504,6 +512,7 @@ where
                             },
                             craps_active(&current_phase),
                             event_log,
+                            Established::<CrapsRoundActive>::assert(),
                         )?;
 
                         table.seat_mut(0).expect("seat 0").record_round();
@@ -533,12 +542,13 @@ where
 // ─────────────────────────────────────────────────────────────
 
 #[instrument(skip_all)]
-fn render_craps<B: Backend>(
+fn render_craps<B: Backend, P: Prop>(
     ctx: &mut RenderCtx<'_, B>,
     phase: DisplayPhase<'_>,
     active: Option<usize>,
     event_log: &[GameEvent],
-) -> Result<()>
+    game_proof: Established<P>,
+) -> Result<Established<And<P, NoOverflow>>>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
@@ -548,7 +558,6 @@ where
         BlockJson, BordersJson, ConstraintJson, DirectionJson, ParagraphText, StyleJson, TuiNode,
         WidgetJson,
     };
-    use elicitation::contracts::Established;
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let pal = GamePalette::new();
@@ -687,7 +696,7 @@ where
                 .render(cols[2], frame.buffer_mut());
         }
     })?;
-    Ok(())
+    Ok(both(game_proof, Established::assert()))
 }
 
 fn build_phase_context(phase: &DisplayPhase<'_>) -> PhaseContext {
@@ -1376,7 +1385,7 @@ where
             "🂠  New round — your bankroll: ${bankroll}"
         )));
 
-        render_craps(
+        let _ = render_craps(
             &mut ctx,
             DisplayPhase::Betting {
                 bankroll,
@@ -1386,6 +1395,7 @@ where
             },
             craps_active(&current_phase),
             &event_log,
+            Established::<CrapsRoundActive>::assert(),
         )?;
 
         // Human bet
@@ -1489,7 +1499,7 @@ where
         let roll = dice.generate();
         let sum = roll.sum();
 
-        render_craps(
+        let _ = render_craps(
             &mut ctx,
             DisplayPhase::ComeOut {
                 bankroll: *table.seats()[0].bankroll(),
@@ -1498,6 +1508,7 @@ where
             },
             craps_active(&current_phase),
             &event_log,
+            Established::<CrapsRoundActive>::assert(),
         )?;
 
         event_log.push(GameEvent::story(format!(
@@ -1572,7 +1583,7 @@ where
                 event_log.push(GameEvent::phase_change("ComeOut", "Resolved"));
                 event_log.push(GameEvent::proof("RoundSettled"));
 
-                render_craps(
+                let _ = render_craps(
                     &mut ctx,
                     DisplayPhase::Resolved {
                         bankroll: *table.seats()[0].bankroll(),
@@ -1582,6 +1593,7 @@ where
                     },
                     craps_active(&current_phase),
                     &event_log,
+                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 for i in 0..seat_comms.len() {
@@ -1627,7 +1639,7 @@ where
                 let mut current_proof = point_proof;
                 let mut roll_count: u32 = 0;
                 loop {
-                    render_craps(
+                    let _ = render_craps(
                         &mut ctx,
                         DisplayPhase::PointPhase {
                             bankroll: *table.seats()[0].bankroll(),
@@ -1637,10 +1649,11 @@ where
                         },
                         craps_active(&current_phase),
                         &event_log,
+                        Established::<CrapsRoundActive>::assert(),
                     )?;
 
                     event_log.push(GameEvent::story("  Press any key to roll...".to_string()));
-                    render_craps(
+                    let _ = render_craps(
                         &mut ctx,
                         DisplayPhase::PointPhase {
                             bankroll: *table.seats()[0].bankroll(),
@@ -1650,6 +1663,7 @@ where
                         },
                         craps_active(&current_phase),
                         &event_log,
+                        Established::<CrapsRoundActive>::assert(),
                     )?;
 
                     if matches!(wait_for_keypress_raw().await?, RoundOutcome::Quit) {
@@ -1670,7 +1684,7 @@ where
                         point_roll.die2(),
                     )));
 
-                    render_craps(
+                    let _ = render_craps(
                         &mut ctx,
                         DisplayPhase::PointPhase {
                             bankroll: *table.seats()[0].bankroll(),
@@ -1680,6 +1694,7 @@ where
                         },
                         craps_active(&current_phase),
                         &event_log,
+                        Established::<CrapsRoundActive>::assert(),
                     )?;
 
                     match execute_point_roll(point_phase, point_roll, current_proof) {
@@ -1756,7 +1771,7 @@ where
                             event_log.push(GameEvent::phase_change("PointPhase", "Resolved"));
                             event_log.push(GameEvent::proof("RoundSettled"));
 
-                            render_craps(
+                            let _ = render_craps(
                                 &mut ctx,
                                 DisplayPhase::Resolved {
                                     bankroll: *table.seats()[0].bankroll(),
@@ -1766,6 +1781,7 @@ where
                                 },
                                 craps_active(&current_phase),
                                 &event_log,
+                                Established::<CrapsRoundActive>::assert(),
                             )?;
 
                             for i in 0..seat_comms.len() {

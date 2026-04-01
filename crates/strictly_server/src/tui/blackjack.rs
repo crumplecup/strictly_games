@@ -9,6 +9,8 @@
 //! `execute_place_bet` → `execute_play_action` (loop) → `execute_dealer_turn`.
 //! The compiler enforces the correct call order via `Established<P>` contracts.
 
+use crate::tui::contracts::NoOverflow;
+use crate::tui::contracts::{BettingActive, MultiRoundActive};
 use crate::tui::observable_communicator::ObservableCommunicator;
 use crate::tui::tui_communicator::TuiCommunicator;
 use crate::tui::typestate_widget::{
@@ -21,13 +23,14 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
-use elicitation::contracts::Established;
+use elicitation::contracts::{And, Established, Prop, both};
 use ratatui::{Terminal, backend::Backend, prelude::Widget};
 use std::time::SystemTime;
 use strictly_blackjack::{
     BasicAction, BetPlaced, BlackjackAction, BlackjackPlayerView, GameBetting, GameFinished,
-    GamePlayerTurn, GameSetup, Hand, MultiRound, Outcome, PlaceBetOutput, PlayActionOutput,
-    PlayActionResult, SeatBet, execute_dealer_turn, execute_place_bet, execute_play_action,
+    GamePlayerTurn, GameSetup, Hand, MultiRound, Outcome, PayoutSettled, PlaceBetOutput,
+    PlayActionOutput, PlayActionResult, SeatBet, execute_dealer_turn, execute_place_bet,
+    execute_play_action,
 };
 use tokio::sync::watch;
 use tokio::time::{Duration, sleep};
@@ -119,7 +122,7 @@ where
             prompt_rx: prompt_rx.clone(),
         };
 
-        let Some((hand_result, hand_outcome)) =
+        let Some((hand_result, hand_outcome, settled_proof)) =
             run_single_hand(&mut ctx, bankroll, &comm, &mut event_log).await?
         else {
             return Ok(BlackjackSessionOutcome::Abandoned);
@@ -136,7 +139,13 @@ where
             bj_edges: &bj_edges,
             prompt_rx: prompt_rx.clone(),
         };
-        render_finish(&mut ctx, &hand_result, &last_outcome, &event_log)?;
+        let _ = render_finish(
+            &mut ctx,
+            &hand_result,
+            &last_outcome,
+            &event_log,
+            settled_proof,
+        )?;
 
         // Q = quit, any other key = play another hand.
         if !wait_for_keypress().await? || bankroll == 0 {
@@ -164,7 +173,13 @@ async fn run_single_hand<B: Backend>(
     bankroll: u64,
     comm: &ObservableCommunicator<TuiCommunicator>,
     event_log: &mut Vec<GameEvent>,
-) -> Result<Option<(GameFinished, BlackjackSessionOutcome)>>
+) -> Result<
+    Option<(
+        GameFinished,
+        BlackjackSessionOutcome,
+        Established<PayoutSettled>,
+    )>,
+>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
@@ -178,11 +193,12 @@ where
     let game = GameSetup::new(seed);
     let betting = game.start_betting(bankroll);
 
-    render_blackjack(
+    let _ = render_blackjack(
         ctx,
         DisplayPhase::Betting { state: &betting },
         blackjack_active(&current_phase),
         event_log,
+        Established::<BettingActive>::assert(),
     )?;
 
     let bet = loop {
@@ -206,9 +222,9 @@ where
 
     event_log.push(GameEvent::story(format!("💰  Bet {bet} — cards dealt")));
 
-    let finished = match place_output {
+    let (finished, settled_proof) = match place_output {
         // Natural blackjack / dealer natural — no player actions needed.
-        PlaceBetOutput::Finished(f, _settled) => {
+        PlaceBetOutput::Finished(f, settled) => {
             let reason =
                 if f.dealer_hand().is_blackjack() && f.outcomes().iter().any(|o| o.is_loss()) {
                     "⚡  Dealer natural blackjack"
@@ -220,7 +236,7 @@ where
             event_log.push(GameEvent::story(reason));
             event_log.push(GameEvent::phase_change("Betting", "Finished"));
             event_log.push(GameEvent::proof("PayoutSettled"));
-            f
+            (f, settled)
         }
         // Normal play — enter player action loop.
         PlaceBetOutput::PlayerTurn(pt, bet_proof) => {
@@ -254,7 +270,7 @@ where
     };
     event_log.push(GameEvent::result(outcome_story));
 
-    Ok(Some((finished, outcome)))
+    Ok(Some((finished, outcome, settled_proof)))
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -269,16 +285,17 @@ async fn play_player_turn<B: Backend>(
     comm: &ObservableCommunicator<TuiCommunicator>,
     current_phase: &mut String,
     event_log: &mut Vec<GameEvent>,
-) -> Result<GameFinished>
+) -> Result<(GameFinished, Established<PayoutSettled>)>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
     loop {
-        render_blackjack(
+        let _ = render_blackjack(
             ctx,
             DisplayPhase::PlayerTurn { state: &state },
             blackjack_active(current_phase),
             event_log,
+            current_proof,
         )?;
 
         let action = match BasicAction::elicit(comm).await {
@@ -328,7 +345,7 @@ where
                         }
                         event_log.push(GameEvent::phase_change("PlayerTurn", "Finished"));
                         event_log.push(GameEvent::proof("PayoutSettled"));
-                        return Ok(f);
+                        return Ok((f, Established::assert()));
                     }
                     PlayActionOutput::DealerTurn(dt) => {
                         *current_phase = "DealerTurn".to_string();
@@ -339,7 +356,7 @@ where
                         event_log.push(GameEvent::proof("PlayerTurnComplete"));
 
                         // ── execute_dealer_turn (PlayerTurnComplete → PayoutSettled) ──
-                        let (finished, _resolved) = execute_dealer_turn(dt, player_done_proof);
+                        let (finished, settled_proof) = execute_dealer_turn(dt, player_done_proof);
 
                         // Narrate dealer result.
                         let dealer_val = finished.dealer_hand().value().best();
@@ -353,7 +370,7 @@ where
                         event_log.push(GameEvent::proof("PayoutSettled"));
 
                         *current_phase = "Finished".to_string();
-                        return Ok(finished);
+                        return Ok((finished, settled_proof));
                     }
                 }
             }
@@ -384,12 +401,13 @@ fn compute_outcome(finished: &GameFinished) -> BlackjackSessionOutcome {
 // ─────────────────────────────────────────────────────────────
 
 #[instrument(skip_all)]
-fn render_blackjack<B: Backend>(
+fn render_blackjack<B: Backend, P: Prop>(
     ctx: &mut RenderCtx<'_, B>,
     phase: DisplayPhase<'_>,
     active: Option<usize>,
     event_log: &[GameEvent],
-) -> Result<()>
+    game_proof: Established<P>,
+) -> Result<Established<And<P, NoOverflow>>>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
@@ -399,7 +417,6 @@ where
         BlockJson, BordersJson, ConstraintJson, DirectionJson, ParagraphText, StyleJson, TuiNode,
         WidgetJson,
     };
-    use elicitation::contracts::Established;
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let pal = GamePalette::new();
@@ -515,16 +532,17 @@ where
                 .render(cols[1], frame.buffer_mut());
         }
     })?;
-    Ok(())
+    Ok(both(game_proof, Established::assert()))
 }
 
 #[instrument(skip_all)]
-fn render_finish<B: Backend>(
+fn render_finish<B: Backend, P: Prop>(
     ctx: &mut RenderCtx<'_, B>,
     finished: &GameFinished,
     outcome: &BlackjackSessionOutcome,
     event_log: &[GameEvent],
-) -> Result<()>
+    game_proof: Established<P>,
+) -> Result<Established<And<P, NoOverflow>>>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
@@ -534,13 +552,13 @@ where
         BlockJson, BordersJson, LineJson, ModifierJson, ParagraphText, SpanJson, StyleJson,
         TextJson, TuiNode, WidgetJson,
     };
-    use elicitation::contracts::Established;
 
-    render_blackjack(
+    let _ = render_blackjack(
         ctx,
         DisplayPhase::Finished { state: finished },
         blackjack_active("Finished"),
         event_log,
+        game_proof,
     )?;
 
     let pal = GamePalette::new();
@@ -618,7 +636,7 @@ where
                 Established::assert()
             });
     })?;
-    Ok(())
+    Ok(both(game_proof, Established::assert()))
 }
 
 /// Builds the [`PhaseContext`] callout from the current display phase.
@@ -1066,7 +1084,7 @@ where
 
         // Render the betting phase so the player sees the table before prompts.
         let empty_hand = strictly_blackjack::Hand::default();
-        render_multi(
+        let _ = render_multi(
             terminal,
             MultiRenderCtx {
                 seat_names: &seat_names,
@@ -1081,6 +1099,7 @@ where
                 event_log: &event_log,
                 prompt: Some("Place your bets!"),
             },
+            Established::<MultiRoundActive>::assert(),
         )?;
 
         for i in 0..num_seats {
@@ -1176,7 +1195,7 @@ where
                         SeatComm::Agent { prompt_rx, .. } => prompt_rx.borrow().clone(),
                     };
 
-                    render_multi(
+                    let _ = render_multi(
                         terminal,
                         MultiRenderCtx {
                             seat_names: &seat_names,
@@ -1191,6 +1210,7 @@ where
                             event_log: &event_log,
                             prompt: prompt_snapshot.as_deref(),
                         },
+                        Established::<MultiRoundActive>::assert(),
                     )?;
 
                     if round.seats[round_idx].is_done() {
@@ -1331,7 +1351,7 @@ where
             chat_messages.push(msg);
         }
 
-        render_multi(
+        let _ = render_multi(
             terminal,
             MultiRenderCtx {
                 seat_names: &seat_names,
@@ -1346,6 +1366,7 @@ where
                 event_log: &event_log,
                 prompt: None,
             },
+            Established::<MultiRoundActive>::assert(),
         )?;
 
         if bankrolls.iter().all(|&b| b == 0) {
@@ -1378,7 +1399,11 @@ struct MultiRenderCtx<'a> {
 
 /// Minimal multi-player render: left=hands, center=typestate+log, right=chat.
 #[instrument(skip_all)]
-fn render_multi<B: Backend>(terminal: &mut Terminal<B>, ctx: MultiRenderCtx<'_>) -> Result<()>
+fn render_multi<B: Backend, P: Prop>(
+    terminal: &mut Terminal<B>,
+    ctx: MultiRenderCtx<'_>,
+    game_proof: Established<P>,
+) -> Result<Established<And<P, NoOverflow>>>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
@@ -1389,7 +1414,6 @@ where
         BlockJson, BordersJson, ConstraintJson, DirectionJson, LineJson, ModifierJson,
         ParagraphText, SpanJson, StyleJson, TextJson, TuiNode, WidgetJson,
     };
-    use elicitation::contracts::Established;
     use ratatui::layout::{Constraint, Direction, Layout};
     use ratatui::prelude::Widget as _;
 
@@ -1689,7 +1713,7 @@ where
         let chat = ChatWidget::new(chat_messages);
         chat.render(cols[2], frame.buffer_mut());
     })?;
-    Ok(())
+    Ok(both(game_proof, Established::assert()))
 }
 async fn wait_for_keypress() -> Result<bool> {
     use crossterm::{

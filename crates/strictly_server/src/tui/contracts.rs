@@ -100,6 +100,22 @@ impl VerifiedWorkflow for TextWrapped {}
 pub struct AreaSufficient;
 impl VerifiedWorkflow for AreaSufficient {}
 
+/// Established when a `GameBetting` object is live and the player is
+/// actively choosing a bet amount.
+#[derive(elicitation::Prop)]
+pub struct BettingActive;
+impl VerifiedWorkflow for BettingActive {}
+
+/// Established when a craps session is active (any phase).
+#[derive(elicitation::Prop)]
+pub struct CrapsRoundActive;
+impl VerifiedWorkflow for CrapsRoundActive {}
+
+/// Established during multi-player blackjack rounds (any phase).
+#[derive(elicitation::Prop)]
+pub struct MultiRoundActive;
+impl VerifiedWorkflow for MultiRoundActive {}
+
 /// Composite: `LabelContained ∧ TextWrapped ∧ AreaSufficient`.
 /// `And<…>: VerifiedWorkflow` via blanket impl — proof composition is automatic.
 pub type NoOverflow = And<LabelContained, And<TextWrapped, AreaSufficient>>;
