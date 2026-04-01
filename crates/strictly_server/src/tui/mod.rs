@@ -139,6 +139,7 @@ where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
     use crate::games::tictactoe::Player;
+    use crate::session::DialogueEntry;
     use tokio::time::{Duration, sleep};
 
     info!("Starting type-safe game loop");
@@ -148,6 +149,7 @@ where
     let mut prev_phase: Option<&'static str> = None;
     let mut prev_move_count: usize = 0;
     let mut explore_stats = ExploreStats::default();
+    let mut dialogue: Vec<DialogueEntry> = Vec::new();
     let ttt_nodes = tictactoe_nodes();
     let ttt_edges = tictactoe_edges();
 
@@ -155,9 +157,12 @@ where
         // Get game state (type-safe!)
         let game = client.get_game().await?;
 
-        // Fetch explore stats (best-effort).
+        // Fetch explore stats and dialogue (best-effort).
         if let Ok(stats) = client.get_explore_stats().await {
             explore_stats = stats;
+        }
+        if let Ok(entries) = client.get_dialogue().await {
+            dialogue = entries;
         }
 
         // Track phase transitions.
@@ -221,16 +226,17 @@ where
 
         // Render UI
         let graph = GraphState::new(true, &ttt_nodes, &ttt_edges, active, &explore_stats);
+        let frame_data = FrameData {
+            game: &game,
+            cursor,
+            event_log: &event_log,
+            dialogue: &dialogue,
+            graph,
+            status_text: &status_text,
+            status_color,
+        };
         terminal.draw(|f| {
-            render_tictactoe_frame(
-                f,
-                &game,
-                cursor,
-                &event_log,
-                &graph,
-                &status_text,
-                status_color,
-            );
+            render_tictactoe_frame(f, &frame_data);
         })?;
 
         // Handle game over
@@ -359,6 +365,7 @@ where
     <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
 {
     use crate::games::tictactoe::Player;
+    use crate::session::DialogueEntry;
     use tokio::time::{Duration, sleep};
 
     info!(show_typestate_graph, "Starting lobby game loop");
@@ -368,13 +375,17 @@ where
     let mut prev_phase: Option<&'static str> = None;
     let mut prev_move_count: usize = 0;
     let mut explore_stats = ExploreStats::default();
+    let mut dialogue: Vec<DialogueEntry> = Vec::new();
 
     loop {
         let game = client.get_game().await?;
 
-        // Fetch explore stats (best-effort, ignore errors).
+        // Fetch explore stats and dialogue (best-effort, ignore errors).
         if let Ok(stats) = client.get_explore_stats().await {
             explore_stats = stats;
+        }
+        if let Ok(entries) = client.get_dialogue().await {
+            dialogue = entries;
         }
 
         // Track phase transitions.
@@ -415,6 +426,7 @@ where
                 &game,
                 cursor,
                 &event_log,
+                &dialogue,
                 show_typestate_graph,
                 &explore_stats,
             )
@@ -422,15 +434,44 @@ where
         }
 
         // Render in-progress game.
-        render_active_game(
-            terminal,
-            &game,
-            &client,
-            cursor,
-            &event_log,
-            show_typestate_graph,
-            &explore_stats,
-        )?;
+        {
+            use crate::games::tictactoe::Player as TttPlayer;
+            let ttt_nodes = tictactoe_nodes();
+            let ttt_edges = tictactoe_edges();
+            let active = tictactoe_active(&game);
+            let status_text = if let Some(ref error) = client.last_error {
+                format!("ERROR: {}  •  Arrow keys + Enter | Q: Quit", error)
+            } else if let Some(player) = game.to_move() {
+                let p = if player == TttPlayer::X { "X" } else { "O" };
+                format!("Player {} to move  •  Arrow keys + Enter | Q: Quit", p)
+            } else {
+                "Waiting…  •  Arrow keys + Enter | Q: Quit".to_string()
+            };
+            let status_color = if client.last_error.is_some() {
+                Color::Red
+            } else {
+                Color::Yellow
+            };
+            let graph = GraphState::new(
+                show_typestate_graph,
+                &ttt_nodes,
+                &ttt_edges,
+                active,
+                &explore_stats,
+            );
+            let frame_data = FrameData {
+                game: &game,
+                cursor,
+                event_log: &event_log,
+                dialogue: &dialogue,
+                graph,
+                status_text: &status_text,
+                status_color,
+            };
+            terminal.draw(|f| {
+                render_tictactoe_frame(f, &frame_data);
+            })?;
+        }
 
         // Handle input.
         if event::poll(Duration::from_millis(100))?
@@ -471,6 +512,7 @@ async fn render_game_over_and_wait<B: ratatui::backend::Backend>(
     game: &AnyGame,
     cursor: Position,
     event_log: &[GameEvent],
+    dialogue: &[crate::session::DialogueEntry],
     show_typestate_graph: bool,
     explore_stats: &ExploreStats,
 ) -> Result<AnyGame>
@@ -496,16 +538,17 @@ where
         active,
         explore_stats,
     );
+    let frame_data = FrameData {
+        game,
+        cursor,
+        event_log,
+        dialogue,
+        graph,
+        status_text: &status_text,
+        status_color: Color::Green,
+    };
     terminal.draw(|f| {
-        render_tictactoe_frame(
-            f,
-            game,
-            cursor,
-            event_log,
-            &graph,
-            &status_text,
-            Color::Green,
-        );
+        render_tictactoe_frame(f, &frame_data);
     })?;
 
     // Wait for any keypress.
@@ -518,63 +561,6 @@ where
         }
         sleep(Duration::from_millis(50)).await;
     }
-}
-
-/// Renders the active game state with cursor.
-#[instrument(skip_all)]
-fn render_active_game<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    game: &AnyGame,
-    client: &RestGameClient,
-    cursor: Position,
-    event_log: &[GameEvent],
-    show_typestate_graph: bool,
-    explore_stats: &ExploreStats,
-) -> Result<()>
-where
-    <B as ratatui::backend::Backend>::Error: Send + Sync + 'static,
-{
-    use crate::games::tictactoe::Player;
-
-    let ttt_nodes = tictactoe_nodes();
-    let ttt_edges = tictactoe_edges();
-    let active = tictactoe_active(game);
-
-    let status_text = if let Some(ref error) = client.last_error {
-        format!("ERROR: {}  •  Arrow keys + Enter | Q: Quit", error)
-    } else if let Some(player) = game.to_move() {
-        let p = if player == Player::X { "X" } else { "O" };
-        format!("Player {} to move  •  Arrow keys + Enter | Q: Quit", p)
-    } else {
-        "Waiting…  •  Arrow keys + Enter | Q: Quit".to_string()
-    };
-
-    let status_color = if client.last_error.is_some() {
-        Color::Red
-    } else {
-        Color::Yellow
-    };
-
-    let graph = GraphState::new(
-        show_typestate_graph,
-        &ttt_nodes,
-        &ttt_edges,
-        active,
-        explore_stats,
-    );
-    terminal.draw(|f| {
-        render_tictactoe_frame(
-            f,
-            game,
-            cursor,
-            event_log,
-            &graph,
-            &status_text,
-            status_color,
-        );
-    })?;
-
-    Ok(())
 }
 
 /// Renders board with cursor highlighting.
@@ -664,20 +650,35 @@ impl<'a> GraphState<'a> {
     }
 }
 
-/// Renders the 3-column tic-tac-toe layout (Board | Game Story | Typestate).
+/// All data needed to render a single tic-tac-toe frame.
 ///
-/// When `graph.show` is false, uses a 2-column layout instead.
+/// Groups parameters that would otherwise cause clippy's
+/// `too_many_arguments` lint to fire.
+struct FrameData<'a> {
+    /// Game state.
+    game: &'a AnyGame,
+    /// Cursor position.
+    cursor: Position,
+    /// Event log for the story pane.
+    event_log: &'a [GameEvent],
+    /// Server↔agent dialogue.
+    dialogue: &'a [crate::session::DialogueEntry],
+    /// Typestate graph state.
+    graph: GraphState<'a>,
+    /// Status bar text.
+    status_text: &'a str,
+    /// Status bar colour.
+    status_color: Color,
+}
+
+/// Renders the 4-column tic-tac-toe layout (Board | Game Story | Chat | Typestate).
+///
+/// When `graph.show` is false, uses a 3-column layout (Board | Story | Chat).
+/// When there is no dialogue, falls back to the original layout without chat.
 /// The status bar combines game state and key hints into one row.
 #[instrument(skip_all)]
-fn render_tictactoe_frame(
-    f: &mut ratatui::Frame,
-    game: &AnyGame,
-    cursor: Position,
-    event_log: &[GameEvent],
-    graph: &GraphState,
-    status_text: &str,
-    status_color: Color,
-) {
+fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
+    use crate::tui::chat_widget::{ChatMessage, ChatWidget, Participant};
     use ratatui::{
         layout::{Alignment, Constraint, Direction, Layout},
         style::{Modifier, Style},
@@ -689,7 +690,7 @@ fn render_tictactoe_frame(
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Title
-            Constraint::Min(0),    // Content (Board | Story | Typestate)
+            Constraint::Min(0),    // Content
             Constraint::Length(3), // Status bar
         ])
         .split(f.area());
@@ -705,28 +706,46 @@ fn render_tictactoe_frame(
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(title, outer[0]);
 
-    // Content: 3-column (with typestate) or 2-column layout
-    let content_areas = if graph.show {
-        Layout::default()
+    let has_chat = !data.dialogue.is_empty();
+
+    // Content layout — adapts based on which panels are active.
+    let content_areas = match (data.graph.show, has_chat) {
+        (true, true) => Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(30), // Board
+                Constraint::Percentage(20), // Game Story
+                Constraint::Percentage(25), // Chat
+                Constraint::Percentage(25), // Typestate
+            ])
+            .split(outer[1]),
+        (true, false) => Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(40), // Board
                 Constraint::Percentage(30), // Game Story
                 Constraint::Percentage(30), // Typestate
             ])
-            .split(outer[1])
-    } else {
-        Layout::default()
+            .split(outer[1]),
+        (false, true) => Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(40), // Board
+                Constraint::Percentage(30), // Game Story
+                Constraint::Percentage(30), // Chat
+            ])
+            .split(outer[1]),
+        (false, false) => Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(55), // Board
                 Constraint::Percentage(45), // Game Story
             ])
-            .split(outer[1])
+            .split(outer[1]),
     };
 
     // Board
-    let board_lines = render_board_with_cursor(game.board(), cursor);
+    let board_lines = render_board_with_cursor(data.game.board(), data.cursor);
     let board = Paragraph::new(board_lines)
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL).title(" Board "));
@@ -738,13 +757,13 @@ fn render_tictactoe_frame(
     f.render_widget(story_block, content_areas[1]);
 
     let max_lines = story_inner.height as usize;
-    let story_lines: Vec<Line> = if event_log.is_empty() {
+    let story_lines: Vec<Line> = if data.event_log.is_empty() {
         vec![Line::from(Span::styled(
             "Waiting for first move…",
             Style::default().fg(Color::DarkGray),
         ))]
     } else {
-        event_log
+        data.event_log
             .iter()
             .rev()
             .take(max_lines)
@@ -767,16 +786,43 @@ fn render_tictactoe_frame(
     };
     f.render_widget(Paragraph::new(story_lines), story_inner);
 
-    // Typestate graph (right column, if enabled)
-    if graph.show && content_areas.len() > 2 {
-        let widget = TypestateGraphWidget::new(graph.nodes, graph.edges, graph.active, event_log)
-            .with_explore_stats(graph.explore_stats);
-        f.render_widget(widget, content_areas[2]);
+    // Chat pane — server↔agent dialogue (column index depends on layout).
+    let chat_col = if has_chat { Some(2) } else { None };
+    if let Some(col) = chat_col {
+        let chat_messages: Vec<ChatMessage> = data
+            .dialogue
+            .iter()
+            .map(|entry| {
+                let participant = if entry.role == "Agent" {
+                    Participant::Agent("Agent".to_string())
+                } else {
+                    Participant::Host
+                };
+                ChatMessage::new(participant, &entry.text)
+            })
+            .collect();
+        let chat = ChatWidget::new(&chat_messages);
+        f.render_widget(chat, content_areas[col]);
+    }
+
+    // Typestate graph (rightmost column when enabled).
+    if data.graph.show {
+        let type_col = if has_chat { 3 } else { 2 };
+        if content_areas.len() > type_col {
+            let widget = TypestateGraphWidget::new(
+                data.graph.nodes,
+                data.graph.edges,
+                data.graph.active,
+                data.event_log,
+            )
+            .with_explore_stats(data.graph.explore_stats);
+            f.render_widget(widget, content_areas[type_col]);
+        }
     }
 
     // Status bar — combined game state + key hints
-    let status = Paragraph::new(status_text.to_string())
-        .style(Style::default().fg(status_color))
+    let status = Paragraph::new(data.status_text.to_string())
+        .style(Style::default().fg(data.status_color))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(status, outer[2]);

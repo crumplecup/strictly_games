@@ -52,6 +52,36 @@ impl ExploreStats {
     }
 }
 
+/// A single line of server↔agent dialogue.
+///
+/// Recorded during the explore/play loop so the TUI can render
+/// the exchange between the game server and the AI agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DialogueEntry {
+    /// Who sent the message: `"Server"` or `"Agent"`.
+    pub role: String,
+    /// The message text.
+    pub text: String,
+}
+
+impl DialogueEntry {
+    /// Creates a server-originated dialogue entry.
+    pub fn server(text: impl Into<String>) -> Self {
+        Self {
+            role: "Server".to_string(),
+            text: text.into(),
+        }
+    }
+
+    /// Creates an agent-originated dialogue entry.
+    pub fn agent(text: impl Into<String>) -> Self {
+        Self {
+            role: "Agent".to_string(),
+            text: text.into(),
+        }
+    }
+}
+
 /// Unique identifier for a player.
 pub type PlayerId = String;
 
@@ -309,6 +339,8 @@ impl GameSession {
 #[derive(Debug, Clone)]
 pub struct SessionManager {
     sessions: Arc<Mutex<HashMap<SessionId, GameSession>>>,
+    /// Server↔agent dialogue log, keyed by session ID.
+    dialogue: Arc<Mutex<HashMap<SessionId, Vec<DialogueEntry>>>>,
 }
 
 impl SessionManager {
@@ -318,6 +350,7 @@ impl SessionManager {
         info!("Creating session manager");
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            dialogue: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -415,6 +448,9 @@ impl SessionManager {
             .start(crate::games::tictactoe::Player::X)
             .into();
         session.explore_stats = ExploreStats::default();
+        // Release session lock before taking dialogue lock.
+        drop(sessions);
+        self.clear_dialogue(session_id);
         info!("Game restarted with same players");
         Ok(())
     }
@@ -444,6 +480,31 @@ impl SessionManager {
                 "Recorded play action"
             );
         }
+    }
+
+    /// Appends a dialogue entry for the given session.
+    #[instrument(skip(self, entry), fields(role = %entry.role))]
+    pub fn push_dialogue(&self, session_id: &str, entry: DialogueEntry) {
+        let mut dialogue = self.dialogue.lock().unwrap();
+        dialogue
+            .entry(session_id.to_string())
+            .or_default()
+            .push(entry);
+    }
+
+    /// Returns all dialogue entries for a session.
+    #[instrument(skip(self))]
+    pub fn get_dialogue(&self, session_id: &str) -> Vec<DialogueEntry> {
+        let dialogue = self.dialogue.lock().unwrap();
+        dialogue.get(session_id).cloned().unwrap_or_default()
+    }
+
+    /// Clears the dialogue log for a session (called on restart).
+    #[instrument(skip(self))]
+    pub fn clear_dialogue(&self, session_id: &str) {
+        let mut dialogue = self.dialogue.lock().unwrap();
+        dialogue.remove(session_id);
+        debug!("Cleared dialogue log");
     }
 }
 

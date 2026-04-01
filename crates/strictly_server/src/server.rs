@@ -566,12 +566,18 @@ impl GameServer {
         peer: Peer<RoleServer>,
         session_id: &str,
     ) -> Result<Position, McpError> {
+        use crate::session::DialogueEntry;
         use crate::tui::contextual_communicator::{ContextualCommunicator, knowledge_cache};
         use elicitation::ElicitCommunicator as _;
         use strictly_tictactoe::{TicTacToeAction, TicTacToeView};
 
         let knowledge = knowledge_cache();
         let comm = ContextualCommunicator::new(ElicitServer::new(peer), knowledge.clone());
+
+        self.sessions.push_dialogue(
+            session_id,
+            DialogueEntry::server("Eliciting move — select a position or explore."),
+        );
 
         loop {
             let action = TicTacToeAction::elicit(&comm)
@@ -588,26 +594,40 @@ impl GameServer {
                 let board = session.game.board();
                 if board.is_empty(pos) {
                     self.sessions.record_play(session_id);
+                    self.sessions.push_dialogue(
+                        session_id,
+                        DialogueEntry::agent(format!("Play {}", pos.label())),
+                    );
                     tracing::info!(position = ?pos, "Position elicited and validated");
                     return Ok(pos);
                 }
                 // Occupied despite agent choice — inform and retry
+                self.sessions.push_dialogue(
+                    session_id,
+                    DialogueEntry::agent(format!("Play {} (invalid)", pos.label())),
+                );
+                let rejection = format!(
+                    "[Invalid Move] Position {} is occupied. Please choose an empty square.",
+                    pos
+                );
+                self.sessions
+                    .push_dialogue(session_id, DialogueEntry::server(&rejection));
                 knowledge
                     .lock()
                     .unwrap()
                     .push(format!("[Invalid Move] Position {} is occupied.", pos));
-                let _ = comm
-                    .send_prompt(&format!(
-                        "[Invalid Move] Position {} is occupied. Please choose an empty square.",
-                        pos
-                    ))
-                    .await;
+                let _ = comm.send_prompt(&rejection).await;
                 continue;
             }
 
             // Explore — record, build view, cache knowledge, and loop
             self.sessions.record_explore(session_id);
             let category = action.explore_category().unwrap_or("unknown");
+            self.sessions.push_dialogue(
+                session_id,
+                DialogueEntry::agent(format!("Explore: {category}")),
+            );
+
             let session = self
                 .sessions
                 .get_session(session_id)
@@ -624,6 +644,12 @@ impl GameServer {
                 .unwrap_or_else(|| "No information available".to_string());
 
             tracing::debug!(category, "Agent exploring game state");
+
+            // Record the server's response to the explore request.
+            self.sessions.push_dialogue(
+                session_id,
+                DialogueEntry::server(format!("[{category}] {description}")),
+            );
 
             // Add to the growing knowledge cache so the agent sees it
             // in every subsequent prompt until it commits.

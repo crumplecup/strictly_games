@@ -170,6 +170,24 @@ impl RestGameClient {
         Ok(stats)
     }
 
+    /// Fetches the server↔agent dialogue log.
+    #[instrument(skip(self))]
+    pub async fn get_dialogue(&self) -> Result<Vec<crate::session::DialogueEntry>> {
+        let url = format!(
+            "{}/api/sessions/{}/dialogue",
+            self.base_url, self.session_id
+        );
+        let entries = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("Failed to deserialize dialogue")?;
+        Ok(entries)
+    }
+
     /// Makes a move via MCP tool.
     #[instrument(skip(self), fields(position = ?position))]
     pub async fn make_move(&mut self, position: Position) -> Result<()> {

@@ -59,7 +59,7 @@ pub use llm_client::{LlmClient, LlmConfig, LlmError, LlmProvider};
 pub use server::GameServer;
 
 // Public API exports - Session
-pub use session::{ExploreStats, GameSession, SessionManager};
+pub use session::{DialogueEntry, ExploreStats, GameSession, SessionManager};
 
 // Public API exports - TUI
 pub use tui::{run as tui_run, run_game_session};

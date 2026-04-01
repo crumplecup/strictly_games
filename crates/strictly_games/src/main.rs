@@ -188,6 +188,16 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 }
             }),
         )
+        .route(
+            "/api/sessions/{session_id}/dialogue",
+            axum::routing::get({
+                let sessions = explore_sessions.clone();
+                move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
+                    use axum::Json;
+                    Json(sessions.get_dialogue(&session_id))
+                }
+            }),
+        )
         .fallback_service(
             ServiceBuilder::new()
                 .map_request(|req: Request<Body>| {
