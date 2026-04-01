@@ -600,9 +600,9 @@ verify-creusot-tracked csv="creusot_verification_results.csv":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! command -v cargo-creusot &>/dev/null && ! cargo creusot --version &>/dev/null 2>&1; then
-        echo "❌ cargo-creusot not installed."
-        echo "   Install: cargo install cargo-creusot"
+    if ! opam exec -- cargo creusot version &>/dev/null 2>&1; then
+        echo "❌ cargo-creusot not found via opam."
+        echo "   Install: opam install creusot  (or cargo install cargo-creusot)"
         exit 1
     fi
 
@@ -615,7 +615,7 @@ verify-creusot-tracked csv="creusot_verification_results.csv":
         echo -n "  🔬 $module ... "
         START=$(date +%s%3N)
         # cargo creusot compiles with creusot cfg and checks contracts
-        OUTPUT=$(cargo creusot -- -p strictly_proofs 2>&1) || RC=$?
+        OUTPUT=$(opam exec -- cargo creusot -- -p strictly_proofs 2>&1) || RC=$?
         END=$(date +%s%3N)
         ELAPSED=$(( (END - START) / 1000 ))
         TS=$(date -Iseconds)
@@ -647,8 +647,8 @@ verify-creusot-prove csv="creusot_module_results.csv" goals="creusot_goal_result
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! command -v why3find &>/dev/null; then
-        echo "❌ why3find not installed. Install via opam: opam install why3find"
+    if ! opam exec -- why3find --version &>/dev/null 2>&1; then
+        echo "❌ why3find not found via opam. Install: opam install why3find"
         exit 1
     fi
 
@@ -668,7 +668,7 @@ verify-creusot-prove csv="creusot_module_results.csv" goals="creusot_goal_result
     for module in "${MODULES[@]}"; do
         echo "  📐 $module"
         START=$(date +%s%3N)
-        OUTPUT=$(cargo creusot prove -- -p strictly_proofs 2>&1) || RC=$?
+        OUTPUT=$(opam exec -- cargo creusot prove -- -p strictly_proofs 2>&1) || RC=$?
         END=$(date +%s%3N)
         ELAPSED=$(( (END - START) / 1000 ))
         TS=$(date -Iseconds)
