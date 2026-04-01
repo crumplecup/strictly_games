@@ -19,8 +19,42 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Widget},
 };
 use tracing::instrument;
+use unicode_width::UnicodeWidthStr as _;
 
 use crate::AnyGame;
+
+// ─────────────────────────────────────────────────────────────
+//  Unicode-aware text helpers
+// ─────────────────────────────────────────────────────────────
+
+/// Truncates `s` so its display width does not exceed `max_cols`.
+///
+/// If truncation is required, the last visible character is replaced with `…`
+/// (U+2026, display width 1), so the result always fits in `max_cols` columns.
+fn truncate_to_width(s: &str, max_cols: usize) -> String {
+    if s.width() <= max_cols {
+        return s.to_string();
+    }
+    if max_cols == 0 {
+        return String::new();
+    }
+    if max_cols == 1 {
+        return "…".to_string();
+    }
+    // Reserve one column for the ellipsis.
+    let budget = max_cols - 1;
+    let mut used = 0;
+    let mut end = 0;
+    for ch in s.chars() {
+        let w = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+        if used + w > budget {
+            break;
+        }
+        used += w;
+        end += ch.len_utf8();
+    }
+    format!("{}…", &s[..end])
+}
 
 // ─────────────────────────────────────────────────────────────
 //  Graph definition types
@@ -493,7 +527,7 @@ impl TypestateGraphWidget<'_> {
         let mut constraints: Vec<Constraint> = Vec::with_capacity(n * 2 - 1);
         for i in 0..n {
             constraints.push(Constraint::Length(
-                (self.nodes[i].label.len() as u16 + 4).min(area.width),
+                (self.nodes[i].label.width() as u16 + 4).min(area.width),
             ));
             if i < n - 1 {
                 constraints.push(Constraint::Min(1)); // arrow gap
@@ -529,9 +563,10 @@ impl TypestateGraphWidget<'_> {
             let block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(border_style);
-            let label = Paragraph::new(Line::from(Span::styled(node.label, label_style)))
-                .alignment(Alignment::Center);
             let node_inner = block.inner(slots[slot_idx]);
+            let truncated = truncate_to_width(node.label, node_inner.width as usize);
+            let label = Paragraph::new(Line::from(Span::styled(truncated, label_style)))
+                .alignment(Alignment::Center);
             block.render(slots[slot_idx], buf);
             label.render(node_inner, buf);
 
@@ -575,7 +610,7 @@ impl TypestateGraphWidget<'_> {
         // Compute horizontal midpoints for each node slot
         let midpoints: Vec<u16> = (0..n)
             .map(|i| {
-                let box_w = self.nodes[i].label.len() + 4;
+                let box_w = self.nodes[i].label.width() + 4;
                 let slot_x = i * slot_w;
                 let bx = slot_x + slot_w.saturating_sub(box_w) / 2;
                 area.x + (bx + box_w / 2) as u16
@@ -601,7 +636,7 @@ impl TypestateGraphWidget<'_> {
         if let Some(active_idx) = self.active {
             let n = self.nodes.len();
             let slot_w = (area.width as usize / n).max(1);
-            let box_w = self.nodes[active_idx].label.len() + 4;
+            let box_w = self.nodes[active_idx].label.width() + 4;
             let slot_x = active_idx * slot_w;
             let bx = slot_x + slot_w.saturating_sub(box_w) / 2;
             let mid = area.x + (bx + box_w / 2) as u16;
@@ -662,7 +697,7 @@ impl TypestateGraphWidget<'_> {
         let narrative_style = Style::default()
             .fg(Color::White)
             .add_modifier(Modifier::BOLD);
-        let clipped: String = ctx.narrative.chars().take(inner_w).collect();
+        let clipped = truncate_to_width(&ctx.narrative, inner_w);
         lines.push(Line::from(Span::styled(clipped, narrative_style)));
 
         // Choices
@@ -675,9 +710,10 @@ impl TypestateGraphWidget<'_> {
                 let label_style = Style::default().fg(Color::Cyan);
                 let desc_style = Style::default().fg(Color::Gray);
 
+                let truncated_label = truncate_to_width(choice.label, 8);
                 lines.push(Line::from(vec![
                     Span::styled(format!("[{}] ", choice.key), key_style),
-                    Span::styled(format!("{:<8}", choice.label), label_style),
+                    Span::styled(format!("{:<8}", truncated_label), label_style),
                     Span::styled(choice.desc.to_string(), desc_style),
                 ]));
             }
@@ -696,7 +732,7 @@ impl TypestateGraphWidget<'_> {
                 header_style,
             )));
             for prompt_line in prompt_text.lines() {
-                let clipped: String = prompt_line.chars().take(inner_w).collect();
+                let clipped = truncate_to_width(prompt_line, inner_w);
                 lines.push(Line::from(Span::styled(clipped, text_style)));
             }
         }
