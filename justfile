@@ -319,8 +319,10 @@ verify-kani-tracked csv="kani_verification_results.csv":
     TOTAL=${#HARNESSES[@]}
     echo "🔬 Running $TOTAL Kani harnesses → $CSV"
     echo ""
+    IDX=0
     for harness in "${HARNESSES[@]}"; do
-        printf "  %-50s" "$harness"
+        IDX=$((IDX + 1))
+        printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
         if cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
             END=$(date +%s)
@@ -373,15 +375,18 @@ verify-kani-resume csv="kani_verification_results.csv":
         winner_detects_diagonal winner_detects_row
     )
     PASS=0; FAIL=0; SKIP=0
-    echo "🔬 Resuming Kani run — skipping already-passed harnesses"
+    TOTAL=${#HARNESSES[@]}
+    echo "🔬 Resuming Kani run — skipping already-passed harnesses ($TOTAL total)"
     echo ""
+    IDX=0
     for harness in "${HARNESSES[@]}"; do
+        IDX=$((IDX + 1))
         if echo "$PASSED" | grep -qx "$harness"; then
-            printf "  %-50s⏭  SKIP (already passed)\n" "$harness"
+            printf "  [%d/%d] %-50s⏭  SKIP (already passed)\n" "$IDX" "$TOTAL" "$harness"
             SKIP=$((SKIP + 1))
             continue
         fi
-        printf "  %-50s" "$harness"
+        printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
         if cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
             END=$(date +%s); ELAPSED=$((END - START))
