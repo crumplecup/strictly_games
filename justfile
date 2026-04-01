@@ -195,9 +195,10 @@ verify-check:
 
 # Run each Kani harness individually, recording pass/fail/duration to a CSV.
 # Format: module,harness,status,duration_secs,timestamp
-# Usage: just verify-kani-tracked            (fresh run, overwrites CSV)
-#        just verify-kani-tracked my.csv     (custom CSV path)
-verify-kani-tracked csv="kani_verification_results.csv":
+# Usage: just verify-kani-tracked                  (fresh run, overwrites CSV)
+#        just verify-kani-tracked my.csv           (custom CSV path)
+#        just verify-kani-tracked my.csv 600       (custom timeout)
+verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
     #!/usr/bin/env bash
     set -euo pipefail
     CSV="{{csv}}"
@@ -324,7 +325,7 @@ verify-kani-tracked csv="kani_verification_results.csv":
         IDX=$((IDX + 1))
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
+        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
             END=$(date +%s)
             ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
@@ -333,8 +334,9 @@ verify-kani-tracked csv="kani_verification_results.csv":
         else
             END=$(date +%s)
             ELAPSED=$((END - START))
-            echo "kani_proofs,$harness,FAIL,$ELAPSED,$(date -Iseconds)" >> "$CSV"
-            printf "❌ FAIL (%ds)\n" "$ELAPSED"
+            STATUS=$( [ $ELAPSED -ge {{timeout}} ] && echo "TIMEOUT" || echo "FAIL" )
+            echo "kani_proofs,$harness,$STATUS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            [ "$STATUS" = "TIMEOUT" ] && printf "⏱  TIMEOUT (%ds)\n" "$ELAPSED" || printf "❌ FAIL (%ds)\n" "$ELAPSED"
             FAIL=$((FAIL + 1))
         fi
     done
@@ -343,7 +345,7 @@ verify-kani-tracked csv="kani_verification_results.csv":
     echo "CSV:     $CSV"
 
 # Resume a previous tracked run — skips harnesses already recorded as PASS.
-verify-kani-resume csv="kani_verification_results.csv":
+verify-kani-resume csv="kani_verification_results.csv" timeout="300":
     #!/usr/bin/env bash
     set -euo pipefail
     CSV="{{csv}}"
@@ -388,15 +390,16 @@ verify-kani-resume csv="kani_verification_results.csv":
         fi
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
+        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
             END=$(date +%s); ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
             printf "✅ PASS (%ds)\n" "$ELAPSED"
             PASS=$((PASS + 1))
         else
             END=$(date +%s); ELAPSED=$((END - START))
-            echo "kani_proofs,$harness,FAIL,$ELAPSED,$(date -Iseconds)" >> "$CSV"
-            printf "❌ FAIL (%ds)\n" "$ELAPSED"
+            STATUS=$( [ $ELAPSED -ge {{timeout}} ] && echo "TIMEOUT" || echo "FAIL" )
+            echo "kani_proofs,$harness,$STATUS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            [ "$STATUS" = "TIMEOUT" ] && printf "⏱  TIMEOUT (%ds)\n" "$ELAPSED" || printf "❌ FAIL (%ds)\n" "$ELAPSED"
             FAIL=$((FAIL + 1))
         fi
     done
@@ -414,14 +417,21 @@ verify-kani-summary csv="kani_verification_results.csv":
     fi
     PASS=$(awk -F',' '$3=="PASS"' "$CSV" | wc -l | tr -d ' ')
     FAIL=$(awk -F',' '$3=="FAIL"' "$CSV" | wc -l | tr -d ' ')
-    TOTAL=$((PASS + FAIL))
+    TIMEOUT=$(awk -F',' '$3=="TIMEOUT"' "$CSV" | wc -l | tr -d ' ')
+    TOTAL=$((PASS + FAIL + TIMEOUT))
     echo "📊 Kani verification summary ($CSV)"
-    echo "   Passed: $PASS / $TOTAL"
-    echo "   Failed: $FAIL"
+    echo "   Passed:  $PASS / $TOTAL"
+    echo "   Failed:  $FAIL"
+    [ "$TIMEOUT" -gt 0 ] && echo "   Timeout: $TIMEOUT"
     if [ "$FAIL" -gt 0 ]; then
         echo ""
         echo "Failed harnesses:"
         awk -F',' '$3=="FAIL" {printf "  ❌ %s\n", $2}' "$CSV"
+    fi
+    if [ "$TIMEOUT" -gt 0 ]; then
+        echo ""
+        echo "Timed-out harnesses:"
+        awk -F',' '$3=="TIMEOUT" {printf "  ⏱  %s  (%ss)\n", $2, $4}' "$CSV"
     fi
 
 # Show only failed harnesses from the CSV.
