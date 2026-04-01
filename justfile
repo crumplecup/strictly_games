@@ -146,6 +146,22 @@ verify-passive-affirm:
     cargo kani -p strictly_proofs --harness affirm_continue_always_returns
     cargo kani -p strictly_proofs --harness cancellation_is_monotonic
 
+# Run TUI breakpoint truth-table proofs (NoOverflow layout arithmetic)
+verify-tui-breakpoints:
+    @echo "Verifying TUI layout contracts across all 7 terminal breakpoints..."
+    cargo kani -p strictly_proofs --harness truncation_always_satisfies_label_contained
+    cargo kani -p strictly_proofs --harness node_box_width_no_u16_overflow
+    cargo kani -p strictly_proofs --harness area_sufficient_zero_height_fails
+    cargo kani -p strictly_proofs --harness area_sufficient_nonzero_height_passes
+    cargo kani -p strictly_proofs --harness breakpoint_minimum_blackjack_layout
+    cargo kani -p strictly_proofs --harness breakpoint_small_layout
+    cargo kani -p strictly_proofs --harness breakpoint_medium_layout
+    cargo kani -p strictly_proofs --harness breakpoint_large_layout
+    cargo kani -p strictly_proofs --harness breakpoint_ultrawide_layout
+    cargo kani -p strictly_proofs --harness breakpoint_tiny_graceful_degrade
+    cargo kani -p strictly_proofs --harness breakpoint_micro_expected_failure
+    cargo kani -p strictly_proofs --harness symbolic_must_pass_range_safe
+
 # Check that verification code compiles (fast check before running Kani)
 verify-check:
     @echo "Checking verification code compiles..."

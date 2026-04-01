@@ -233,5 +233,5 @@ fn place_four_ten_payout() {
 fn house_edge_non_negative() {
     let bet: BetType = kani::any();
     let edge = house_edge(bet);
-    assert!(edge >= 0.0, "House edge is non-negative");
+    assert!(edge >= 0, "House edge is non-negative");
 }
