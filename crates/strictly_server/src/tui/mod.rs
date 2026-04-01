@@ -9,6 +9,7 @@ pub mod craps;
 mod input; // Cursor movement
 pub mod mcp_communicator;
 pub mod observable_communicator;
+mod palette;
 mod rest_client; // Type-safe REST client
 mod standalone;
 pub mod tui_communicator;
@@ -563,9 +564,15 @@ where
     }
 }
 
-/// Renders board with cursor highlighting.
-fn render_board_with_cursor(board: &crate::games::tictactoe::Board, cursor: Position) -> String {
+/// Builds a WCAG-styled [`TextJson`] of the board for use in a TuiNode tree.
+#[instrument(skip_all)]
+fn build_board_text(
+    board: &crate::games::tictactoe::Board,
+    cursor: Position,
+    pal: &palette::GamePalette,
+) -> elicit_ratatui::TextJson {
     use crate::games::tictactoe::{Player, Square};
+    use elicit_ratatui::{LineJson, SpanJson, StyleJson, TextJson};
 
     let positions = [
         [Position::TopLeft, Position::TopCenter, Position::TopRight],
@@ -581,40 +588,199 @@ fn render_board_with_cursor(board: &crate::games::tictactoe::Board, cursor: Posi
         ],
     ];
 
-    let mut lines = Vec::new();
+    let sep_style = StyleJson {
+        fg: Some(pal.border.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let cursor_style = StyleJson {
+        fg: Some(pal.highlight.json.clone()),
+        bg: None,
+        modifiers: vec![elicit_ratatui::ModifierJson::Bold],
+    };
+    let x_style = StyleJson {
+        fg: Some(pal.warning.json.clone()),
+        bg: None,
+        modifiers: vec![elicit_ratatui::ModifierJson::Bold],
+    };
+    let o_style = StyleJson {
+        fg: Some(pal.host.json.clone()),
+        bg: None,
+        modifiers: vec![elicit_ratatui::ModifierJson::Bold],
+    };
+    let empty_style = StyleJson {
+        fg: Some(pal.muted.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+
+    let mut lines: Vec<LineJson> = Vec::new();
 
     for (row_idx, row) in positions.iter().enumerate() {
-        let mut line_spans = Vec::new();
+        let mut spans: Vec<SpanJson> = Vec::new();
 
         for (col_idx, &pos) in row.iter().enumerate() {
             let square = board.get(pos);
-            let symbol = match square {
-                Square::Empty => " ",
-                Square::Occupied(Player::X) => "X",
-                Square::Occupied(Player::O) => "O",
+            let is_cursor = pos == cursor;
+
+            let (text, style) = match (square, is_cursor) {
+                (_, true) => {
+                    let sym = match square {
+                        Square::Empty => " ",
+                        Square::Occupied(Player::X) => "X",
+                        Square::Occupied(Player::O) => "O",
+                    };
+                    (format!("[{sym}]"), cursor_style.clone())
+                }
+                (Square::Empty, false) => (" · ".to_string(), empty_style.clone()),
+                (Square::Occupied(Player::X), false) => (" X ".to_string(), x_style.clone()),
+                (Square::Occupied(Player::O), false) => (" O ".to_string(), o_style.clone()),
             };
 
-            let cell = if pos == cursor {
-                format!("[{}]", symbol) // Highlight cursor
-            } else {
-                format!(" {} ", symbol)
-            };
-
-            line_spans.push(cell);
+            spans.push(SpanJson {
+                content: text,
+                style: Some(style),
+            });
 
             if col_idx < 2 {
-                line_spans.push("|".to_string());
+                spans.push(SpanJson {
+                    content: "│".to_string(),
+                    style: Some(sep_style.clone()),
+                });
             }
         }
 
-        lines.push(line_spans.join(""));
+        lines.push(LineJson {
+            spans,
+            style: None,
+            alignment: Some(elicit_ratatui::AlignmentJson::Center),
+        });
 
         if row_idx < 2 {
-            lines.push("-----------".to_string());
+            lines.push(LineJson {
+                spans: vec![SpanJson {
+                    content: "───┼───┼───".to_string(),
+                    style: Some(sep_style.clone()),
+                }],
+                style: None,
+                alignment: Some(elicit_ratatui::AlignmentJson::Center),
+            });
         }
     }
 
-    lines.join("\n")
+    TextJson {
+        lines,
+        style: None,
+        alignment: Some(elicit_ratatui::AlignmentJson::Center),
+    }
+}
+
+/// Builds a WCAG-styled [`TextJson`] of the event log for the story pane.
+#[instrument(skip_all)]
+fn build_story_text(
+    event_log: &[typestate_widget::GameEvent],
+    pal: &palette::GamePalette,
+) -> elicit_ratatui::TextJson {
+    use elicit_ratatui::{LineJson, ModifierJson, SpanJson, StyleJson, TextJson};
+
+    if event_log.is_empty() {
+        return TextJson {
+            lines: vec![LineJson {
+                spans: vec![SpanJson {
+                    content: "Waiting for first move…".to_string(),
+                    style: Some(StyleJson {
+                        fg: Some(pal.muted.json.clone()),
+                        bg: None,
+                        modifiers: vec![],
+                    }),
+                }],
+                style: None,
+                alignment: None,
+            }],
+            style: None,
+            alignment: None,
+        };
+    }
+
+    // Show up to 40 lines, most-recent last.
+    let max_lines = 40usize;
+    let lines: Vec<LineJson> = event_log
+        .iter()
+        .rev()
+        .take(max_lines)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .enumerate()
+        .map(|(i, ev)| {
+            let age = max_lines.saturating_sub(i + 1);
+            let modifiers = if age == 0 {
+                vec![ModifierJson::Bold]
+            } else {
+                vec![]
+            };
+            let style = if age >= 3 {
+                // Old events fade to muted grey.
+                StyleJson {
+                    fg: Some(pal.muted.json.clone()),
+                    bg: None,
+                    modifiers: vec![],
+                }
+            } else if age >= 1 {
+                // Recent but not current — use body text colour (AA-verified).
+                StyleJson {
+                    fg: Some(pal.body.json.clone()),
+                    bg: None,
+                    modifiers,
+                }
+            } else {
+                // Current event — full palette colour + bold.
+                StyleJson {
+                    fg: Some(ratatui_color_to_json(ev.color, pal)),
+                    bg: None,
+                    modifiers,
+                }
+            };
+            LineJson {
+                spans: vec![SpanJson {
+                    content: ev.text.clone(),
+                    style: Some(style),
+                }],
+                style: None,
+                alignment: None,
+            }
+        })
+        .collect();
+
+    TextJson {
+        lines,
+        style: None,
+        alignment: None,
+    }
+}
+
+/// Maps a ratatui [`ratatui::style::Color`] from the event log to a
+/// [`elicit_ratatui::ColorJson`] drawn from the verified palette where
+/// possible, falling back to a direct RGB mapping otherwise.
+#[instrument(skip_all)]
+fn ratatui_color_to_json(
+    color: ratatui::style::Color,
+    pal: &palette::GamePalette,
+) -> elicit_ratatui::ColorJson {
+    use ratatui::style::Color;
+    match color {
+        Color::Cyan | Color::LightCyan => pal.highlight.json.clone(),
+        Color::Green | Color::LightGreen => pal.success.json.clone(),
+        Color::Yellow | Color::LightYellow => pal.warning.json.clone(),
+        Color::Red | Color::LightRed => pal.error.json.clone(),
+        Color::Blue | Color::LightBlue => pal.host.json.clone(),
+        Color::Magenta | Color::LightMagenta => pal.proof.json.clone(),
+        Color::White => pal.title.json.clone(),
+        Color::DarkGray | Color::Gray => pal.muted.json.clone(),
+        Color::Rgb(r, g, b) => elicit_ratatui::ColorJson::Rgb { r, g, b },
+        Color::Indexed(i) => elicit_ratatui::ColorJson::Indexed { index: i },
+        _ => pal.agent.json.clone(),
+    }
 }
 
 /// Bundled typestate graph state passed to the frame renderer.
@@ -673,122 +839,228 @@ struct FrameData<'a> {
 
 /// Renders the 4-column tic-tac-toe layout (Board | Game Story | Chat | Typestate).
 ///
-/// When `graph.show` is false, uses a 3-column layout (Board | Story | Chat).
-/// When there is no dialogue, falls back to the original layout without chat.
-/// The status bar combines game state and key hints into one row.
+/// Builds a [`TuiNode`] tree for the outer chrome (title, status bar) and
+/// static content (board, story), then renders chat and typestate graph
+/// custom widgets into layout-allocated areas.  This is the Phase 4
+/// declarative rendering: the layout structure lives in a TuiNode tree;
+/// custom widgets slot into areas computed by that tree.
 #[instrument(skip_all)]
 fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
     use crate::tui::chat_widget::{ChatMessage, ChatWidget, Participant};
-    use ratatui::{
-        layout::{Alignment, Constraint, Direction, Layout},
-        style::{Modifier, Style},
-        text::{Line, Span},
-        widgets::{Block, Borders, Paragraph},
+    use elicit_ratatui::{
+        BlockJson, BordersJson, ConstraintJson, DirectionJson, ModifierJson, ParagraphText,
+        StyleJson, TuiNode, WidgetJson, render_node,
+    };
+    use palette::GamePalette;
+    use ratatui::layout::{Constraint, Direction, Layout};
+
+    let pal = GamePalette::new();
+    let has_chat = !data.dialogue.is_empty();
+
+    // --- Helper closures for building palette-sourced StyleJson ---
+    let style_fg = |c: &palette::VerifiedColor| StyleJson {
+        fg: Some(c.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let style_fg_bold = |c: &palette::VerifiedColor| StyleJson {
+        fg: Some(c.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+    let style_border = |c: &palette::VerifiedColor| StyleJson {
+        fg: Some(c.json.clone()),
+        bg: None,
+        modifiers: vec![],
     };
 
+    // --- Board content as rich TextJson ---
+    let board_text = build_board_text(data.game.board(), data.cursor, &pal);
+
+    // --- Story lines as TextJson ---
+    let story_text = build_story_text(data.event_log, &pal);
+
+    // --- Column constraints based on active panels ---
+    let col_constraints: Vec<ConstraintJson> = match (data.graph.show, has_chat) {
+        (true, true) => vec![
+            ConstraintJson::Percentage { value: 30 },
+            ConstraintJson::Percentage { value: 20 },
+            ConstraintJson::Percentage { value: 25 },
+            ConstraintJson::Percentage { value: 25 },
+        ],
+        (true, false) => vec![
+            ConstraintJson::Percentage { value: 40 },
+            ConstraintJson::Percentage { value: 30 },
+            ConstraintJson::Percentage { value: 30 },
+        ],
+        (false, true) => vec![
+            ConstraintJson::Percentage { value: 40 },
+            ConstraintJson::Percentage { value: 30 },
+            ConstraintJson::Percentage { value: 30 },
+        ],
+        (false, false) => vec![
+            ConstraintJson::Percentage { value: 55 },
+            ConstraintJson::Percentage { value: 45 },
+        ],
+    };
+
+    // --- Build TuiNode tree: vertical outer shell with horizontal content row ---
+    let board_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(board_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: Some("Center".to_string()),
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(" Board ".to_string()),
+                style: None,
+                border_style: Some(style_border(&pal.border)),
+                padding: None,
+            }),
+        }),
+    };
+
+    let story_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(story_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(" Game Story ".to_string()),
+                style: None,
+                border_style: Some(style_border(&pal.border)),
+                padding: None,
+            }),
+        }),
+    };
+
+    // Placeholders for chat and typestate — we render custom widgets into
+    // the areas produced by the layout after render_node runs the outer shell.
+    let clear_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Clear),
+    };
+
+    // Build the content row children
+    let mut content_children = vec![board_node, story_node];
+    if has_chat {
+        content_children.push(clear_node.clone());
+    }
+    if data.graph.show {
+        content_children.push(clear_node);
+    }
+
+    let title_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Plain("Strictly Games — Tic Tac Toe".to_string()),
+            style: Some(style_fg_bold(&pal.title)),
+            wrap: false,
+            scroll: None,
+            alignment: Some("Center".to_string()),
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: None,
+                style: None,
+                border_style: Some(style_border(&pal.border)),
+                padding: None,
+            }),
+        }),
+    };
+
+    let status_style = if data.status_color == ratatui::style::Color::Red {
+        style_fg_bold(&pal.error)
+    } else if data.status_color == ratatui::style::Color::Green {
+        style_fg(&pal.success)
+    } else {
+        style_fg(&pal.warning)
+    };
+
+    let status_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Plain(data.status_text.to_string()),
+            style: Some(status_style),
+            wrap: false,
+            scroll: None,
+            alignment: Some("Center".to_string()),
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: None,
+                style: None,
+                border_style: Some(style_border(&pal.border)),
+                padding: None,
+            }),
+        }),
+    };
+
+    let root = TuiNode::Layout {
+        direction: DirectionJson::Vertical,
+        constraints: vec![
+            ConstraintJson::Length { value: 3 },
+            ConstraintJson::Min { value: 0 },
+            ConstraintJson::Length { value: 3 },
+        ],
+        children: vec![
+            title_node,
+            TuiNode::Layout {
+                direction: DirectionJson::Horizontal,
+                constraints: col_constraints,
+                children: content_children,
+                margin: None,
+            },
+            status_node,
+        ],
+        margin: None,
+    };
+
+    // Render the TuiNode tree — this handles title, board, story, and status.
+    render_node(f, f.area(), &root);
+
+    // Compute the same layout areas to render custom widgets into.
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Title
-            Constraint::Min(0),    // Content
-            Constraint::Length(3), // Status bar
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(3),
         ])
         .split(f.area());
 
-    // Title
-    let title = Paragraph::new("Strictly Games — Tic Tac Toe")
-        .style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(title, outer[0]);
-
-    let has_chat = !data.dialogue.is_empty();
-
-    // Content layout — adapts based on which panels are active.
-    let content_areas = match (data.graph.show, has_chat) {
-        (true, true) => Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(30), // Board
-                Constraint::Percentage(20), // Game Story
-                Constraint::Percentage(25), // Chat
-                Constraint::Percentage(25), // Typestate
-            ])
-            .split(outer[1]),
-        (true, false) => Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(40), // Board
-                Constraint::Percentage(30), // Game Story
-                Constraint::Percentage(30), // Typestate
-            ])
-            .split(outer[1]),
-        (false, true) => Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(40), // Board
-                Constraint::Percentage(30), // Game Story
-                Constraint::Percentage(30), // Chat
-            ])
-            .split(outer[1]),
-        (false, false) => Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(55), // Board
-                Constraint::Percentage(45), // Game Story
-            ])
-            .split(outer[1]),
+    let col_constraints_ratatui: Vec<Constraint> = match (data.graph.show, has_chat) {
+        (true, true) => vec![
+            Constraint::Percentage(30),
+            Constraint::Percentage(20),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ],
+        (true, false) => vec![
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+            Constraint::Percentage(30),
+        ],
+        (false, true) => vec![
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+            Constraint::Percentage(30),
+        ],
+        (false, false) => vec![Constraint::Percentage(55), Constraint::Percentage(45)],
     };
 
-    // Board
-    let board_lines = render_board_with_cursor(data.game.board(), data.cursor);
-    let board = Paragraph::new(board_lines)
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).title(" Board "));
-    f.render_widget(board, content_areas[0]);
+    let content_areas = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(col_constraints_ratatui)
+        .split(outer[1]);
 
-    // Game Story pane — shows the full event log, scrolled to bottom.
-    let story_block = Block::default().borders(Borders::ALL).title(" Game Story ");
-    let story_inner = story_block.inner(content_areas[1]);
-    f.render_widget(story_block, content_areas[1]);
-
-    let max_lines = story_inner.height as usize;
-    let story_lines: Vec<Line> = if data.event_log.is_empty() {
-        vec![Line::from(Span::styled(
-            "Waiting for first move…",
-            Style::default().fg(Color::DarkGray),
-        ))]
-    } else {
-        data.event_log
-            .iter()
-            .rev()
-            .take(max_lines)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .enumerate()
-            .map(|(i, ev)| {
-                let age = max_lines.saturating_sub(i + 1);
-                let style = if age == 0 {
-                    Style::default().fg(ev.color).add_modifier(Modifier::BOLD)
-                } else if age < 3 {
-                    Style::default().fg(ev.color)
-                } else {
-                    Style::default().fg(Color::DarkGray)
-                };
-                Line::from(Span::styled(ev.text.clone(), style))
-            })
-            .collect()
-    };
-    f.render_widget(Paragraph::new(story_lines), story_inner);
-
-    // Chat pane — server↔agent dialogue (column index depends on layout).
-    let chat_col = if has_chat { Some(2) } else { None };
-    if let Some(col) = chat_col {
+    // Chat pane — custom widget rendered into the layout area.
+    if has_chat {
+        let chat_col = 2;
         let chat_messages: Vec<ChatMessage> = data
             .dialogue
             .iter()
@@ -802,10 +1074,10 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
             })
             .collect();
         let chat = ChatWidget::new(&chat_messages);
-        f.render_widget(chat, content_areas[col]);
+        f.render_widget(chat, content_areas[chat_col]);
     }
 
-    // Typestate graph (rightmost column when enabled).
+    // Typestate graph — custom widget rendered into the layout area.
     if data.graph.show {
         let type_col = if has_chat { 3 } else { 2 };
         if content_areas.len() > type_col {
@@ -819,11 +1091,4 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
             f.render_widget(widget, content_areas[type_col]);
         }
     }
-
-    // Status bar — combined game state + key hints
-    let status = Paragraph::new(data.status_text.to_string())
-        .style(Style::default().fg(data.status_color))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL));
-    f.render_widget(status, outer[2]);
 }
