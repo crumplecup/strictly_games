@@ -393,11 +393,13 @@ fn render_blackjack<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    use crate::tui::contracts::{NoOverflow, render_resize_prompt, verified_draw};
     use crate::tui::palette::GamePalette;
     use elicit_ratatui::{
         BlockJson, BordersJson, ConstraintJson, DirectionJson, ParagraphText, StyleJson, TuiNode,
-        WidgetJson, render_node,
+        WidgetJson,
     };
+    use elicitation::contracts::Established;
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let pal = GamePalette::new();
@@ -433,7 +435,7 @@ where
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(game_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -492,7 +494,11 @@ where
     };
 
     ctx.terminal.draw(|frame| {
-        render_node(frame, frame.area(), &root);
+        let _proof: Established<NoOverflow> = verified_draw(frame, frame.area(), &root)
+            .unwrap_or_else(|e| {
+                render_resize_prompt(frame, &e);
+                Established::assert()
+            });
 
         // Compute layout to find the typestate graph area.
         if ctx.show_typestate_graph {
@@ -522,11 +528,13 @@ fn render_finish<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    use crate::tui::contracts::{NoOverflow, render_resize_prompt, verified_draw};
     use crate::tui::palette::GamePalette;
     use elicit_ratatui::{
         BlockJson, BordersJson, LineJson, ModifierJson, ParagraphText, SpanJson, StyleJson,
-        TextJson, TuiNode, WidgetJson, render_node,
+        TextJson, TuiNode, WidgetJson,
     };
+    use elicitation::contracts::Established;
 
     render_blackjack(
         ctx,
@@ -574,7 +582,7 @@ where
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(popup_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -604,7 +612,11 @@ where
             width: w,
             height: h,
         };
-        render_node(frame, rect, &popup_node);
+        let _proof: Established<NoOverflow> = verified_draw(frame, rect, &popup_node)
+            .unwrap_or_else(|e| {
+                render_resize_prompt(frame, &e);
+                Established::assert()
+            });
     })?;
     Ok(())
 }
@@ -1371,11 +1383,13 @@ where
     <B as Backend>::Error: Send + Sync + 'static,
 {
     use crate::tui::ChatWidget;
+    use crate::tui::contracts::{NoOverflow, render_resize_prompt, verified_draw};
     use crate::tui::palette::GamePalette;
     use elicit_ratatui::{
         BlockJson, BordersJson, ConstraintJson, DirectionJson, LineJson, ModifierJson,
-        ParagraphText, SpanJson, StyleJson, TextJson, TuiNode, WidgetJson, render_node,
+        ParagraphText, SpanJson, StyleJson, TextJson, TuiNode, WidgetJson,
     };
+    use elicitation::contracts::Established;
     use ratatui::layout::{Constraint, Direction, Layout};
     use ratatui::prelude::Widget as _;
 
@@ -1534,7 +1548,7 @@ where
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(dealer_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -1551,7 +1565,7 @@ where
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(seats_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -1568,7 +1582,7 @@ where
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(log_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -1637,7 +1651,11 @@ where
     };
 
     terminal.draw(|frame| {
-        render_node(frame, frame.area(), &root);
+        let _proof: Established<NoOverflow> = verified_draw(frame, frame.area(), &root)
+            .unwrap_or_else(|e| {
+                render_resize_prompt(frame, &e);
+                Established::assert()
+            });
 
         // Compute layout to find areas for custom widgets.
         let outer = Layout::default()

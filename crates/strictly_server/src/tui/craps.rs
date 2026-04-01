@@ -542,11 +542,13 @@ fn render_craps<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    use crate::tui::contracts::{NoOverflow, render_resize_prompt, verified_draw};
     use crate::tui::palette::GamePalette;
     use elicit_ratatui::{
         BlockJson, BordersJson, ConstraintJson, DirectionJson, ParagraphText, StyleJson, TuiNode,
-        WidgetJson, render_node,
+        WidgetJson,
     };
+    use elicitation::contracts::Established;
     use ratatui::layout::{Constraint, Direction, Layout};
 
     let pal = GamePalette::new();
@@ -585,7 +587,7 @@ where
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(game_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -603,7 +605,7 @@ where
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(story_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -661,7 +663,11 @@ where
     };
 
     ctx.terminal.draw(|frame| {
-        render_node(frame, frame.area(), &root);
+        let _proof: Established<NoOverflow> = verified_draw(frame, frame.area(), &root)
+            .unwrap_or_else(|e| {
+                render_resize_prompt(frame, &e);
+                Established::assert()
+            });
 
         if ctx.show_typestate_graph {
             let outer = Layout::default()

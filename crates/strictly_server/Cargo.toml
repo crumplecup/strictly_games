@@ -72,6 +72,7 @@ elicit_ui = { workspace = true }
 # TUI
 ratatui = { workspace = true }
 crossterm = { workspace = true }
+unicode-width = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

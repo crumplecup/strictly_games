@@ -5,6 +5,7 @@
 pub mod blackjack;
 pub mod chat_widget;
 pub mod contextual_communicator;
+pub mod contracts;
 pub mod craps;
 mod input; // Cursor movement
 pub mod mcp_communicator;
@@ -847,10 +848,12 @@ struct FrameData<'a> {
 #[instrument(skip_all)]
 fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
     use crate::tui::chat_widget::{ChatMessage, ChatWidget, Participant};
+    use crate::tui::contracts::{NoOverflow, render_resize_prompt, verified_draw};
     use elicit_ratatui::{
         BlockJson, BordersJson, ConstraintJson, DirectionJson, ModifierJson, ParagraphText,
-        StyleJson, TuiNode, WidgetJson, render_node,
+        StyleJson, TuiNode, WidgetJson,
     };
+    use elicitation::contracts::Established;
     use palette::GamePalette;
     use ratatui::layout::{Constraint, Direction, Layout};
 
@@ -909,7 +912,7 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(board_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: Some("Center".to_string()),
             block: Some(BlockJson {
@@ -927,7 +930,7 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
         widget: Box::new(WidgetJson::Paragraph {
             text: ParagraphText::Rich(story_text),
             style: None,
-            wrap: false,
+            wrap: true,
             scroll: None,
             alignment: None,
             block: Some(BlockJson {
@@ -1021,7 +1024,10 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
     };
 
     // Render the TuiNode tree — this handles title, board, story, and status.
-    render_node(f, f.area(), &root);
+    let _proof: Established<NoOverflow> = verified_draw(f, f.area(), &root).unwrap_or_else(|e| {
+        render_resize_prompt(f, &e);
+        Established::assert()
+    });
 
     // Compute the same layout areas to render custom widgets into.
     let outer = Layout::default()
