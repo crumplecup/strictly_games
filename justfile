@@ -433,22 +433,353 @@ verify-kani-failed csv="kani_verification_results.csv":
     fi
 
 
-    @echo "Running tracked Verus verification..."
-    cargo run --bin strictly_games -- verify --tool verus
+# ─────────────────────────────────────────────────────────────
+# Verus verification tracking
+# CSV format: module,status,verified,errors,duration_secs,timestamp
+# ─────────────────────────────────────────────────────────────
 
-# Run Creusot verification with CSV tracking
-verify-creusot-tracked:
-    @echo "Running tracked Creusot verification..."
-    cargo run --bin strictly_games -- verify --tool creusot
+# Run Verus verification with CSV tracking (recommended)
+# Usage: just verify-verus-tracked                  (fresh run)
+#        just verify-verus-tracked my.csv           (custom CSV)
+#        just verify-verus-tracked my.csv 300       (custom timeout)
+verify-verus-tracked csv="verus_verification_results.csv" timeout="600":
+    #!/usr/bin/env bash
+    set -euo pipefail
 
-# Show current verification status from CSV
-verify-status csv="kani_verification_results.csv":
-    just verify-kani-summary {{csv}}
+    if [ -f .env ]; then
+        export $(grep -v '^#' .env | grep VERUS_PATH | xargs 2>/dev/null) || true
+    fi
+    VERUS_BIN="${VERUS_PATH/#\~/$HOME}"
+    if [ ! -f "$VERUS_BIN" ]; then
+        echo "❌ Verus not found at: $VERUS_BIN"
+        echo "   Set VERUS_PATH in .env (see .env)"
+        exit 1
+    fi
 
-# Run all tracked verification (Kani + Verus + Creusot)
+    CSV="{{csv}}"
+    echo "module,status,verified,errors,duration_secs,timestamp" > "$CSV"
+    PASS=0; FAIL=0
+
+    for file in crates/strictly_proofs/src/verus_proofs/*.rs; do
+        module=$(basename "$file" .rs)
+        [[ "$module" == "mod" ]] && continue
+
+        echo -n "  🔬 $module ... "
+        START=$(date +%s%3N)
+        OUTPUT=$(timeout "{{timeout}}" "$VERUS_BIN" --crate-type=lib "$file" 2>&1) || true
+        END=$(date +%s%3N)
+        ELAPSED=$(( (END - START) / 1000 ))
+
+        VERIFIED=$(echo "$OUTPUT" | grep -oP '\d+(?= verified)' | tail -1 || echo "0")
+        ERRORS=$(echo "$OUTPUT" | grep -oP '\d+(?= error)' | tail -1 || echo "0")
+        TS=$(date -Iseconds)
+
+        if [[ "${ERRORS:-0}" == "0" ]] && echo "$OUTPUT" | grep -q "verified"; then
+            STATUS="PASS"; PASS=$((PASS + 1))
+            echo "✅  ($VERIFIED verified, ${ELAPSED}s)"
+        else
+            STATUS="FAIL"; FAIL=$((FAIL + 1))
+            echo "❌  ($ERRORS errors, ${ELAPSED}s)"
+        fi
+        echo "$module,$STATUS,$VERIFIED,$ERRORS,$ELAPSED,$TS" >> "$CSV"
+    done
+
+    echo ""
+    echo "Results: $PASS passed, $FAIL failed"
+    echo "CSV:     $CSV"
+    [ "$FAIL" -eq 0 ] || exit 1
+
+# Resume Verus tracking — skip modules already marked PASS in CSV
+verify-verus-resume csv="verus_verification_results.csv" timeout="600":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [ -f .env ]; then
+        export $(grep -v '^#' .env | grep VERUS_PATH | xargs 2>/dev/null) || true
+    fi
+    VERUS_BIN="${VERUS_PATH/#\~/$HOME}"
+    if [ ! -f "$VERUS_BIN" ]; then
+        echo "❌ Verus not found at: $VERUS_BIN. Set VERUS_PATH in .env"; exit 1
+    fi
+
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then
+        echo "No CSV at $CSV — use 'just verify-verus-tracked' to start fresh."
+        exit 1
+    fi
+
+    PASS=0; FAIL=0; SKIP=0
+    for file in crates/strictly_proofs/src/verus_proofs/*.rs; do
+        module=$(basename "$file" .rs)
+        [[ "$module" == "mod" ]] && continue
+
+        if grep -q "^$module,PASS," "$CSV" 2>/dev/null; then
+            echo "  ⏭  $module (already PASS — skipping)"
+            SKIP=$((SKIP + 1)); continue
+        fi
+
+        echo -n "  🔬 $module ... "
+        START=$(date +%s%3N)
+        OUTPUT=$(timeout "{{timeout}}" "$VERUS_BIN" --crate-type=lib "$file" 2>&1) || true
+        END=$(date +%s%3N)
+        ELAPSED=$(( (END - START) / 1000 ))
+
+        VERIFIED=$(echo "$OUTPUT" | grep -oP '\d+(?= verified)' | tail -1 || echo "0")
+        ERRORS=$(echo "$OUTPUT" | grep -oP '\d+(?= error)' | tail -1 || echo "0")
+        TS=$(date -Iseconds)
+
+        if [[ "${ERRORS:-0}" == "0" ]] && echo "$OUTPUT" | grep -q "verified"; then
+            STATUS="PASS"; PASS=$((PASS + 1))
+            echo "✅  ($VERIFIED verified, ${ELAPSED}s)"
+        else
+            STATUS="FAIL"; FAIL=$((FAIL + 1))
+            echo "❌  ($ERRORS errors, ${ELAPSED}s)"
+        fi
+        # Update or append the row
+        sed -i "/^$module,/d" "$CSV" 2>/dev/null || true
+        echo "$module,$STATUS,$VERIFIED,$ERRORS,$ELAPSED,$TS" >> "$CSV"
+    done
+
+    echo ""
+    echo "Results: $PASS newly passed, $FAIL failed, $SKIP skipped"
+    echo "CSV:     $CSV"
+
+# Show Verus verification summary from CSV
+verify-verus-summary csv="verus_verification_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then echo "No CSV at $CSV"; exit 1; fi
+    PASS=$(awk -F',' '$2=="PASS"' "$CSV" | wc -l | tr -d ' ')
+    FAIL=$(awk -F',' '$2=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    TOTAL=$((PASS + FAIL))
+    echo "📊 Verus verification summary ($CSV)"
+    echo "   Passed: $PASS / $TOTAL"
+    echo "   Failed: $FAIL"
+    if [ "$FAIL" -gt 0 ]; then
+        echo ""
+        echo "Failed modules:"
+        awk -F',' '$2=="FAIL" {printf "  ❌ %s\n", $1}' "$CSV"
+    fi
+
+# Show only failed Verus modules from CSV
+verify-verus-failed csv="verus_verification_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then echo "No CSV at $CSV"; exit 1; fi
+    FAIL=$(awk -F',' '$2=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    if [ "$FAIL" -eq 0 ]; then
+        echo "✅ No failed modules in $CSV"
+    else
+        echo "❌ Failed modules:"
+        awk -F',' '$2=="FAIL" {printf "  %s  (%ss)\n", $1, $5}' "$CSV"
+    fi
+
+# List all Verus proof modules
+verify-verus-list:
+    @echo "Verus proof modules:"
+    @for f in crates/strictly_proofs/src/verus_proofs/*.rs; do \
+        m=$(basename "$f" .rs); \
+        [ "$m" != "mod" ] && echo "  $m"; \
+    done
+
+# ─────────────────────────────────────────────────────────────
+# Creusot verification tracking
+# Module CSV format: module,status,duration_secs,timestamp
+# Goals CSV format:  module,function,goal,status,duration_secs,timestamp
+# ─────────────────────────────────────────────────────────────
+
+# Run Creusot verification with CSV tracking (cargo check, one row per module)
+# Usage: just verify-creusot-tracked                (fresh run)
+#        just verify-creusot-tracked my.csv         (custom CSV)
+verify-creusot-tracked csv="creusot_verification_results.csv":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v cargo-creusot &>/dev/null && ! cargo creusot --version &>/dev/null 2>&1; then
+        echo "❌ cargo-creusot not installed."
+        echo "   Install: cargo install cargo-creusot"
+        exit 1
+    fi
+
+    CSV="{{csv}}"
+    echo "module,status,duration_secs,timestamp" > "$CSV"
+    PASS=0; FAIL=0
+    MODULES=(bankroll_financial compositional_proof game_invariants tui_breakpoints)
+
+    for module in "${MODULES[@]}"; do
+        echo -n "  🔬 $module ... "
+        START=$(date +%s%3N)
+        # cargo creusot compiles with creusot cfg and checks contracts
+        OUTPUT=$(cargo creusot -- -p strictly_proofs 2>&1) || RC=$?
+        END=$(date +%s%3N)
+        ELAPSED=$(( (END - START) / 1000 ))
+        TS=$(date -Iseconds)
+
+        # If the full package check passed we mark this module as PASS;
+        # subsequent modules in the same run reuse the cached build result.
+        if [ "${RC:-0}" -eq 0 ]; then
+            STATUS="PASS"; PASS=$((PASS + 1))
+            echo "✅  (${ELAPSED}s)"
+        else
+            STATUS="FAIL"; FAIL=$((FAIL + 1))
+            echo "❌  (${ELAPSED}s)"
+            echo "    $(echo "$OUTPUT" | grep -E 'error|warning' | head -3)"
+        fi
+        echo "$module,$STATUS,$ELAPSED,$TS" >> "$CSV"
+        RC=0  # reset for next iteration
+    done
+
+    echo ""
+    echo "Results: $PASS passed, $FAIL failed"
+    echo "CSV:     $CSV"
+    [ "$FAIL" -eq 0 ] || exit 1
+
+# Run Creusot SMT prove pass and track per-goal results
+# Requires: cargo-creusot + why3find + SMT solvers (z3, alt-ergo, cvc5)
+# Usage: just verify-creusot-prove
+#        just verify-creusot-prove my_modules.csv my_goals.csv
+verify-creusot-prove csv="creusot_module_results.csv" goals="creusot_goal_results.csv":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v why3find &>/dev/null; then
+        echo "❌ why3find not installed. Install via opam: opam install why3find"
+        exit 1
+    fi
+
+    echo "🔬 Running Creusot prove pass (cargo creusot prove)..."
+    echo "   Module CSV: {{csv}}"
+    echo "   Goals CSV:  {{goals}}"
+    echo ""
+
+    MODULE_CSV="{{csv}}"
+    GOALS_CSV="{{goals}}"
+    echo "module,status,duration_secs,timestamp" > "$MODULE_CSV"
+    echo "module,function,goal,status,prover,duration_secs,timestamp" > "$GOALS_CSV"
+
+    PASS=0; FAIL=0; GOALS_PROVED=0; GOALS_TOTAL=0
+    MODULES=(bankroll_financial compositional_proof game_invariants tui_breakpoints)
+
+    for module in "${MODULES[@]}"; do
+        echo "  📐 $module"
+        START=$(date +%s%3N)
+        OUTPUT=$(cargo creusot prove -- -p strictly_proofs 2>&1) || RC=$?
+        END=$(date +%s%3N)
+        ELAPSED=$(( (END - START) / 1000 ))
+        TS=$(date -Iseconds)
+
+        MODULE_STATUS="PASS"
+        # Parse why3find output lines: look for Valid/Timeout/Unknown per goal
+        while IFS= read -r line; do
+            # why3find outputs: "  function_name: Valid (prover, Xs)"
+            if echo "$line" | grep -qE 'Valid|Timeout|Unknown|Failed'; then
+                GOAL_STATUS=$(echo "$line" | grep -oE 'Valid|Timeout|Unknown|Failed' | head -1)
+                PROVER=$(echo "$line" | grep -oP '(?<=\()[\w@.]+(?=,)' || echo "unknown")
+                GOAL_ELAPSED=$(echo "$line" | grep -oP '[\d.]+(?=s\))' || echo "0")
+                FUNC=$(echo "$line" | grep -oP '^\s+\K\S+(?=:)' || echo "unknown")
+                GOAL_NUM="${GOALS_TOTAL}"
+                GOALS_TOTAL=$((GOALS_TOTAL + 1))
+                echo "$module,$FUNC,vc${GOAL_NUM},$GOAL_STATUS,$PROVER,$GOAL_ELAPSED,$TS" >> "$GOALS_CSV"
+                if [ "$GOAL_STATUS" = "Valid" ]; then
+                    GOALS_PROVED=$((GOALS_PROVED + 1))
+                    echo "    ✅ $FUNC: $GOAL_STATUS ($PROVER, ${GOAL_ELAPSED}s)"
+                else
+                    MODULE_STATUS="FAIL"
+                    echo "    ❌ $FUNC: $GOAL_STATUS ($PROVER, ${GOAL_ELAPSED}s)"
+                fi
+            fi
+        done <<< "$OUTPUT"
+
+        if [ "$MODULE_STATUS" = "PASS" ]; then
+            PASS=$((PASS + 1))
+        else
+            FAIL=$((FAIL + 1))
+        fi
+        echo "$module,$MODULE_STATUS,$ELAPSED,$TS" >> "$MODULE_CSV"
+        RC=0
+    done
+
+    echo ""
+    echo "Goals:   $GOALS_PROVED / $GOALS_TOTAL proved"
+    echo "Modules: $PASS passed, $FAIL failed"
+    echo "Module CSV: $MODULE_CSV"
+    echo "Goals  CSV: $GOALS_CSV"
+    [ "$FAIL" -eq 0 ] || exit 1
+
+# Show Creusot module-level summary from CSV
+verify-creusot-summary csv="creusot_verification_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then echo "No CSV at $CSV"; exit 1; fi
+    PASS=$(awk -F',' '$2=="PASS"' "$CSV" | wc -l | tr -d ' ')
+    FAIL=$(awk -F',' '$2=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    TOTAL=$((PASS + FAIL))
+    echo "📊 Creusot verification summary ($CSV)"
+    echo "   Passed: $PASS / $TOTAL"
+    echo "   Failed: $FAIL"
+    if [ "$FAIL" -gt 0 ]; then
+        echo ""
+        echo "Failed modules:"
+        awk -F',' '$2=="FAIL" {printf "  ❌ %s\n", $1}' "$CSV"
+    fi
+
+# Show failed Creusot modules from CSV
+verify-creusot-failed csv="creusot_verification_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then echo "No CSV at $CSV"; exit 1; fi
+    FAIL=$(awk -F',' '$2=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    if [ "$FAIL" -eq 0 ]; then
+        echo "✅ No failed modules in $CSV"
+    else
+        echo "❌ Failed modules:"
+        awk -F',' '$2=="FAIL" {printf "  %s  (%ss)\n", $1, $3}' "$CSV"
+    fi
+
+# Show goal-level summary from Creusot prove CSV
+verify-creusot-goal-summary goals="creusot_goal_results.csv":
+    #!/usr/bin/env python3
+    import csv, sys
+    goals_file = "{{goals}}"
+    try:
+        rows = list(csv.DictReader(open(goals_file)))
+    except FileNotFoundError:
+        print(f"No goals CSV at {goals_file} — run 'just verify-creusot-prove' first")
+        sys.exit(1)
+    proved  = sum(1 for r in rows if r.get('status') == 'Valid')
+    total   = len(rows)
+    modules = sorted(set(r['module'] for r in rows))
+    print(f'Goals: {proved}/{total} proved across {len(modules)} modules')
+    for m in modules:
+        mr = [r for r in rows if r['module'] == m]
+        mp = sum(1 for r in mr if r.get('status') == 'Valid')
+        print(f'  {m}: {mp}/{len(mr)}')
+
+# List all Creusot proof modules
+verify-creusot-list:
+    @echo "Creusot proof modules:"
+    @for f in crates/strictly_proofs/src/creusot_proofs/*.rs; do \
+        m=$(basename "$f" .rs); \
+        [ "$m" != "mod" ] && echo "  $m"; \
+    done
+
+# Show current verification status — all three tools
+verify-status kani_csv="kani_verification_results.csv" verus_csv="verus_verification_results.csv" creusot_csv="creusot_verification_results.csv":
+    just verify-kani-summary {{kani_csv}}
+    @echo ""
+    -just verify-verus-summary {{verus_csv}}
+    @echo ""
+    -just verify-creusot-summary {{creusot_csv}}
+
+# Run all tracked verification — Kani + Verus + Creusot
 verify-all-tracked:
-    @echo "Running verification trifecta..."
-    cargo run --bin strictly_games -- verify --tool all
+    @echo "🔬 Running verification trifecta (Kani + Verus + Creusot)..."
+    just verify-kani-tracked
+    just verify-verus-tracked
+    just verify-creusot-tracked
+    @echo ""
+    @echo "✅ Verification trifecta complete."
+    just verify-status
 
 # Generate verification dashboard from CSV
 verify-dashboard:
