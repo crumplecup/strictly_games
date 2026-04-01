@@ -22,15 +22,7 @@ use crossterm::event::{self, Event, KeyCode};
 use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
 use elicitation::contracts::Established;
-use ratatui::{
-    Terminal,
-    backend::Backend,
-    layout::{Constraint, Direction, Layout},
-    prelude::Widget,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-};
+use ratatui::{Terminal, backend::Backend, prelude::Widget};
 use std::time::SystemTime;
 use strictly_blackjack::{
     BasicAction, BetPlaced, BlackjackAction, BlackjackPlayerView, GameBetting, GameFinished,
@@ -401,56 +393,121 @@ fn render_blackjack<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    use crate::tui::palette::GamePalette;
+    use elicit_ratatui::{
+        BlockJson, BordersJson, ConstraintJson, DirectionJson, ParagraphText, StyleJson, TuiNode,
+        WidgetJson, render_node,
+    };
+    use ratatui::layout::{Constraint, Direction, Layout};
+
+    let pal = GamePalette::new();
+    let border_style = StyleJson {
+        fg: Some(pal.border.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let muted_style = StyleJson {
+        fg: Some(pal.muted.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+
     // Snapshot the latest in-flight prompt (non-blocking).
     let pending_prompt = ctx.prompt_rx.borrow().clone();
     let phase_ctx = build_phase_context(&phase).with_pending_prompt(pending_prompt);
 
+    let game_title = format!(" ♠ Blackjack — {} ♣ ", ctx.player_name);
+    let game_text = build_game_text(&phase, &pal);
+
+    let content_constraints: Vec<ConstraintJson> = if ctx.show_typestate_graph {
+        vec![
+            ConstraintJson::Percentage { value: 55 },
+            ConstraintJson::Percentage { value: 45 },
+        ]
+    } else {
+        vec![ConstraintJson::Percentage { value: 100 }]
+    };
+
+    // Build the game panel node (always present).
+    let game_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(game_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(game_title),
+                style: None,
+                border_style: Some(border_style.clone()),
+                padding: None,
+            }),
+        }),
+    };
+
+    // Typestate placeholder (Clear) — custom widget renders into this area.
+    let mut content_children = vec![game_node];
+    if ctx.show_typestate_graph {
+        content_children.push(TuiNode::Widget {
+            widget: Box::new(WidgetJson::Clear),
+        });
+    }
+
+    let root = TuiNode::Layout {
+        direction: DirectionJson::Vertical,
+        constraints: vec![
+            ConstraintJson::Min { value: 0 },
+            ConstraintJson::Length {
+                value: PROMPT_PANE_HEIGHT,
+            },
+        ],
+        children: vec![
+            TuiNode::Layout {
+                direction: DirectionJson::Horizontal,
+                constraints: content_constraints,
+                children: content_children,
+                margin: None,
+            },
+            TuiNode::Widget {
+                widget: Box::new(WidgetJson::Paragraph {
+                    text: ParagraphText::Plain(String::new()),
+                    style: None,
+                    wrap: false,
+                    scroll: None,
+                    alignment: None,
+                    block: Some(BlockJson {
+                        borders: BordersJson::All,
+                        border_type: None,
+                        title: Some(" Input ".to_string()),
+                        style: None,
+                        border_style: Some(muted_style),
+                        padding: None,
+                    }),
+                }),
+            },
+        ],
+        margin: None,
+    };
+
     ctx.terminal.draw(|frame| {
-        let full = frame.area();
+        render_node(frame, frame.area(), &root);
 
-        // Split: game content on top, dedicated prompt pane at bottom.
-        let outer = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
-            .split(full);
-        let area = outer[0];
-        let prompt_area = outer[1];
-
-        let main_chunks = if ctx.show_typestate_graph {
-            Layout::default()
+        // Compute layout to find the typestate graph area.
+        if ctx.show_typestate_graph {
+            let outer = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
+                .split(frame.area());
+            let cols = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-                .split(area)
-        } else {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(100)])
-                .split(area)
-        };
-
-        let game_block = Block::default()
-            .borders(Borders::ALL)
-            .title(format!(" ♠ Blackjack — {} ♣ ", ctx.player_name))
-            .style(Style::default().fg(Color::White));
-
-        let game_inner = game_block.inner(main_chunks[0]);
-        game_block.render(main_chunks[0], frame.buffer_mut());
-
-        let content_lines = build_game_lines(&phase);
-        Paragraph::new(content_lines).render(game_inner, frame.buffer_mut());
-
-        if ctx.show_typestate_graph && main_chunks.len() > 1 {
+                .split(outer[0]);
             TypestateGraphWidget::new(ctx.bj_nodes, ctx.bj_edges, active, event_log)
                 .with_context(&phase_ctx)
-                .render(main_chunks[1], frame.buffer_mut());
+                .render(cols[1], frame.buffer_mut());
         }
-
-        // Prompt pane — bordered region for TuiCommunicator input.
-        let prompt_block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Input ")
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(prompt_block, prompt_area);
     })?;
     Ok(())
 }
@@ -465,6 +522,12 @@ fn render_finish<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    use crate::tui::palette::GamePalette;
+    use elicit_ratatui::{
+        BlockJson, BordersJson, LineJson, ModifierJson, ParagraphText, SpanJson, StyleJson,
+        TextJson, TuiNode, WidgetJson, render_node,
+    };
+
     render_blackjack(
         ctx,
         DisplayPhase::Finished { state: finished },
@@ -472,25 +535,67 @@ where
         event_log,
     )?;
 
+    let pal = GamePalette::new();
+    let outcome_text = match outcome {
+        BlackjackSessionOutcome::Win(b) => format!("🎉  You WIN! Bankroll: {b}"),
+        BlackjackSessionOutcome::Loss(b) => format!("💸  You lose. Bankroll: {b}"),
+        BlackjackSessionOutcome::Push(b) => format!("🤝  Push. Bankroll: {b}"),
+        BlackjackSessionOutcome::Abandoned => "Session ended.".to_string(),
+    };
+
+    let popup_text = TextJson {
+        lines: vec![LineJson {
+            spans: vec![
+                SpanJson {
+                    content: outcome_text.clone(),
+                    style: Some(StyleJson {
+                        fg: Some(pal.warning.json.clone()),
+                        bg: None,
+                        modifiers: vec![ModifierJson::Bold],
+                    }),
+                },
+                SpanJson {
+                    content: "  — press any key to continue".to_string(),
+                    style: Some(StyleJson {
+                        fg: Some(pal.body.json.clone()),
+                        bg: None,
+                        modifiers: vec![],
+                    }),
+                },
+            ],
+            style: None,
+            alignment: None,
+        }],
+        style: None,
+        alignment: None,
+    };
+
+    let popup_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(popup_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(" Result ".to_string()),
+                style: None,
+                border_style: Some(StyleJson {
+                    fg: Some(pal.border.json.clone()),
+                    bg: None,
+                    modifiers: vec![],
+                }),
+                padding: None,
+            }),
+        }),
+    };
+
     ctx.terminal.draw(|frame| {
         let area = frame.area();
-        let outcome_text = match outcome {
-            BlackjackSessionOutcome::Win(b) => format!("🎉  You WIN! Bankroll: {b}"),
-            BlackjackSessionOutcome::Loss(b) => format!("💸  You lose. Bankroll: {b}"),
-            BlackjackSessionOutcome::Push(b) => format!("🤝  Push. Bankroll: {b}"),
-            BlackjackSessionOutcome::Abandoned => "Session ended.".to_string(),
-        };
-        let footer = Paragraph::new(Line::from(vec![
-            Span::styled(
-                &outcome_text,
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  — press any key to continue"),
-        ]));
+        let w = (area.width as usize).min(outcome_text.len() + 44) as u16;
         let h = 3u16;
-        let w = (area.width as usize).min(outcome_text.len() + 40) as u16;
         let x = area.x + area.width.saturating_sub(w) / 2;
         let y = area.y + area.height.saturating_sub(h) / 2;
         let rect = ratatui::layout::Rect {
@@ -499,12 +604,7 @@ where
             width: w,
             height: h,
         };
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().bg(Color::DarkGray).fg(Color::White));
-        let inner = block.inner(rect);
-        block.render(rect, frame.buffer_mut());
-        footer.render(inner, frame.buffer_mut());
+        render_node(frame, rect, &popup_node);
     })?;
     Ok(())
 }
@@ -563,27 +663,80 @@ fn build_phase_context(phase: &DisplayPhase<'_>) -> PhaseContext {
     }
 }
 
-fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
+fn build_game_text(
+    phase: &DisplayPhase<'_>,
+    pal: &crate::tui::palette::GamePalette,
+) -> elicit_ratatui::TextJson {
+    use elicit_ratatui::{LineJson, ModifierJson, SpanJson, StyleJson, TextJson};
+
+    let warning_style = StyleJson {
+        fg: Some(pal.warning.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+    let muted_style = StyleJson {
+        fg: Some(pal.muted.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let body_style = StyleJson {
+        fg: Some(pal.body.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let highlight_style = StyleJson {
+        fg: Some(pal.highlight.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+    let success_style = StyleJson {
+        fg: Some(pal.success.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+    let error_style = StyleJson {
+        fg: Some(pal.error.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+
+    let plain = |s: String| LineJson {
+        spans: vec![SpanJson {
+            content: s,
+            style: Some(body_style.clone()),
+        }],
+        style: None,
+        alignment: None,
+    };
+    let empty = || LineJson {
+        spans: vec![SpanJson {
+            content: String::new(),
+            style: None,
+        }],
+        style: None,
+        alignment: None,
+    };
+    let styled_line = |s: String, st: StyleJson| LineJson {
+        spans: vec![SpanJson {
+            content: s,
+            style: Some(st),
+        }],
+        style: None,
+        alignment: None,
+    };
+
+    let mut lines: Vec<LineJson> = Vec::new();
 
     match phase {
         DisplayPhase::Betting { state } => {
-            lines.push(Line::from(Span::styled(
-                "♦  Place your bet",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            lines.push(Line::from(""));
-            lines.push(Line::from(format!(
-                "  Bankroll: {} chips",
-                state.bankroll()
-            )));
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                "  (Enter amount below ↓)",
-                Style::default().fg(Color::DarkGray),
-            )));
+            lines.push(styled_line("♦  Place your bet".to_string(), warning_style));
+            lines.push(empty());
+            lines.push(plain(format!("  Bankroll: {} chips", state.bankroll())));
+            lines.push(empty());
+            lines.push(styled_line(
+                "  (Enter amount below ↓)".to_string(),
+                muted_style,
+            ));
         }
         DisplayPhase::PlayerTurn { state } => {
             let dealer_cards = state.dealer_hand().cards();
@@ -596,31 +749,24 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
                     .unwrap_or_default();
                 format!("  Dealer: {visible} [?]  (hit 17+)")
             };
-            lines.push(Line::from(dealer_str));
-            lines.push(Line::from(""));
+            lines.push(plain(dealer_str));
+            lines.push(empty());
 
             for (i, hand) in state.player_hands().iter().enumerate() {
-                let marker = if i == state.current_hand_index() {
-                    "▶"
+                let is_active = i == state.current_hand_index();
+                let marker = if is_active { "▶" } else { " " };
+                let st = if is_active {
+                    highlight_style.clone()
                 } else {
-                    " "
+                    muted_style.clone()
                 };
-                lines.push(Line::from(Span::styled(
-                    format!("  {marker} Your hand: {hand}"),
-                    if i == state.current_hand_index() {
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(Color::Gray)
-                    },
-                )));
+                lines.push(styled_line(format!("  {marker} Your hand: {hand}"), st));
             }
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                "  (Choose action below ↓)",
-                Style::default().fg(Color::DarkGray),
-            )));
+            lines.push(empty());
+            lines.push(styled_line(
+                "  (Choose action below ↓)".to_string(),
+                muted_style,
+            ));
         }
         DisplayPhase::Finished { state } => {
             let dealer_hand = state.dealer_hand();
@@ -630,25 +776,25 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
                 .first()
                 .is_some_and(|h| h.is_blackjack());
 
-            // ── Context banner ─────────────────────────────────
-            let (banner, banner_color) = match (player_natural, dealer_natural) {
-                (true, true) => ("  ♦ Both have natural blackjack — Push!", Color::Yellow),
-                (true, false) => ("  ♠ Natural blackjack! 3:2 payout", Color::Green),
-                (false, true) => ("  ♦ Dealer natural blackjack", Color::Red),
-                (false, false) => ("", Color::White),
+            let (banner, banner_st) = match (player_natural, dealer_natural) {
+                (true, true) => (
+                    Some("  ♦ Both have natural blackjack — Push!"),
+                    warning_style.clone(),
+                ),
+                (true, false) => (
+                    Some("  ♠ Natural blackjack! 3:2 payout"),
+                    success_style.clone(),
+                ),
+                (false, true) => (Some("  ♦ Dealer natural blackjack"), error_style.clone()),
+                (false, false) => (None, body_style.clone()),
             };
-            if !banner.is_empty() {
-                lines.push(Line::from(Span::styled(
-                    banner,
-                    Style::default()
-                        .fg(banner_color)
-                        .add_modifier(Modifier::BOLD),
-                )));
-                lines.push(Line::from(""));
+            if let Some(b) = banner {
+                lines.push(styled_line(b.to_string(), banner_st));
+                lines.push(empty());
             }
 
-            lines.push(Line::from(format!("  Dealer: {dealer_hand}")));
-            lines.push(Line::from(""));
+            lines.push(plain(format!("  Dealer: {dealer_hand}")));
+            lines.push(empty());
 
             for (i, (hand, outcome)) in state
                 .player_hands()
@@ -657,33 +803,36 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
                 .enumerate()
             {
                 let bet = state.bets().get(i).copied().unwrap_or(0);
-                let is_bust = hand.is_bust();
-                let color = if outcome.is_win() {
-                    Color::Green
+                let bust_note = if hand.is_bust() { "  BUST" } else { "" };
+                let st = if outcome.is_win() {
+                    success_style.clone()
                 } else if outcome.is_loss() {
-                    Color::Red
+                    error_style.clone()
                 } else {
-                    Color::Yellow
+                    warning_style.clone()
                 };
-                let bust_note = if is_bust { "  BUST" } else { "" };
-                lines.push(Line::from(Span::styled(
+                lines.push(styled_line(
                     format!(
                         "  Hand {}: {}  [{outcome}]{bust_note}  (bet: {bet})",
                         i + 1,
                         hand
                     ),
-                    Style::default().fg(color),
-                )));
+                    st,
+                ));
             }
-            lines.push(Line::from(""));
-            lines.push(Line::from(format!(
+            lines.push(empty());
+            lines.push(plain(format!(
                 "  Final bankroll: {} chips",
                 state.bankroll()
             )));
         }
     }
 
-    lines
+    TextJson {
+        lines,
+        style: None,
+        alignment: None,
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1222,6 +1371,14 @@ where
     <B as Backend>::Error: Send + Sync + 'static,
 {
     use crate::tui::ChatWidget;
+    use crate::tui::palette::GamePalette;
+    use elicit_ratatui::{
+        BlockJson, BordersJson, ConstraintJson, DirectionJson, LineJson, ModifierJson,
+        ParagraphText, SpanJson, StyleJson, TextJson, TuiNode, WidgetJson, render_node,
+    };
+    use ratatui::layout::{Constraint, Direction, Layout};
+    use ratatui::prelude::Widget as _;
+
     let MultiRenderCtx {
         seat_names,
         bankrolls,
@@ -1236,142 +1393,283 @@ where
         prompt,
     } = ctx;
 
-    terminal.draw(|frame| {
-        let full = frame.area();
+    let pal = GamePalette::new();
+    let border_style = StyleJson {
+        fg: Some(pal.border.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let muted_style = StyleJson {
+        fg: Some(pal.muted.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
 
-        // Split: game content on top, dedicated prompt pane at bottom.
+    // ── Dealer text ────────────────────────────────────────────────────────
+    let dealer_str = dealer_hand
+        .cards()
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let dealer_value = if dealer_hand.cards().is_empty() {
+        String::new()
+    } else {
+        format!("  ({})", dealer_hand.value().best())
+    };
+    let dealer_text = TextJson {
+        lines: vec![LineJson {
+            spans: vec![SpanJson {
+                content: format!("  {dealer_str}{dealer_value}"),
+                style: Some(StyleJson {
+                    fg: Some(pal.title.json.clone()),
+                    bg: None,
+                    modifiers: vec![],
+                }),
+            }],
+            style: None,
+            alignment: None,
+        }],
+        style: None,
+        alignment: None,
+    };
+
+    // ── Seats text ─────────────────────────────────────────────────────────
+    let mut seat_lines: Vec<LineJson> = Vec::new();
+    for (i, seat) in seats.iter().enumerate() {
+        let (fg, prefix) = if i == active_seat {
+            (pal.success.json.clone(), "► ")
+        } else {
+            (pal.body.json.clone(), "  ")
+        };
+        seat_lines.push(LineJson {
+            spans: vec![SpanJson {
+                content: format!("{prefix}{} (bet {})  ", seat.name, seat.bet),
+                style: Some(StyleJson {
+                    fg: Some(fg),
+                    bg: None,
+                    modifiers: vec![ModifierJson::Bold],
+                }),
+            }],
+            style: None,
+            alignment: None,
+        });
+        let cards_str = seat
+            .hand
+            .cards()
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let value = seat.hand.value().best();
+        let status = if seat.natural {
+            "★ Natural!".to_string()
+        } else if seat.bust {
+            "✗ Bust".to_string()
+        } else if seat.stood {
+            format!("Stand ({value})")
+        } else {
+            format!("({value})")
+        };
+        seat_lines.push(LineJson {
+            spans: vec![SpanJson {
+                content: format!("    {cards_str}  {status}"),
+                style: Some(StyleJson {
+                    fg: Some(pal.body.json.clone()),
+                    bg: None,
+                    modifiers: vec![],
+                }),
+            }],
+            style: None,
+            alignment: None,
+        });
+    }
+    if seats.is_empty() {
+        for (i, name) in seat_names.iter().enumerate() {
+            let bankroll = bankrolls.get(i).copied().unwrap_or(0);
+            seat_lines.push(LineJson {
+                spans: vec![SpanJson {
+                    content: format!("  {name}: {bankroll} chips"),
+                    style: Some(StyleJson {
+                        fg: Some(pal.body.json.clone()),
+                        bg: None,
+                        modifiers: vec![],
+                    }),
+                }],
+                style: None,
+                alignment: None,
+            });
+        }
+    }
+    let seats_text = TextJson {
+        lines: seat_lines,
+        style: None,
+        alignment: None,
+    };
+
+    // ── Story/log text ─────────────────────────────────────────────────────
+    let log_lines: Vec<LineJson> = event_log
+        .iter()
+        .map(|e| LineJson {
+            spans: vec![SpanJson {
+                content: e.text.clone(),
+                style: Some(StyleJson {
+                    fg: Some(crate::tui::ratatui_color_to_json(e.color, &pal)),
+                    bg: None,
+                    modifiers: vec![],
+                }),
+            }],
+            style: None,
+            alignment: None,
+        })
+        .collect();
+    let log_text = TextJson {
+        lines: log_lines,
+        style: None,
+        alignment: None,
+    };
+
+    // ── Assemble TuiNode tree ──────────────────────────────────────────────
+    let dealer_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(dealer_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(" Dealer ".to_string()),
+                style: None,
+                border_style: Some(border_style.clone()),
+                padding: None,
+            }),
+        }),
+    };
+    let seats_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(seats_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(" Seats ".to_string()),
+                style: None,
+                border_style: Some(border_style.clone()),
+                padding: None,
+            }),
+        }),
+    };
+    let center_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(log_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(" Game Log ".to_string()),
+                style: None,
+                border_style: Some(border_style.clone()),
+                padding: None,
+            }),
+        }),
+    };
+
+    let root = TuiNode::Layout {
+        direction: DirectionJson::Vertical,
+        constraints: vec![
+            ConstraintJson::Min { value: 0 },
+            ConstraintJson::Length {
+                value: PROMPT_PANE_HEIGHT,
+            },
+        ],
+        children: vec![
+            TuiNode::Layout {
+                direction: DirectionJson::Horizontal,
+                constraints: vec![
+                    ConstraintJson::Percentage { value: 40 },
+                    ConstraintJson::Percentage { value: 35 },
+                    ConstraintJson::Percentage { value: 25 },
+                ],
+                children: vec![
+                    TuiNode::Layout {
+                        direction: DirectionJson::Vertical,
+                        constraints: vec![
+                            ConstraintJson::Length { value: 4 },
+                            ConstraintJson::Min { value: 0 },
+                        ],
+                        children: vec![dealer_node, seats_node],
+                        margin: None,
+                    },
+                    center_node,
+                    TuiNode::Widget {
+                        widget: Box::new(WidgetJson::Clear),
+                    },
+                ],
+                margin: None,
+            },
+            TuiNode::Widget {
+                widget: Box::new(WidgetJson::Paragraph {
+                    text: ParagraphText::Plain(String::new()),
+                    style: None,
+                    wrap: false,
+                    scroll: None,
+                    alignment: None,
+                    block: Some(BlockJson {
+                        borders: BordersJson::All,
+                        border_type: None,
+                        title: Some(" Input ".to_string()),
+                        style: None,
+                        border_style: Some(muted_style),
+                        padding: None,
+                    }),
+                }),
+            },
+        ],
+        margin: None,
+    };
+
+    terminal.draw(|frame| {
+        render_node(frame, frame.area(), &root);
+
+        // Compute layout to find areas for custom widgets.
         let outer = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
-            .split(full);
-        let area = outer[0];
-        let prompt_area = outer[1];
-
-        let chunks = Layout::default()
+            .split(frame.area());
+        let cols = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(40),
                 Constraint::Percentage(35),
                 Constraint::Percentage(25),
             ])
-            .split(area);
+            .split(outer[0]);
 
-        // ── Left: all players' hands ─────────────────────────────────────
-        // Split left pane vertically: dealer (fixed 4 lines) + seats (remaining).
-        let left_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(4), Constraint::Min(0)])
-            .split(chunks[0]);
-
-        // Dealer hand (fixed section at top).
-        let dealer_str = dealer_hand
-            .cards()
-            .iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<_>>()
-            .join(" ");
-        let dealer_value = if dealer_hand.cards().is_empty() {
-            String::new()
-        } else {
-            format!("  ({})", dealer_hand.value().best())
-        };
-        let dealer_widget =
-            Paragraph::new(vec![Line::from(format!("  {dealer_str}{dealer_value}"))])
-                .block(Block::default().borders(Borders::ALL).title(" Dealer "));
-        frame.render_widget(dealer_widget, left_chunks[0]);
-
-        // Player seats (scrollable).
-        let mut hand_lines: Vec<Line<'static>> = Vec::new();
-        for (i, seat) in seats.iter().enumerate() {
-            let color = if i == active_seat {
-                Color::Green
-            } else {
-                Color::White
-            };
-            let prefix = if i == active_seat { "► " } else { "  " };
-
-            hand_lines.push(Line::from(Span::styled(
-                format!("{prefix}{} (bet {})  ", seat.name, seat.bet),
-                Style::default().fg(color).add_modifier(Modifier::BOLD),
-            )));
-            let cards_str = seat
-                .hand
-                .cards()
-                .iter()
-                .map(|c| c.to_string())
-                .collect::<Vec<_>>()
-                .join(" ");
-            let value = seat.hand.value().best();
-            let status = if seat.natural {
-                "★ Natural!".to_string()
-            } else if seat.bust {
-                "✗ Bust".to_string()
-            } else if seat.stood {
-                format!("Stand ({value})")
-            } else {
-                format!("({value})")
-            };
-            hand_lines.push(Line::from(format!("    {cards_str}  {status}")));
-        }
-
-        // When no seats exist yet (betting phase), show bankrolls.
-        if seats.is_empty() {
-            for (i, name) in seat_names.iter().enumerate() {
-                let bankroll = bankrolls.get(i).copied().unwrap_or(0);
-                hand_lines.push(Line::from(format!("  {name}: {bankroll} chips")));
-            }
-        }
-
-        // Scroll to keep active seat visible (2 lines per seat).
-        let seats_height = left_chunks[1].height.saturating_sub(2) as usize;
-        let scroll_offset = if active_seat < seats.len() {
-            let seat_line = active_seat * 2;
-            seat_line.saturating_sub(seats_height / 2)
-        } else if hand_lines.len() > seats_height {
-            hand_lines.len().saturating_sub(seats_height)
-        } else {
-            0
-        };
-
-        let seats_widget = Paragraph::new(hand_lines)
-            .block(Block::default().borders(Borders::ALL).title(" Seats "))
-            .scroll((scroll_offset as u16, 0));
-        frame.render_widget(seats_widget, left_chunks[1]);
-
-        // ── Center: typestate + log ───────────────────────────────────────
+        // Center: typestate graph (if enabled) or log already rendered above.
         if show_typestate_graph {
             let phase_ctx =
                 PhaseContext::info("Playing…").with_pending_prompt(prompt.map(|s| s.to_string()));
-            let widget = TypestateGraphWidget::new(
+            TypestateGraphWidget::new(
                 bj_nodes,
                 bj_edges,
                 blackjack_active("PlayerTurn"),
                 event_log,
             )
-            .with_context(&phase_ctx);
-            frame.render_widget(widget, chunks[1]);
-        } else {
-            let log_lines: Vec<Line<'static>> = event_log
-                .iter()
-                .rev()
-                .take(chunks[1].height.saturating_sub(2) as usize)
-                .map(|e| Line::from(e.text.clone()))
-                .collect();
-            let log = Paragraph::new(log_lines)
-                .block(Block::default().borders(Borders::ALL).title(" Game Log "));
-            frame.render_widget(log, chunks[1]);
+            .with_context(&phase_ctx)
+            .render(cols[1], frame.buffer_mut());
         }
 
-        // ── Right: chat log ───────────────────────────────────────────────
+        // Right: chat.
         let chat = ChatWidget::new(chat_messages);
-        frame.render_widget(chat, chunks[2]);
-
-        // ── Bottom: dedicated prompt pane for TuiCommunicator input ──────
-        let prompt_block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Input ")
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(prompt_block, prompt_area);
+        chat.render(cols[2], frame.buffer_mut());
     })?;
     Ok(())
 }

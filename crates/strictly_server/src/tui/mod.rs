@@ -763,7 +763,7 @@ fn build_story_text(
 /// [`elicit_ratatui::ColorJson`] drawn from the verified palette where
 /// possible, falling back to a direct RGB mapping otherwise.
 #[instrument(skip_all)]
-fn ratatui_color_to_json(
+pub(crate) fn ratatui_color_to_json(
     color: ratatui::style::Color,
     pal: &palette::GamePalette,
 ) -> elicit_ratatui::ColorJson {

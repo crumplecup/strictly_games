@@ -18,15 +18,7 @@ use crossterm::event::{self, Event, KeyCode};
 use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
 use elicitation::Generator as _;
-use ratatui::{
-    Terminal,
-    backend::Backend,
-    layout::{Constraint, Direction, Layout},
-    prelude::Widget,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
-};
+use ratatui::{Terminal, backend::Backend, prelude::Widget};
 use strictly_craps::{
     ActiveBet, BetOutcome, BetType, ComeOutOutput, CrapsAction, CrapsTable, CrapsTableView,
     DiceRoll, GameSetup, Point, PointRollOutput, execute_comeout_roll, execute_place_bets,
@@ -550,82 +542,144 @@ fn render_craps<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
+    use crate::tui::palette::GamePalette;
+    use elicit_ratatui::{
+        BlockJson, BordersJson, ConstraintJson, DirectionJson, ParagraphText, StyleJson, TuiNode,
+        WidgetJson, render_node,
+    };
+    use ratatui::layout::{Constraint, Direction, Layout};
+
+    let pal = GamePalette::new();
+    let border_style = StyleJson {
+        fg: Some(pal.border.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let muted_style = StyleJson {
+        fg: Some(pal.muted.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+
     let pending_prompt = ctx.prompt_rx.borrow().clone();
     let phase_ctx = build_phase_context(&phase).with_pending_prompt(pending_prompt);
 
+    let game_title = format!(" 🎲 Craps — {} 🎲 ", ctx.player_name);
+    let game_text = build_game_text(&phase, &pal);
+    let story_text = build_craps_story_text(event_log, &pal);
+
+    let content_constraints: Vec<ConstraintJson> = if ctx.show_typestate_graph {
+        vec![
+            ConstraintJson::Percentage { value: 40 },
+            ConstraintJson::Percentage { value: 35 },
+            ConstraintJson::Percentage { value: 25 },
+        ]
+    } else {
+        vec![
+            ConstraintJson::Percentage { value: 45 },
+            ConstraintJson::Percentage { value: 55 },
+        ]
+    };
+
+    let game_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(game_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(game_title),
+                style: None,
+                border_style: Some(border_style.clone()),
+                padding: None,
+            }),
+        }),
+    };
+
+    let story_node = TuiNode::Widget {
+        widget: Box::new(WidgetJson::Paragraph {
+            text: ParagraphText::Rich(story_text),
+            style: None,
+            wrap: false,
+            scroll: None,
+            alignment: None,
+            block: Some(BlockJson {
+                borders: BordersJson::All,
+                border_type: None,
+                title: Some(" Story ".to_string()),
+                style: None,
+                border_style: Some(border_style.clone()),
+                padding: None,
+            }),
+        }),
+    };
+
+    let mut content_children = vec![game_node, story_node];
+    if ctx.show_typestate_graph {
+        content_children.push(TuiNode::Widget {
+            widget: Box::new(WidgetJson::Clear),
+        });
+    }
+
+    let root = TuiNode::Layout {
+        direction: DirectionJson::Vertical,
+        constraints: vec![
+            ConstraintJson::Min { value: 0 },
+            ConstraintJson::Length {
+                value: PROMPT_PANE_HEIGHT,
+            },
+        ],
+        children: vec![
+            TuiNode::Layout {
+                direction: DirectionJson::Horizontal,
+                constraints: content_constraints,
+                children: content_children,
+                margin: None,
+            },
+            TuiNode::Widget {
+                widget: Box::new(WidgetJson::Paragraph {
+                    text: ParagraphText::Plain(String::new()),
+                    style: None,
+                    wrap: false,
+                    scroll: None,
+                    alignment: None,
+                    block: Some(BlockJson {
+                        borders: BordersJson::All,
+                        border_type: None,
+                        title: Some(" Input ".to_string()),
+                        style: None,
+                        border_style: Some(muted_style),
+                        padding: None,
+                    }),
+                }),
+            },
+        ],
+        margin: None,
+    };
+
     ctx.terminal.draw(|frame| {
-        let full = frame.area();
+        render_node(frame, frame.area(), &root);
 
-        let outer = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
-            .split(full);
-        let area = outer[0];
-        let prompt_area = outer[1];
-
-        // 3-column: Game (40%) | Story (35%) | Typestate (25%)
-        // Without typestate graph: Game (45%) | Story (55%)
-        let main_chunks = if ctx.show_typestate_graph {
-            Layout::default()
+        if ctx.show_typestate_graph {
+            let outer = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
+                .split(frame.area());
+            let cols = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([
                     Constraint::Percentage(40),
                     Constraint::Percentage(35),
                     Constraint::Percentage(25),
                 ])
-                .split(area)
-        } else {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-                .split(area)
-        };
-
-        // ── Left: Game state ──────────────────────────────────
-        let game_block = Block::default()
-            .borders(Borders::ALL)
-            .title(format!(" 🎲 Craps — {} 🎲 ", ctx.player_name))
-            .style(Style::default().fg(Color::White));
-
-        let game_inner = game_block.inner(main_chunks[0]);
-        game_block.render(main_chunks[0], frame.buffer_mut());
-
-        let content_lines = build_game_lines(&phase);
-        Paragraph::new(content_lines).render(game_inner, frame.buffer_mut());
-
-        // ── Center: Story log ─────────────────────────────────
-        let story_idx = 1;
-        let story_block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Story ")
-            .style(Style::default().fg(Color::White));
-        let story_inner = story_block.inner(main_chunks[story_idx]);
-        story_block.render(main_chunks[story_idx], frame.buffer_mut());
-
-        let story_height = story_inner.height as usize;
-        let story_lines: Vec<Line<'_>> = event_log
-            .iter()
-            .map(|ev| Line::from(Span::styled(ev.text.clone(), Style::default().fg(ev.color))))
-            .collect();
-        // Show most recent events (scroll to bottom)
-        let skip = story_lines.len().saturating_sub(story_height);
-        let visible: Vec<Line<'_>> = story_lines.into_iter().skip(skip).collect();
-        Paragraph::new(visible)
-            .wrap(Wrap { trim: false })
-            .render(story_inner, frame.buffer_mut());
-
-        // ── Right: Typestate graph (if enabled) ───────────────
-        if ctx.show_typestate_graph && main_chunks.len() > 2 {
+                .split(outer[0]);
             TypestateGraphWidget::new(ctx.nodes, ctx.edges, active, event_log)
                 .with_context(&phase_ctx)
-                .render(main_chunks[2], frame.buffer_mut());
+                .render(cols[2], frame.buffer_mut());
         }
-
-        let prompt_block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Input ")
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(prompt_block, prompt_area);
     })?;
     Ok(())
 }
@@ -676,8 +730,69 @@ fn build_phase_context(phase: &DisplayPhase<'_>) -> PhaseContext {
     }
 }
 
-fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
+fn build_game_text(
+    phase: &DisplayPhase<'_>,
+    pal: &crate::tui::palette::GamePalette,
+) -> elicit_ratatui::TextJson {
+    use elicit_ratatui::{LineJson, ModifierJson, SpanJson, StyleJson, TextJson};
+
+    let warning_style = StyleJson {
+        fg: Some(pal.warning.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+    let muted_style = StyleJson {
+        fg: Some(pal.muted.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let body_style = StyleJson {
+        fg: Some(pal.body.json.clone()),
+        bg: None,
+        modifiers: vec![],
+    };
+    let highlight_style = StyleJson {
+        fg: Some(pal.highlight.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+    let success_style = StyleJson {
+        fg: Some(pal.success.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+    let error_style = StyleJson {
+        fg: Some(pal.error.json.clone()),
+        bg: None,
+        modifiers: vec![ModifierJson::Bold],
+    };
+
+    let plain = |s: String| LineJson {
+        spans: vec![SpanJson {
+            content: s,
+            style: Some(body_style.clone()),
+        }],
+        style: None,
+        alignment: None,
+    };
+    let empty = || LineJson {
+        spans: vec![SpanJson {
+            content: String::new(),
+            style: None,
+        }],
+        style: None,
+        alignment: None,
+    };
+    let styled_line = |s: String, st: StyleJson| LineJson {
+        spans: vec![SpanJson {
+            content: s,
+            style: Some(st),
+        }],
+        style: None,
+        alignment: None,
+    };
+
+    let mut lines: Vec<LineJson> = Vec::new();
 
     match phase {
         DisplayPhase::Betting {
@@ -686,29 +801,24 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
             lesson_level,
             lesson_tip,
         } => {
-            lines.push(Line::from(Span::styled(
+            lines.push(styled_line(
                 format!("🎲  Lesson {lesson_level}: {lesson_title}"),
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            lines.push(Line::from(""));
-            lines.push(Line::from(format!("  Bankroll: ${bankroll}")));
-            lines.push(Line::from(""));
-
-            // Show first line of lesson text as a tip
+                warning_style,
+            ));
+            lines.push(empty());
+            lines.push(plain(format!("  Bankroll: ${bankroll}")));
+            lines.push(empty());
             if let Some(first_line) = lesson_tip.lines().nth(1) {
-                lines.push(Line::from(Span::styled(
+                lines.push(styled_line(
                     format!("  💡 {first_line}"),
-                    Style::default().fg(Color::DarkGray),
-                )));
-                lines.push(Line::from(""));
+                    muted_style.clone(),
+                ));
+                lines.push(empty());
             }
-
-            lines.push(Line::from(Span::styled(
-                "  Place your Pass Line bet ↓",
-                Style::default().fg(Color::DarkGray),
-            )));
+            lines.push(styled_line(
+                "  Place your Pass Line bet ↓".to_string(),
+                muted_style,
+            ));
         }
 
         DisplayPhase::ComeOut {
@@ -716,20 +826,15 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
             bets,
             roll,
         } => {
-            lines.push(Line::from(Span::styled(
-                "🎲  Come-Out Roll",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            lines.push(Line::from(""));
-
-            // Show bets
+            lines.push(styled_line(
+                "🎲  Come-Out Roll".to_string(),
+                highlight_style,
+            ));
+            lines.push(empty());
             for bet in *bets {
-                lines.push(Line::from(format!("  📌 {bet}")));
+                lines.push(plain(format!("  📌 {bet}")));
             }
-            lines.push(Line::from(""));
-
+            lines.push(empty());
             if let Some(r) = roll {
                 let sum = r.sum();
                 let result = if r.is_natural() {
@@ -739,22 +844,20 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
                 } else {
                     format!("Point is {sum} 📍")
                 };
-                lines.push(Line::from(Span::styled(
+                let st = if r.is_natural() {
+                    success_style
+                } else if r.is_craps() {
+                    error_style
+                } else {
+                    warning_style
+                };
+                lines.push(styled_line(
                     format!("  🎲 {} + {} = {sum}  —  {result}", r.die1(), r.die2()),
-                    Style::default()
-                        .fg(if r.is_natural() {
-                            Color::Green
-                        } else if r.is_craps() {
-                            Color::Red
-                        } else {
-                            Color::Yellow
-                        })
-                        .add_modifier(Modifier::BOLD),
-                )));
+                    st,
+                ));
             }
-
-            lines.push(Line::from(""));
-            lines.push(Line::from(format!("  Bankroll: ${bankroll}")));
+            lines.push(empty());
+            lines.push(plain(format!("  Bankroll: ${bankroll}")));
         }
 
         DisplayPhase::PointPhase {
@@ -763,19 +866,15 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
             point,
             roll,
         } => {
-            lines.push(Line::from(Span::styled(
+            lines.push(styled_line(
                 format!("📍  Point Phase — Point: {point}"),
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            lines.push(Line::from(""));
-
+                warning_style,
+            ));
+            lines.push(empty());
             for bet in *bets {
-                lines.push(Line::from(format!("  📌 {bet}")));
+                lines.push(plain(format!("  📌 {bet}")));
             }
-            lines.push(Line::from(""));
-
+            lines.push(empty());
             if let Some(r) = roll {
                 let sum = r.sum();
                 let result = if sum == point.value() {
@@ -785,27 +884,25 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
                 } else {
                     format!("No decision (need {point} or 7)")
                 };
-                lines.push(Line::from(Span::styled(
+                let st = if sum == point.value() {
+                    success_style
+                } else if sum == 7 {
+                    error_style
+                } else {
+                    body_style.clone()
+                };
+                lines.push(styled_line(
                     format!("  🎲 {} + {} = {sum}  —  {result}", r.die1(), r.die2()),
-                    Style::default()
-                        .fg(if sum == point.value() {
-                            Color::Green
-                        } else if sum == 7 {
-                            Color::Red
-                        } else {
-                            Color::White
-                        })
-                        .add_modifier(Modifier::BOLD),
-                )));
+                    st,
+                ));
             } else {
-                lines.push(Line::from(Span::styled(
-                    "  Press any key to roll the dice...",
-                    Style::default().fg(Color::DarkGray),
-                )));
+                lines.push(styled_line(
+                    "  Press any key to roll the dice...".to_string(),
+                    muted_style,
+                ));
             }
-
-            lines.push(Line::from(""));
-            lines.push(Line::from(format!("  Bankroll: ${bankroll}")));
+            lines.push(empty());
+            lines.push(plain(format!("  Bankroll: ${bankroll}")));
         }
 
         DisplayPhase::Resolved {
@@ -814,54 +911,106 @@ fn build_game_lines(phase: &DisplayPhase<'_>) -> Vec<Line<'static>> {
             pass_line_won,
             point,
         } => {
-            let banner = if *pass_line_won {
-                "🎉  You Win!"
+            let (banner, banner_st) = if *pass_line_won {
+                ("🎉  You Win!", success_style)
             } else {
-                "💸  You Lose"
+                ("💸  You Lose", error_style)
             };
-            lines.push(Line::from(Span::styled(
-                banner,
-                Style::default()
-                    .fg(if *pass_line_won {
-                        Color::Green
-                    } else {
-                        Color::Red
-                    })
-                    .add_modifier(Modifier::BOLD),
-            )));
-            lines.push(Line::from(""));
-
+            lines.push(styled_line(banner.to_string(), banner_st));
+            lines.push(empty());
             if let Some(pt) = point {
-                lines.push(Line::from(format!("  Point was: {pt}")));
+                lines.push(plain(format!("  Point was: {pt}")));
             } else {
-                lines.push(Line::from("  Resolved on come-out"));
+                lines.push(plain("  Resolved on come-out".to_string()));
             }
-            lines.push(Line::from(""));
-
+            lines.push(empty());
             for (bet, outcome) in *results {
-                let (label, color) = match outcome {
-                    BetOutcome::Win(profit) => {
-                        (format!("  ✅ {bet} → Win +${profit}"), Color::Green)
-                    }
-                    BetOutcome::Lose => {
-                        (format!("  ❌ {bet} → Lose -${}", bet.amount()), Color::Red)
-                    }
-                    BetOutcome::Push => (format!("  🤝 {bet} → Push (returned)"), Color::Yellow),
-                    BetOutcome::NoAction => (format!("  ⏸️  {bet} → No action"), Color::DarkGray),
+                let (label, st) = match outcome {
+                    BetOutcome::Win(profit) => (
+                        format!("  ✅ {bet} → Win +${profit}"),
+                        StyleJson {
+                            fg: Some(pal.success.json.clone()),
+                            bg: None,
+                            modifiers: vec![],
+                        },
+                    ),
+                    BetOutcome::Lose => (
+                        format!("  ❌ {bet} → Lose -${}", bet.amount()),
+                        StyleJson {
+                            fg: Some(pal.error.json.clone()),
+                            bg: None,
+                            modifiers: vec![],
+                        },
+                    ),
+                    BetOutcome::Push => (
+                        format!("  🤝 {bet} → Push (returned)"),
+                        StyleJson {
+                            fg: Some(pal.warning.json.clone()),
+                            bg: None,
+                            modifiers: vec![],
+                        },
+                    ),
+                    BetOutcome::NoAction => (
+                        format!("  ⏸️  {bet} → No action"),
+                        StyleJson {
+                            fg: Some(pal.muted.json.clone()),
+                            bg: None,
+                            modifiers: vec![],
+                        },
+                    ),
                 };
-                lines.push(Line::from(Span::styled(label, Style::default().fg(color))));
+                lines.push(styled_line(label, st));
             }
-            lines.push(Line::from(""));
-            lines.push(Line::from(format!("  Final bankroll: ${bankroll}")));
-            lines.push(Line::from(""));
-            lines.push(Line::from(Span::styled(
-                "  Press any key for next round, Q to quit",
-                Style::default().fg(Color::DarkGray),
-            )));
+            lines.push(empty());
+            lines.push(plain(format!("  Final bankroll: ${bankroll}")));
+            lines.push(empty());
+            lines.push(styled_line(
+                "  Press any key for next round, Q to quit".to_string(),
+                StyleJson {
+                    fg: Some(pal.muted.json.clone()),
+                    bg: None,
+                    modifiers: vec![],
+                },
+            ));
         }
     }
 
-    lines
+    TextJson {
+        lines,
+        style: None,
+        alignment: None,
+    }
+}
+
+/// Builds a story pane [`TextJson`] from the craps event log.
+fn build_craps_story_text(
+    event_log: &[GameEvent],
+    pal: &crate::tui::palette::GamePalette,
+) -> elicit_ratatui::TextJson {
+    use crate::tui::ratatui_color_to_json;
+    use elicit_ratatui::{LineJson, SpanJson, StyleJson, TextJson};
+
+    let lines: Vec<LineJson> = event_log
+        .iter()
+        .map(|ev| LineJson {
+            spans: vec![SpanJson {
+                content: ev.text.clone(),
+                style: Some(StyleJson {
+                    fg: Some(ratatui_color_to_json(ev.color, pal)),
+                    bg: None,
+                    modifiers: vec![],
+                }),
+            }],
+            style: None,
+            alignment: None,
+        })
+        .collect();
+
+    TextJson {
+        lines,
+        style: None,
+        alignment: None,
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
