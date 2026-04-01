@@ -1,16 +1,19 @@
 //! Typestate graph visualization widget for the in-game TUI panel.
 //!
 //! Renders the game phase state machine as a box-and-arrow diagram using
-//! Unicode box-drawing characters. The active phase is highlighted in cyan,
-//! and a narrative callout drops below it showing the live situation and the
-//! available transition choices.
+//! composed `Block`, `Paragraph`, `Line`, and `Span` widgets — no direct
+//! buffer manipulation. This makes the entire output expressible as
+//! `WidgetJson` for AccessKit verification.
+//!
+//! The active phase is highlighted in cyan, and a narrative callout drops
+//! below it showing the live situation and the available transition choices.
 //!
 //! The event log beneath the graph tells the story of the hand in plain
 //! language rather than technical proof names.
 
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
@@ -179,22 +182,22 @@ pub fn blackjack_edges() -> Vec<EdgeDef> {
             from: 0,
             to: 1,
             label: None,
-        }, // place_bet → PlayerTurn
+        },
         EdgeDef {
             from: 1,
             to: 2,
             label: None,
-        }, // stand → DealerTurn
+        },
         EdgeDef {
             from: 2,
             to: 3,
             label: None,
-        }, // play_dealer_turn → Finished
+        },
         EdgeDef {
             from: 0,
             to: 3,
             label: Some("(natural)"),
-        }, // natural blackjack fast-finish
+        },
     ]
 }
 
@@ -232,31 +235,26 @@ pub fn tictactoe_nodes() -> Vec<NodeDef> {
 /// Edge definitions for the tictactoe typestate graph.
 pub fn tictactoe_edges() -> Vec<EdgeDef> {
     vec![
-        // Setup → X Turn (X always moves first)
         EdgeDef {
             from: 0,
             to: 1,
             label: None,
         },
-        // X Turn → O Turn
         EdgeDef {
             from: 1,
             to: 2,
             label: None,
         },
-        // O Turn → X Turn (alternation loop)
         EdgeDef {
             from: 2,
             to: 1,
             label: None,
         },
-        // X Turn → GameFinished (X wins or draws)
         EdgeDef {
             from: 1,
             to: 3,
             label: Some("(end)"),
         },
-        // O Turn → GameFinished (O wins or draws)
         EdgeDef {
             from: 2,
             to: 3,
@@ -319,27 +317,27 @@ pub fn craps_edges() -> Vec<EdgeDef> {
             from: 0,
             to: 1,
             label: None,
-        }, // place_bets → ComeOut
+        },
         EdgeDef {
             from: 1,
             to: 2,
             label: None,
-        }, // point established
+        },
         EdgeDef {
             from: 2,
             to: 3,
             label: None,
-        }, // point hit / seven-out
+        },
         EdgeDef {
             from: 1,
             to: 3,
             label: Some("(natural/craps)"),
-        }, // instant resolution
+        },
         EdgeDef {
             from: 3,
             to: 0,
             label: Some("(next round)"),
-        }, // next round
+        },
     ]
 }
 
@@ -361,6 +359,7 @@ pub fn craps_active(phase: &str) -> Option<usize> {
 
 /// Ratatui widget that renders the typestate graph, active callout, and story log.
 ///
+/// All rendering uses composed `Block`, `Paragraph`, `Line`, and `Span` widgets.
 /// The area is split vertically: upper portion is the phase graph with an
 /// optional narrative callout beneath the active node; lower portion is the
 /// story log showing the hand history in plain English.
@@ -422,22 +421,33 @@ impl Widget for TypestateGraphWidget<'_> {
             return;
         }
 
-        // Compute graph height: node box (3) + connector (1) + callout + margin.
-        // This ensures the callout never bleeds into the story log area.
-        let box_h: usize = 3;
-        let callout_lines = self.callout_height();
-        let connector_rows: usize = if callout_lines > 0 { 1 } else { 0 };
-        let needed_graph_h = (box_h + connector_rows + callout_lines + 1) as u16;
+        let has_callout = self.has_callout();
         let has_stats = self
             .explore_stats
             .is_some_and(|s| s.total_explores > 0 || s.total_plays > 0);
-        let stats_h: u16 = if has_stats { 1 } else { 0 };
-        let graph_h = needed_graph_h
-            .max(5)
-            .min(inner.height.saturating_sub(3 + stats_h));
-        let log_h = inner.height.saturating_sub(graph_h + stats_h);
 
-        let mut constraints = vec![Constraint::Length(graph_h)];
+        // Node row (3 lines) + arrow row (1) + optional callout + optional stats
+        let node_row_h: u16 = 3;
+        let arrow_row_h: u16 = 1;
+        let callout_h: u16 = if has_callout {
+            self.callout_line_count() as u16 + 2 // +2 for Block borders
+        } else {
+            0
+        };
+        let connector_h: u16 = if has_callout { 1 } else { 0 };
+        let stats_h: u16 = if has_stats { 1 } else { 0 };
+        let graph_total =
+            (node_row_h + arrow_row_h + connector_h + callout_h + stats_h).min(inner.height);
+        let log_h = inner.height.saturating_sub(graph_total);
+
+        let mut constraints: Vec<Constraint> = vec![
+            Constraint::Length(node_row_h),
+            Constraint::Length(arrow_row_h),
+        ];
+        if has_callout {
+            constraints.push(Constraint::Length(connector_h));
+            constraints.push(Constraint::Length(callout_h));
+        }
         if has_stats {
             constraints.push(Constraint::Length(stats_h));
         }
@@ -448,167 +458,56 @@ impl Widget for TypestateGraphWidget<'_> {
             .constraints(constraints)
             .split(inner);
 
-        self.render_graph(chunks[0], buf);
-
-        if has_stats {
-            self.render_explore_stats(chunks[1], buf);
-            self.render_log(chunks[2], buf);
-        } else {
-            self.render_log(chunks[1], buf);
+        let mut idx = 0;
+        self.render_node_row(chunks[idx], buf);
+        idx += 1;
+        self.render_arrow_row(chunks[idx], buf);
+        idx += 1;
+        if has_callout {
+            self.render_connector(chunks[idx], buf);
+            idx += 1;
+            self.render_callout_block(chunks[idx], buf);
+            idx += 1;
         }
+        if has_stats {
+            self.render_explore_stats(chunks[idx], buf);
+            idx += 1;
+        }
+        self.render_log(chunks[idx], buf);
     }
 }
 
 impl TypestateGraphWidget<'_> {
-    /// Renders the node row plus the optional narrative callout.
-    fn render_graph(&self, area: Rect, buf: &mut Buffer) {
-        if area.height < 3 || area.width < 4 || self.nodes.is_empty() {
+    /// Builds the node row: a horizontal layout of `Block` widgets with centered labels.
+    ///
+    /// Each node is rendered as a bordered `Block` containing a centered `Paragraph`.
+    /// Active node gets cyan border + bold inverted label.
+    #[instrument(skip_all)]
+    fn render_node_row(&self, area: Rect, buf: &mut Buffer) {
+        if area.width < 4 || area.height < 3 || self.nodes.is_empty() {
             return;
         }
 
         let n = self.nodes.len();
-        let box_h: usize = 3;
-
-        // Decide whether we have room for a callout.
-        let callout_lines = self.callout_height();
-        let needs_callout = callout_lines > 0;
-        let connector_rows: usize = if needs_callout { 1 } else { 0 };
-        let total_needed = box_h + connector_rows + callout_lines;
-
-        // Position the node row: if callout fits, push nodes to top; else centre.
-        let node_row_y = if needs_callout && total_needed <= area.height as usize {
-            area.y
-        } else {
-            area.y + (area.height as usize).saturating_sub(box_h) as u16 / 2
-        };
-
-        // Box width = label length + 4 (borders + padding).
-        let box_widths: Vec<usize> = self.nodes.iter().map(|nd| nd.label.len() + 4).collect();
-        let total_w = area.width as usize;
-        let slot_w = (total_w / n).max(1);
-
-        // Horizontal centre of each box (for arrows and connector).
-        let positions: Vec<(u16, u16)> = (0..n)
-            .map(|i| {
-                let slot_x = i * slot_w;
-                let bw = box_widths[i];
-                let bx_rel = slot_x + slot_w.saturating_sub(bw) / 2;
-                (area.x + bx_rel as u16, node_row_y)
-            })
-            .collect();
-
-        let arrow_style = Style::default().fg(Color::DarkGray);
-
-        // ── Draw forward arrows ──────────────────────────────────
-        for edge in self.edges {
-            if edge.to == edge.from + 1 {
-                let (bx_from, _) = positions[edge.from];
-                let (bx_to, _) = positions[edge.to];
-                let aw = box_widths[edge.from] as u16;
-                let arrow_y = node_row_y + 1;
-                let x_start = bx_from + aw;
-                let x_end = bx_to.saturating_sub(1);
-                for x in x_start..x_end {
-                    if x < area.x + area.width {
-                        buf[(x, arrow_y)].set_char('─').set_style(arrow_style);
-                    }
-                }
-                if x_end < area.x + area.width && x_end >= x_start {
-                    buf[(x_end, arrow_y)].set_char('▶').set_style(arrow_style);
-                }
+        // Interleave node slots with arrow gap slots
+        let mut constraints: Vec<Constraint> = Vec::with_capacity(n * 2 - 1);
+        for i in 0..n {
+            constraints.push(Constraint::Length(
+                (self.nodes[i].label.len() as u16 + 4).min(area.width),
+            ));
+            if i < n - 1 {
+                constraints.push(Constraint::Min(1)); // arrow gap
             }
         }
 
-        // ── Draw back-edges ──────────────────────────────────────
-        for edge in self.edges {
-            if edge.to < edge.from {
-                let arc_y = node_row_y + box_h as u16;
-                if arc_y >= area.y + area.height {
-                    continue;
-                }
-                let (bx_from, _) = positions[edge.from];
-                let (bx_to, _) = positions[edge.to];
-                let mid_from = bx_from + box_widths[edge.from] as u16 / 2;
-                let mid_to = bx_to + box_widths[edge.to] as u16 / 2;
-                for x in mid_to..=mid_from {
-                    if x < area.x + area.width {
-                        buf[(x, arc_y)].set_char('─').set_style(arrow_style);
-                    }
-                }
-                if mid_to < area.x + area.width {
-                    buf[(mid_to, arc_y)].set_char('◀').set_style(arrow_style);
-                }
-                let vert_y = arc_y.saturating_sub(1);
-                if vert_y < area.y + area.height {
-                    if mid_to < area.x + area.width {
-                        buf[(mid_to, vert_y)].set_char('│').set_style(arrow_style);
-                    }
-                    if mid_from < area.x + area.width {
-                        buf[(mid_from, vert_y)].set_char('│').set_style(arrow_style);
-                    }
-                }
-            }
-        }
+        let slots = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(constraints)
+            .split(area);
 
-        // ── Draw skip-forward edges (bypass paths, e.g. natural blackjack) ──
-        //
-        // Skip-forward edges have to > from + 1.  They are rendered as a
-        // yellow arc below the node row so they are visually distinct from
-        // the sequential arrows above.  An optional label is placed at the
-        // midpoint of the arc.
-        for edge in self.edges {
-            if edge.to > edge.from + 1 {
-                let arc_y = node_row_y + box_h as u16;
-                if arc_y >= area.y + area.height {
-                    continue;
-                }
-                let style = Style::default().fg(Color::Yellow);
-                let (bx_from, _) = positions[edge.from];
-                let (bx_to, _) = positions[edge.to];
-                let mid_from = bx_from + box_widths[edge.from] as u16 / 2;
-                let mid_to = bx_to + box_widths[edge.to] as u16 / 2;
-
-                // Vertical drops from box bottoms to arc level.
-                let vert_y = arc_y.saturating_sub(1);
-                if vert_y >= area.y {
-                    for cx in [mid_from, mid_to] {
-                        if cx < area.x + area.width {
-                            buf[(cx, vert_y)].set_char('│').set_style(style);
-                        }
-                    }
-                }
-
-                // Horizontal arc span.
-                for x in mid_from..mid_to {
-                    if x < area.x + area.width {
-                        buf[(x, arc_y)].set_char('─').set_style(style);
-                    }
-                }
-                // Arrowhead at destination.
-                if mid_to < area.x + area.width {
-                    buf[(mid_to, arc_y)].set_char('▶').set_style(style);
-                }
-
-                // Label at midpoint (overwrites some '─' chars).
-                if let Some(lbl) = edge.label {
-                    let lbl_len = lbl.len() as u16;
-                    let mid_x = (mid_from + mid_to) / 2;
-                    let lbl_x = mid_x.saturating_sub(lbl_len / 2);
-                    for (j, ch) in lbl.chars().enumerate() {
-                        let x = lbl_x + j as u16;
-                        if x < area.x + area.width {
-                            buf[(x, arc_y)].set_char(ch).set_style(style);
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Draw node boxes ──────────────────────────────────────
         for (i, node) in self.nodes.iter().enumerate() {
+            let slot_idx = i * 2;
             let is_active = self.active == Some(i);
-            let (bx, by) = positions[i];
-            let bw = box_widths[i] as u16;
 
             let (border_style, label_style) = if is_active {
                 (
@@ -627,228 +526,189 @@ impl TypestateGraphWidget<'_> {
                 )
             };
 
-            if bx >= area.x + area.width || by >= area.y + area.height {
-                continue;
-            }
-            let top = format!("┌{}┐", "─".repeat((bw as usize).saturating_sub(2)));
-            buf.set_string(bx, by, &top, border_style);
-            let mid_y = by + 1;
-            if mid_y < area.y + area.height {
-                let interior = (bw as usize).saturating_sub(4);
-                let padded = format!("{:^width$}", node.label, width = interior);
-                let mid = format!("│ {} │", padded);
-                buf.set_string(bx, mid_y, &mid, label_style);
-            }
-            let bot_y = by + 2;
-            if bot_y < area.y + area.height {
-                let bot = format!("└{}┘", "─".repeat((bw as usize).saturating_sub(2)));
-                buf.set_string(bx, bot_y, &bot, border_style);
-            }
-        }
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(border_style);
+            let label = Paragraph::new(Line::from(Span::styled(node.label, label_style)))
+                .alignment(Alignment::Center);
+            let node_inner = block.inner(slots[slot_idx]);
+            block.render(slots[slot_idx], buf);
+            label.render(node_inner, buf);
 
-        // ── Draw callout ─────────────────────────────────────────
-        if needs_callout && let (Some(active_idx), Some(ctx)) = (self.active, self.context) {
-            let (bx_active, _) = positions[active_idx];
-            let bw_active = box_widths[active_idx] as u16;
-            let connector_x = bx_active + bw_active / 2;
-            let connector_y = node_row_y + box_h as u16;
-
-            if connector_y < area.y + area.height {
-                buf[(connector_x, connector_y)]
-                    .set_char('│')
-                    .set_style(Style::default().fg(Color::Cyan));
-            }
-
-            let callout_y = connector_y + 1;
-            if callout_y < area.y + area.height {
-                self.render_callout(ctx, area, callout_y, buf);
+            // Forward arrow in the gap between consecutive nodes
+            if i < n - 1 {
+                let gap = slots[slot_idx + 1];
+                if gap.width > 0 && gap.height > 0 {
+                    let has_forward = self.edges.iter().any(|e| e.from == i && e.to == i + 1);
+                    if has_forward {
+                        let arrow_style = Style::default().fg(Color::DarkGray);
+                        let arrow_chars: String = if gap.width <= 1 {
+                            "▶".to_string()
+                        } else {
+                            let dashes = "─".repeat((gap.width as usize).saturating_sub(1));
+                            format!("{dashes}▶")
+                        };
+                        // Render the arrow on the middle row of the gap
+                        let arrow_y = gap.y + gap.height.saturating_sub(1) / 2;
+                        let arrow_line = Line::from(Span::styled(arrow_chars, arrow_style));
+                        let arrow_area = Rect::new(gap.x, arrow_y, gap.width, 1);
+                        Paragraph::new(arrow_line).render(arrow_area, buf);
+                    }
+                }
             }
         }
     }
 
-    /// Height (rows) required for the callout, or 0 if no callout needed.
-    fn callout_height(&self) -> usize {
+    /// Renders the arc row below nodes for back-edges and skip-forward edges.
+    ///
+    /// Back-edges (to < from) rendered with `◀───` in dark gray.
+    /// Skip-forward edges (to > from + 1) rendered with `───▶` in yellow with labels.
+    #[instrument(skip_all)]
+    fn render_arrow_row(&self, area: Rect, buf: &mut Buffer) {
+        if area.width < 4 || area.height == 0 {
+            return;
+        }
+
+        let n = self.nodes.len();
+        let slot_w = (area.width as usize / n).max(1);
+
+        // Compute horizontal midpoints for each node slot
+        let midpoints: Vec<u16> = (0..n)
+            .map(|i| {
+                let box_w = self.nodes[i].label.len() + 4;
+                let slot_x = i * slot_w;
+                let bx = slot_x + slot_w.saturating_sub(box_w) / 2;
+                area.x + (bx + box_w / 2) as u16
+            })
+            .collect();
+
+        // Build the arc row as a line of Spans
+        let arc_spans = build_arc_spans(self.edges, &midpoints, area.x, area.width);
+
+        if !arc_spans.is_empty() {
+            let line = Line::from(arc_spans);
+            Paragraph::new(line).render(area, buf);
+        }
+    }
+
+    /// Renders the `│` connector between the active node and callout.
+    #[instrument(skip_all)]
+    fn render_connector(&self, area: Rect, buf: &mut Buffer) {
+        if area.height == 0 || area.width == 0 {
+            return;
+        }
+        // Place the connector at the horizontal center of the active node
+        if let Some(active_idx) = self.active {
+            let n = self.nodes.len();
+            let slot_w = (area.width as usize / n).max(1);
+            let box_w = self.nodes[active_idx].label.len() + 4;
+            let slot_x = active_idx * slot_w;
+            let bx = slot_x + slot_w.saturating_sub(box_w) / 2;
+            let mid = area.x + (bx + box_w / 2) as u16;
+
+            let connector_style = Style::default().fg(Color::Cyan);
+            // Build a line with spaces up to mid, then │
+            let offset = (mid.saturating_sub(area.x)) as usize;
+            let pad = " ".repeat(offset);
+            let line = Line::from(vec![Span::raw(pad), Span::styled("│", connector_style)]);
+            Paragraph::new(line).render(area, buf);
+        }
+    }
+
+    /// Whether we should show a callout.
+    fn has_callout(&self) -> bool {
+        matches!(
+            (self.active, self.context),
+            (Some(_), Some(ctx)) if !ctx.narrative.is_empty()
+        )
+    }
+
+    /// Number of content lines inside the callout (excluding block borders).
+    fn callout_line_count(&self) -> usize {
         match (self.active, self.context) {
             (Some(_), Some(ctx)) if !ctx.narrative.is_empty() => {
-                // border top + narrative + blank + choices + pending_prompt + border bottom
                 let prompt_rows = match &ctx.pending_prompt {
-                    Some(p) => {
-                        // One row per line in the prompt, plus a separator blank.
-                        p.lines().count() + 1
-                    }
+                    Some(p) => p.lines().count() + 2, // header + lines + separator
                     None => 0,
                 };
-                2 + 1
-                    + if ctx.choices.is_empty() {
-                        0
-                    } else {
-                        ctx.choices.len() + 1
-                    }
-                    + prompt_rows
+                1 + if ctx.choices.is_empty() {
+                    0
+                } else {
+                    ctx.choices.len() + 1
+                } + prompt_rows
             }
             _ => 0,
         }
     }
 
-    /// Renders the callout box at `callout_y` spanning the full inner width.
-    fn render_callout(&self, ctx: &PhaseContext, area: Rect, callout_y: u16, buf: &mut Buffer) {
-        // Span from area.x to area.x + area.width - 1, max 48 chars wide.
-        let max_w = (area.width as usize).min(48);
-        let cw = max_w as u16;
-        let cx = area.x;
-        let inner_w = (cw as usize).saturating_sub(2); // inside the borders
+    /// Renders the callout as a bordered `Block` with composed `Paragraph` content.
+    #[instrument(skip_all)]
+    fn render_callout_block(&self, area: Rect, buf: &mut Buffer) {
+        if area.height < 3 || area.width < 6 {
+            return;
+        }
+        let Some(ctx) = self.context else { return };
 
-        let border_style = Style::default().fg(Color::Cyan);
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan));
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        let mut lines: Vec<Line<'static>> = Vec::new();
+        let inner_w = inner.width as usize;
+
+        // Narrative
         let narrative_style = Style::default()
             .fg(Color::White)
             .add_modifier(Modifier::BOLD);
-        let choice_key_style = Style::default()
-            .fg(Color::Yellow)
-            .add_modifier(Modifier::BOLD);
-        let choice_label_style = Style::default().fg(Color::Cyan);
-        let choice_desc_style = Style::default().fg(Color::Gray);
+        let clipped: String = ctx.narrative.chars().take(inner_w).collect();
+        lines.push(Line::from(Span::styled(clipped, narrative_style)));
 
-        let mut row = callout_y;
-
-        // Top border.
-        if row < area.y + area.height {
-            let top = format!("┌{}┐", "─".repeat(inner_w));
-            buf.set_string(cx, row, &top, border_style);
-            row += 1;
-        }
-
-        // Narrative line(s).
-        if row < area.y + area.height {
-            let clipped = clip_str(&ctx.narrative, inner_w);
-            let padded = format!("│ {:<width$} │", clipped, width = inner_w.saturating_sub(2));
-            buf.set_string(cx, row, &padded, narrative_style);
-            row += 1;
-        }
-
-        // Choices.
+        // Choices
         if !ctx.choices.is_empty() {
-            // Blank separator.
-            if row < area.y + area.height {
-                let blank = format!("│{}│", " ".repeat(inner_w));
-                buf.set_string(cx, row, &blank, border_style);
-                row += 1;
-            }
-
+            lines.push(Line::from(""));
             for choice in &ctx.choices {
-                if row >= area.y + area.height {
-                    break;
-                }
-                // "│ [H] Hit      draw another card   │"
-                let key_part = format!("[{}] ", choice.key);
-                let label_part = format!("{:<8}", choice.label);
-                let desc_part = clip_str(
-                    choice.desc,
-                    inner_w.saturating_sub(key_part.len() + label_part.len() + 2),
-                );
-                let _trailing = " ".repeat(
-                    inner_w.saturating_sub(2 + key_part.len() + label_part.len() + desc_part.len()),
-                );
+                let key_style = Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD);
+                let label_style = Style::default().fg(Color::Cyan);
+                let desc_style = Style::default().fg(Color::Gray);
 
-                // Write left border.
-                buf[(cx, row)].set_char('│').set_style(border_style);
-                buf[(cx + 1, row)].set_char(' ').set_style(border_style);
-                let mut col = cx + 2;
-
-                // [key]
-                for (j, ch) in key_part.chars().enumerate() {
-                    if col + j as u16 >= cx + cw {
-                        break;
-                    }
-                    buf[(col + j as u16, row)]
-                        .set_char(ch)
-                        .set_style(choice_key_style);
-                }
-                col += key_part.len() as u16;
-
-                // label
-                for (j, ch) in label_part.chars().enumerate() {
-                    if col + j as u16 >= cx + cw {
-                        break;
-                    }
-                    buf[(col + j as u16, row)]
-                        .set_char(ch)
-                        .set_style(choice_label_style);
-                }
-                col += label_part.len() as u16;
-
-                // desc
-                for (j, ch) in desc_part.chars().enumerate() {
-                    if col + j as u16 >= cx + cw {
-                        break;
-                    }
-                    buf[(col + j as u16, row)]
-                        .set_char(ch)
-                        .set_style(choice_desc_style);
-                }
-                col += desc_part.len() as u16;
-
-                // trailing spaces + right border
-                let right_x = cx + cw - 1;
-                for x in col..right_x {
-                    if x < cx + cw {
-                        buf[(x, row)].set_char(' ').set_style(border_style);
-                    }
-                }
-                if right_x < cx + cw {
-                    buf[(right_x, row)].set_char('│').set_style(border_style);
-                }
-
-                row += 1;
+                lines.push(Line::from(vec![
+                    Span::styled(format!("[{}] ", choice.key), key_style),
+                    Span::styled(format!("{:<8}", choice.label), label_style),
+                    Span::styled(choice.desc.to_string(), desc_style),
+                ]));
             }
         }
 
-        // Pending prompt panel — shown when an elicitation is in-flight.
-        // Renders the exact assembled prompt (including numbered options) that
-        // was delivered to the agent, captured by ObservableCommunicator.
+        // Pending prompt
         if let Some(prompt_text) = &ctx.pending_prompt {
-            let prompt_label_style = Style::default()
+            let header_style = Style::default()
                 .fg(Color::Magenta)
                 .add_modifier(Modifier::BOLD);
-            let prompt_text_style = Style::default().fg(Color::Magenta);
+            let text_style = Style::default().fg(Color::Magenta);
 
-            // Blank separator before the prompt panel.
-            if row < area.y + area.height {
-                let blank = format!("│{}│", " ".repeat(inner_w));
-                buf.set_string(cx, row, &blank, border_style);
-                row += 1;
-            }
-
-            // "▶ Prompt:" label on its own line.
-            if row < area.y + area.height {
-                let header = clip_str("▶ Prompt in-flight:", inner_w - 2);
-                let padded = format!("│ {:<width$} │", header, width = inner_w.saturating_sub(2));
-                buf.set_string(cx, row, &padded, prompt_label_style);
-                row += 1;
-            }
-
-            // Each line of the prompt text (handles the multi-line Options list).
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "▶ Prompt in-flight:",
+                header_style,
+            )));
             for prompt_line in prompt_text.lines() {
-                if row >= area.y + area.height {
-                    break;
-                }
-                let clipped = clip_str(prompt_line, inner_w.saturating_sub(2));
-                let padded = format!("│ {:<width$} │", clipped, width = inner_w.saturating_sub(2));
-                buf.set_string(cx, row, &padded, prompt_text_style);
-                row += 1;
+                let clipped: String = prompt_line.chars().take(inner_w).collect();
+                lines.push(Line::from(Span::styled(clipped, text_style)));
             }
         }
 
-        // Bottom border.
-        if row < area.y + area.height {
-            let bot = format!("└{}┘", "─".repeat(inner_w));
-            buf.set_string(cx, row, &bot, border_style);
-        }
+        Paragraph::new(lines).render(inner, buf);
     }
 
     /// Renders the explore/play stats bar between graph and story log.
     ///
     /// Shows a compact line like: `🔍 3 explores / 2 plays (1 this turn)`
     /// The bar turns yellow when per-turn explores exceed 3 (potential whirlpool).
+    #[instrument(skip_all)]
     fn render_explore_stats(&self, area: Rect, buf: &mut Buffer) {
         if area.height == 0 || area.width < 4 {
             return;
@@ -869,6 +729,7 @@ impl TypestateGraphWidget<'_> {
     }
 
     /// Renders the story log below the graph.
+    #[instrument(skip_all)]
     fn render_log(&self, area: Rect, buf: &mut Buffer) {
         let block = Block::default().borders(Borders::TOP).title(" Story ");
         let inner = block.inner(area);
@@ -892,7 +753,6 @@ impl TypestateGraphWidget<'_> {
             .rev()
             .enumerate()
             .map(|(i, ev)| {
-                // Most-recent entry is full brightness; older entries fade.
                 let age = max_lines.saturating_sub(i + 1);
                 let style = if age == 0 {
                     Style::default().fg(ev.color).add_modifier(Modifier::BOLD)
@@ -909,14 +769,97 @@ impl TypestateGraphWidget<'_> {
     }
 }
 
-/// Clips a string to at most `max_chars` characters.
-fn clip_str(s: &str, max_chars: usize) -> &str {
-    let mut end = 0;
-    for (i, (byte_pos, _)) in s.char_indices().enumerate() {
-        if i >= max_chars {
-            break;
-        }
-        end = byte_pos + s[byte_pos..].chars().next().map_or(0, |c| c.len_utf8());
+// ─────────────────────────────────────────────────────────────
+//  Arc span builder — constructs a styled Line for back/skip edges
+// ─────────────────────────────────────────────────────────────
+
+/// Builds styled spans for the arc row showing back-edges and skip-forward edges.
+///
+/// Each edge type gets its own character range on the row:
+/// - Back-edges (to < from): `◀───` in dark gray
+/// - Skip-forward edges (to > from + 1): `───▶` in yellow, with optional label
+#[instrument(skip_all)]
+fn build_arc_spans(
+    edges: &[EdgeDef],
+    midpoints: &[u16],
+    area_x: u16,
+    area_width: u16,
+) -> Vec<Span<'static>> {
+    let total_w = area_width as usize;
+    if total_w == 0 {
+        return Vec::new();
     }
-    &s[..end]
+
+    // Build a character + style buffer
+    let mut chars: Vec<char> = vec![' '; total_w];
+    let mut styles: Vec<Style> = vec![Style::default(); total_w];
+
+    let arrow_style = Style::default().fg(Color::DarkGray);
+    let skip_style = Style::default().fg(Color::Yellow);
+
+    for edge in edges {
+        if edge.from >= midpoints.len() || edge.to >= midpoints.len() {
+            continue;
+        }
+
+        // Back-edge: to < from
+        if edge.to < edge.from {
+            let mid_to = midpoints[edge.to].saturating_sub(area_x) as usize;
+            let mid_from = midpoints[edge.from].saturating_sub(area_x) as usize;
+            if mid_to < total_w {
+                chars[mid_to] = '◀';
+                styles[mid_to] = arrow_style;
+            }
+            for x in (mid_to + 1)..mid_from.min(total_w) {
+                chars[x] = '─';
+                styles[x] = arrow_style;
+            }
+        }
+
+        // Skip-forward edge: to > from + 1
+        if edge.to > edge.from + 1 {
+            let mid_from = midpoints[edge.from].saturating_sub(area_x) as usize;
+            let mid_to = midpoints[edge.to].saturating_sub(area_x) as usize;
+            for x in mid_from..mid_to.min(total_w) {
+                chars[x] = '─';
+                styles[x] = skip_style;
+            }
+            if mid_to < total_w {
+                chars[mid_to] = '▶';
+                styles[mid_to] = skip_style;
+            }
+            // Place label at midpoint
+            if let Some(lbl) = edge.label {
+                let mid_x = (mid_from + mid_to) / 2;
+                let lbl_start = mid_x.saturating_sub(lbl.len() / 2);
+                for (j, ch) in lbl.chars().enumerate() {
+                    let x = lbl_start + j;
+                    if x < total_w {
+                        chars[x] = ch;
+                        styles[x] = skip_style;
+                    }
+                }
+            }
+        }
+    }
+
+    // Collapse runs of same-styled characters into Spans
+    if chars.iter().all(|c| *c == ' ') {
+        return Vec::new();
+    }
+
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut run_start = 0;
+    while run_start < total_w {
+        let run_style = styles[run_start];
+        let mut run_end = run_start + 1;
+        while run_end < total_w && styles[run_end] == run_style {
+            run_end += 1;
+        }
+        let text: String = chars[run_start..run_end].iter().collect();
+        spans.push(Span::styled(text, run_style));
+        run_start = run_end;
+    }
+
+    spans
 }

@@ -1,12 +1,16 @@
 //! Chat widget for rendering the elicitation exchange between the host and players.
 //!
-//! Displays a scrolling chat log in a bordered ratatui panel, newest messages at the bottom.
+//! Displays a scrolling chat log in a bordered ratatui panel, newest messages at
+//! the bottom. All rendering uses composed `Paragraph`/`Line`/`Span` widgets —
+//! no direct buffer manipulation — so the output is expressible as `WidgetJson`
+//! for AccessKit verification.
 
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Style},
-    widgets::{Block, Borders, Widget},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 use tokio::sync::mpsc;
 use tracing::{debug, instrument};
@@ -79,17 +83,48 @@ impl ChatMessage {
         debug!(participant = ?participant, text_len = text.len(), "Creating ChatMessage");
         Self { participant, text }
     }
+
+    /// Converts this message into a styled [`Line`] for rendering.
+    ///
+    /// Host messages are left-aligned with a `[Host]` prefix.
+    /// Human/agent messages are right-aligned by padding with leading spaces.
+    #[instrument(skip(self))]
+    fn to_line(&self, width: usize) -> Line<'static> {
+        let style = Style::default().fg(self.participant.color());
+
+        if self.participant.is_host() {
+            let prefix = format!("[{}] ", self.participant.display_name());
+            let available = width.saturating_sub(prefix.len());
+            let text = clip_to_string(&self.text, available);
+            Line::from(vec![
+                Span::styled(prefix, style.add_modifier(Modifier::BOLD)),
+                Span::styled(text, style),
+            ])
+        } else {
+            let prefix = format!("{}: ", self.participant.display_name());
+            let available = width.saturating_sub(prefix.len());
+            let text = clip_to_string(&self.text, available);
+            let label = format!("{prefix}{text}");
+            let label_len = label.chars().count();
+            let padding = " ".repeat(width.saturating_sub(label_len));
+            Line::from(vec![
+                Span::raw(padding),
+                Span::styled(prefix, style.add_modifier(Modifier::BOLD)),
+                Span::styled(text, style),
+            ])
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
 //  ChatWidget
 // ─────────────────────────────────────────────────────────────
 
-/// Renders the elicitation chat log as an ratatui widget.
+/// Renders the elicitation chat log as a composed `Paragraph` widget.
 ///
 /// Displays messages newest-at-bottom within a bordered panel, colour-coded by
 /// participant. Host messages are left-aligned; human and agent replies are
-/// right-aligned.
+/// right-aligned via leading space padding in `Span`s.
 pub struct ChatWidget<'a> {
     messages: &'a [ChatMessage],
     title: &'static str,
@@ -108,7 +143,7 @@ impl<'a> ChatWidget<'a> {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Widget impl
+//  Widget impl — composed from Paragraph/Line/Span
 // ─────────────────────────────────────────────────────────────
 
 impl Widget for ChatWidget<'_> {
@@ -116,51 +151,36 @@ impl Widget for ChatWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let block = Block::default().borders(Borders::ALL).title(self.title);
         let inner = block.inner(area);
-        block.render(area, buf);
 
         if inner.height == 0 || inner.width == 0 {
+            block.render(area, buf);
             return;
         }
 
-        if self.messages.is_empty() {
+        let width = inner.width as usize;
+
+        let lines: Vec<Line<'static>> = if self.messages.is_empty() {
             debug!("No messages; rendering placeholder");
-            let style = Style::default().fg(Color::DarkGray);
-            buf.set_string(
-                inner.x,
-                inner.y,
-                clip("Waiting for first exchange…", inner.width as usize),
-                style,
+            vec![Line::from(Span::styled(
+                "Waiting for first exchange…",
+                Style::default().fg(Color::DarkGray),
+            ))]
+        } else {
+            let max_rows = inner.height as usize;
+            let start = self.messages.len().saturating_sub(max_rows);
+            let visible = &self.messages[start..];
+
+            debug!(
+                total = self.messages.len(),
+                visible = visible.len(),
+                "Rendering chat messages"
             );
-            return;
-        }
 
-        let max_rows = inner.height as usize;
-        let start = self.messages.len().saturating_sub(max_rows);
-        let visible = &self.messages[start..];
+            visible.iter().map(|msg| msg.to_line(width)).collect()
+        };
 
-        debug!(
-            total = self.messages.len(),
-            visible = visible.len(),
-            "Rendering chat messages"
-        );
-
-        for (i, msg) in visible.iter().enumerate() {
-            let row = inner.y + i as u16;
-            let style = Style::default().fg(msg.participant.color());
-            let width = inner.width as usize;
-
-            if msg.participant.is_host() {
-                // "[Host] {text}" — left-aligned
-                let prefix = format!("[{}] ", msg.participant.display_name());
-                let available = width.saturating_sub(prefix.len());
-                let label = format!("{}{}", prefix, clip(&msg.text, available));
-                buf.set_string(inner.x, row, &label, style);
-            } else {
-                // "{name}: {text}" — right-aligned (human = "You", agent = model name)
-                let prefix = format!("{}: ", msg.participant.display_name());
-                render_right(buf, inner.x, row, width, &prefix, &msg.text, style);
-            }
-        }
+        let paragraph = Paragraph::new(lines).block(block);
+        paragraph.render(area, buf);
     }
 }
 
@@ -168,47 +188,17 @@ impl Widget for ChatWidget<'_> {
 //  Helpers
 // ─────────────────────────────────────────────────────────────
 
-/// Renders a right-aligned `"{prefix}{text}"` label into `buf` at the given row.
-#[instrument(skip(buf, prefix, text, style))]
-fn render_right(
-    buf: &mut Buffer,
-    area_x: u16,
-    row: u16,
-    width: usize,
-    prefix: &str,
-    text: &str,
-    style: Style,
-) {
-    let available = width.saturating_sub(prefix.len());
-    let clipped_text = clip(text, available);
-    let label = format!("{}{}", prefix, clipped_text);
-    let label_len = label.chars().count();
-    let x_offset = width.saturating_sub(label_len) as u16;
-    buf.set_string(area_x + x_offset, row, &label, style);
-}
-
-/// Returns at most `max` chars from `s` (char-boundary safe).
+/// Returns at most `max` chars from `s` as an owned [`String`].
 #[instrument(skip(s))]
-fn clip(s: &str, max: usize) -> &str {
-    if max == 0 {
-        return "";
-    }
-    let mut char_indices = s.char_indices();
-    let mut last_byte = s.len();
-    for (count, (byte_pos, _)) in char_indices.by_ref().enumerate() {
-        if count == max {
-            last_byte = byte_pos;
-            break;
-        }
-    }
-    &s[..last_byte]
+fn clip_to_string(s: &str, max: usize) -> String {
+    s.chars().take(max).collect()
 }
 
 // ─────────────────────────────────────────────────────────────
 //  Channel helper
 // ─────────────────────────────────────────────────────────────
 
-/// Creates a bounded chat channel (capacity 256).
+/// Creates an unbounded chat channel.
 ///
 /// Returns `(sender, receiver)` for distributing to communicators and the render loop.
 #[instrument]

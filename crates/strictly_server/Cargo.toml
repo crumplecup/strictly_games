@@ -66,6 +66,8 @@ toml = { workspace = true }
 async-trait = { workspace = true }
 strum = { workspace = true }
 elicitation_rand = { workspace = true }
+elicit_ratatui = { workspace = true }
+elicit_ui = { workspace = true }
 
 # TUI
 ratatui = { workspace = true }

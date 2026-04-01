@@ -29,6 +29,8 @@ elicitation = { path = "../elicitation/crates/elicitation/", features = [
 ] }
 elicitation_derive = { path = "../elicitation/crates/elicitation_derive/" }
 elicitation_rand = { path = "../elicitation/crates/elicitation_rand/" }
+elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui/" }
+elicit_ui = { path = "../elicitation/crates/elicit_ui/" }
 # elicitation = { version = "0.8.2", features = ["rand"] }
 
 # Verification
