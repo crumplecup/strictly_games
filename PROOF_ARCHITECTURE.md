@@ -83,9 +83,11 @@ Timed-out harnesses appear as `TIMEOUT` in the CSV (distinct from `FAIL`).
 
 ### Loop bounds
 
-**Kani only terminates if the loop bound is a compile-time constant.**  If you
-write a loop over a `Vec` whose length is `kani::any()`, the model checker
-unrolls forever.  Always bound loops with `#[kani::unwind(N)]` or use arrays.
+Kani derives correct unwind bounds automatically.  Do **not** add
+`#[kani::unwind(N)]` — manual unwind limits short-circuit the model checker
+and undermine the soundness of the proof.  If a harness hangs, the right fix
+is to restructure it (e.g. use fixed-size arrays instead of `Vec` with
+`kani::any()` length), not to cap the unroll depth.
 
 ---
 
