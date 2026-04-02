@@ -473,7 +473,11 @@ verify-verus-tracked csv="verus_verification_results.csv" timeout="600":
     echo "module,status,verified,errors,duration_secs,timestamp" > "$CSV"
     PASS=0; FAIL=0
 
-    for file in crates/strictly_proofs/src/verus_proofs/*.rs; do
+    # Generate verus_proof() composed foundation files before verifying
+    cargo build -p strictly_proofs --quiet 2>/dev/null || true
+
+    for file in crates/strictly_proofs/src/verus_proofs/*.rs crates/strictly_proofs/src/verus_proofs/generated/*.rs; do
+        [[ -f "$file" ]] || continue
         module=$(basename "$file" .rs)
         [[ "$module" == "mod" ]] && continue
 
@@ -520,7 +524,12 @@ verify-verus-resume csv="verus_verification_results.csv" timeout="600":
     fi
 
     PASS=0; FAIL=0; SKIP=0
-    for file in crates/strictly_proofs/src/verus_proofs/*.rs; do
+
+    # Ensure verus_proof() composed foundation files are up to date
+    cargo build -p strictly_proofs --quiet 2>/dev/null || true
+
+    for file in crates/strictly_proofs/src/verus_proofs/*.rs crates/strictly_proofs/src/verus_proofs/generated/*.rs; do
+        [[ -f "$file" ]] || continue
         module=$(basename "$file" .rs)
         [[ "$module" == "mod" ]] && continue
 
