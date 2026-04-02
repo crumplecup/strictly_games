@@ -55,6 +55,13 @@ impl Outcome {
     ///
     /// Use this when the bet has already been removed from the bankroll at
     /// placement time — returns the total chips added back, never negative.
+    #[cfg_attr(creusot, creusot_contracts::ensures(
+        (*self == Outcome::Push      ==> result@ == bet@) &&
+        (*self == Outcome::Loss      ==> result@ == 0) &&
+        (*self == Outcome::Win       ==> result@ == bet@ * 2) &&
+        (*self == Outcome::Surrender ==> result@ == bet@ / 2) &&
+        (*self == Outcome::Blackjack ==> result@ == bet@ + (bet@ * 3) / 2)
+    ))]
     pub fn gross_return(self, bet: u64) -> u64 {
         match self {
             Outcome::Win => bet * 2,                   // original bet + 1× profit

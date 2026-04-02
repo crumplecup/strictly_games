@@ -25,7 +25,6 @@ strictly_server = { path = "crates/strictly_server" }
 # Elicitation framework (local dev)
 elicitation = { path = "../elicitation/crates/elicitation/", features = [
   "rand",
-  "proofs",
 ] }
 elicitation_derive = { path = "../elicitation/crates/elicitation_derive/" }
 elicitation_rand = { path = "../elicitation/crates/elicitation_rand/" }

@@ -41,5 +41,3 @@ kani-verifier = { workspace = true, optional = true }
 default = ["shuffle"]
 kani = ["kani-verifier"]
 shuffle = ["elicitation_derive", "elicitation_rand"]
-# Enable proof generation methods (requires elicitation/proofs)
-proofs = []

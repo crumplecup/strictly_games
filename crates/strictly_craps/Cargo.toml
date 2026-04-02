@@ -42,4 +42,3 @@ kani-verifier = { workspace = true, optional = true }
 default = ["roll"]
 kani = ["kani-verifier"]
 roll = ["elicitation_derive", "elicitation_rand"]
-proofs = []
