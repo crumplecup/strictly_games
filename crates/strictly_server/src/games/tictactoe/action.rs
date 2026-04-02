@@ -15,7 +15,9 @@ use tracing::instrument;
 /// - Serialized for replay
 /// - Logged for debugging
 /// - Reasoned about by contracts
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 pub struct Move {
     /// The player making the move.
     pub player: Player,

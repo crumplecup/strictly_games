@@ -32,7 +32,9 @@ impl std::fmt::Display for BasicAction {
 }
 
 /// A player action with context for validation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 pub struct PlayerAction {
     action: BasicAction,
     hand_index: usize,

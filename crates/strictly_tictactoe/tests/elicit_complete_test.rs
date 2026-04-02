@@ -11,7 +11,7 @@
 //! Composition is also verified: `Board` contains `Square`, and `Square`
 //! contains `Player` — so `Board`'s proof must include all constituents.
 
-#![cfg(feature = "proofs")]
+#![cfg(feature = "verification")]
 
 use elicitation::ElicitComplete;
 use strictly_tictactoe::{Board, Player, Position, Square};

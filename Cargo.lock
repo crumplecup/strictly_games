@@ -1107,6 +1107,7 @@ dependencies = [
  "elicitation_derive",
  "elicitation_macros",
  "inventory",
+ "quote",
  "ratatui",
  "rmcp",
  "schemars",
@@ -1129,6 +1130,8 @@ dependencies = [
  "elicitation_derive",
  "elicitation_macros",
  "inventory",
+ "proc-macro2",
+ "quote",
  "rmcp",
  "schemars",
  "serde",
@@ -1160,6 +1163,7 @@ dependencies = [
  "inventory",
  "jiff",
  "paste",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "rand 0.10.0",
@@ -1172,6 +1176,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "syn 2.0.114",
  "time",
  "tokio",
  "tracing",
@@ -4234,10 +4239,13 @@ name = "strictly_proofs"
 version = "0.1.0"
 dependencies = [
  "creusot-std",
+ "elicit_ratatui",
  "elicitation",
+ "proc-macro2",
  "strictly_blackjack",
  "strictly_craps",
  "strictly_tictactoe",
+ "unicode-width",
 ]
 
 [[package]]

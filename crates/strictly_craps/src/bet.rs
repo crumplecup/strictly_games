@@ -13,7 +13,9 @@ use crate::Point;
 ///
 /// Ordered roughly by house edge (best to worst) and grouped by
 /// the progressive lesson system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum BetType {
     // ── Lesson 1: Line bets (1.36–1.41%) ──
@@ -143,7 +145,9 @@ impl std::fmt::Display for BetType {
 }
 
 /// A live bet on the table.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 pub struct ActiveBet {
     /// What kind of bet.
     bet_type: BetType,
@@ -210,7 +214,7 @@ impl std::fmt::Display for ActiveBet {
 }
 
 /// Player action during the betting phase.
-#[derive(Debug, Clone, PartialEq, Eq, Elicit)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub enum BettingAction {
     /// Place a new bet of the given type and amount.
     PlaceBet(BetType, u64),

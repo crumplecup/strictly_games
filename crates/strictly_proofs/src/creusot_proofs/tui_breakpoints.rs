@@ -100,7 +100,7 @@ pub fn creusot_truncation_identity(input_width: usize, max_cols: usize) -> usize
 #[cfg(creusot)]
 #[trusted]
 #[requires(true)]
-#[ensures(result@ <= cell_width@)]  // direct: truncated ≤ cell_width ≤ inner + 2
+#[ensures(result@ <= cell_width@)] // direct: truncated ≤ cell_width ≤ inner + 2
 pub fn creusot_truncation_satisfies_label_contained(
     label_width: usize,
     cell_width: usize,
@@ -124,7 +124,7 @@ pub fn creusot_truncation_satisfies_label_contained(
 #[requires(terminal_cols@ <= 200)]
 #[requires(label_width@ < terminal_cols@)]
 #[ensures(result@ <= terminal_cols@)]
-#[ensures(result@ <= 65535)]  // u16::MAX
+#[ensures(result@ <= 65535)] // u16::MAX
 pub fn creusot_node_box_no_overflow(label_width: u16, terminal_cols: u16) -> u16 {
     label_width.saturating_add(4).min(terminal_cols)
 }
@@ -168,7 +168,7 @@ pub fn creusot_must_pass_range_invariants(cols: u16, rows: u16) -> bool {
 #[trusted]
 #[requires(available@ == 0)]
 #[requires(needed@ > 0)]
-#[ensures(result)]  // the failure condition holds
+#[ensures(result)] // the failure condition holds
 pub fn creusot_area_zero_height_fails(available: usize, needed: usize) -> bool {
     available == 0 && needed > 0
 }
@@ -180,7 +180,7 @@ pub fn creusot_area_zero_height_fails(available: usize, needed: usize) -> bool {
 #[trusted]
 #[requires(available@ > 0)]
 #[requires(needed@ <= available@)]
-#[ensures(!result)]  // the failure condition does NOT hold
+#[ensures(!result)] // the failure condition does NOT hold
 pub fn creusot_area_sufficient_passes(available: usize, needed: usize) -> bool {
     // failure condition: available == 0 && needed > 0
     available == 0 && needed > 0

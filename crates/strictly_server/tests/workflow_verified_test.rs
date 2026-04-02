@@ -9,8 +9,6 @@
 //! 2. **Constituent delegation** — `LegalMove = And<SquareEmpty, PlayerTurn>`
 //!    contains both constituents' proofs, proving the composite is not hollow.
 
-#![cfg(feature = "proofs")]
-
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::And;
 use strictly_server::{PlayerTurn, SquareEmpty};

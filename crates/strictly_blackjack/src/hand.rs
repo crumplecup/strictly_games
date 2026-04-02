@@ -19,7 +19,9 @@ pub const MAX_HAND_CARDS: usize = 11;
 pub const MAX_PLAYER_HANDS: usize = 4;
 
 /// Value of a blackjack hand (hard and soft totals).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct HandValue {
     hard: u8,
@@ -76,7 +78,7 @@ impl std::fmt::Display for HandValue {
 ///
 /// Serializes / deserializes as a variable-length JSON array for wire
 /// compatibility with the original `Vec`-backed representation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit, schemars::JsonSchema)]
 pub struct Hand {
     cards: [Card; MAX_HAND_CARDS],
     len: usize,

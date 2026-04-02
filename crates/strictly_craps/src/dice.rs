@@ -48,6 +48,7 @@ use tracing::instrument;
     Deserialize,
     Elicit,
     strum::EnumIter,
+    schemars::JsonSchema,
 )]
 #[cfg_attr(feature = "roll", derive(elicitation_derive::Rand))]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
@@ -125,7 +126,9 @@ impl std::fmt::Display for DieFace {
 /// let roll = dice.generate(); // Independent, seeded roll
 /// assert!(roll.sum() >= 2 && roll.sum() <= 12);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct DiceRoll {
     /// First die.

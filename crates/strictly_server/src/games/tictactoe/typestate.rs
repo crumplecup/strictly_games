@@ -8,6 +8,7 @@ use super::action::{Move, MoveError};
 use super::contracts::{execute_move, validate_move};
 use super::outcome::Outcome;
 use elicitation::{Elicit, Prompt, Select};
+use serde::{Deserialize, Serialize};
 use strictly_tictactoe::{Board, Player, Position};
 use tracing::instrument;
 
@@ -19,7 +20,7 @@ use tracing::instrument;
 ///
 /// The board is always empty.
 /// No history, no outcome.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameSetup {
     board: Board,
 }
@@ -64,7 +65,7 @@ impl Default for GameSetup {
 /// Invariants enforced by type:
 /// - to_move alternates
 /// - No outcome yet (outcome is in GameFinished)
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameInProgress {
     pub(super) board: Board,
     pub(super) history: Vec<Move>,
@@ -158,7 +159,7 @@ impl GameInProgress {
 ///
 /// The outcome is ALWAYS present (not Option).
 /// This struct encodes the invariant at the type level.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameFinished {
     board: Board,
     history: Vec<Move>,
@@ -195,7 +196,7 @@ impl GameFinished {
 // ─────────────────────────────────────────────────────────────
 
 /// Result of making a move.
-#[derive(Debug, Elicit)]
+#[derive(Debug, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub enum GameResult {
     /// Game continues.
     InProgress(GameInProgress),

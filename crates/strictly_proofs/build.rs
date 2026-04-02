@@ -27,7 +27,8 @@ use elicitation::Elicitation;
 use strictly_blackjack::Outcome;
 
 fn main() {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR set by Cargo");
+    let manifest_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR set by Cargo");
     let gen_dir = std::path::Path::new(&manifest_dir).join("src/verus_proofs/generated");
     std::fs::create_dir_all(&gen_dir).expect("create src/verus_proofs/generated/");
 

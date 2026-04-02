@@ -1,16 +1,4 @@
 //! [`VerifiedWorkflow`] validation tests for `strictly_blackjack` propositions.
-//!
-//! Verifies two guarantees for every proposition type:
-//!
-//! 1. **Non-emptiness** — each proposition's proof methods return a non-empty
-//!    `TokenStream`. An empty stream would mean `#[derive(Prop)]` failed silently
-//!    or a manual impl returned `TokenStream::new()`.
-//!
-//! 2. **Constituent delegation** — compound propositions built with `And<P, Q>`
-//!    contain both `P`'s and `Q`'s proof streams. This guards against a future
-//!    refactor accidentally dropping a constituent from a composite proof.
-
-#![cfg(feature = "proofs")]
 
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::And;

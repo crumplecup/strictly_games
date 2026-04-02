@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
     Deserialize,
     Elicit,
     strum::EnumIter,
+    schemars::JsonSchema,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Point {

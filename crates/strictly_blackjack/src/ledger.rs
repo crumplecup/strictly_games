@@ -34,6 +34,7 @@
 use elicitation::Elicit;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::Established;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::Outcome;
@@ -48,7 +49,7 @@ use crate::error::ActionError;
 ///
 /// Carrying this token through game state means any code that reaches
 /// settlement *must* have gone through a validated debit first.
-#[derive(Debug, Clone, Elicit, elicitation::Prop)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, elicitation::Prop, schemars::JsonSchema)]
 pub struct BetDeducted;
 impl VerifiedWorkflow for BetDeducted {}
 
@@ -57,7 +58,7 @@ impl VerifiedWorkflow for BetDeducted {}
 /// Established exclusively by [`BankrollLedger::settle`].
 /// Consuming `Established<BetDeducted>` guarantees settlement happened
 /// exactly once and that the gross-return arithmetic was applied.
-#[derive(Debug, Clone, Elicit, elicitation::Prop)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, elicitation::Prop, schemars::JsonSchema)]
 pub struct PayoutSettled;
 impl VerifiedWorkflow for PayoutSettled {}
 
@@ -71,7 +72,7 @@ impl VerifiedWorkflow for PayoutSettled {}
 /// The fields are private: the only way to create a valid ledger is through
 /// `debit`, and the only way to produce a final balance is through `settle`.
 /// Manual bankroll arithmetic is not possible from outside this module.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct BankrollLedger {
     /// Bankroll after the bet was removed.  Settlement adds gross return here.
     post_bet_balance: u64,

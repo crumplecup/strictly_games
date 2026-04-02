@@ -1,0 +1,5 @@
+module,status,duration_secs,timestamp
+bankroll_financial,PASS,39,2026-04-01T17:08:22-07:00
+compositional_proof,PASS,3,2026-04-01T17:08:27-07:00
+game_invariants,PASS,3,2026-04-01T17:08:31-07:00
+tui_breakpoints,PASS,4,2026-04-01T17:08:35-07:00

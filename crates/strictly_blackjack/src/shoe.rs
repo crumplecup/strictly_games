@@ -64,7 +64,7 @@ use crate::{Card, Rank, Suit};
 ///
 /// Same seed + same number of decks → same card sequence. Ideal for replays,
 /// testing, and formal verification.
-#[derive(Debug, Elicit)]
+#[derive(Debug, Elicit, schemars::JsonSchema)]
 pub struct Shoe {
     /// Cards in deal order (shuffled at construction).
     cards: Vec<Card>,

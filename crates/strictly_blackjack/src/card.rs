@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
     Serialize,
     Deserialize,
     Elicit,
+    schemars::JsonSchema,
 )]
 #[cfg_attr(feature = "shuffle", derive(elicitation_derive::Rand))]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
@@ -135,6 +136,7 @@ impl std::fmt::Display for Rank {
     Serialize,
     Deserialize,
     Elicit,
+    schemars::JsonSchema,
 )]
 #[cfg_attr(feature = "shuffle", derive(elicitation_derive::Rand))]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
@@ -185,6 +187,7 @@ impl std::fmt::Display for Suit {
     Serialize,
     Deserialize,
     Elicit,
+    schemars::JsonSchema,
 )]
 #[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct Card {

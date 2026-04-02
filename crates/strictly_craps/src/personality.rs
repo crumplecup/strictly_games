@@ -14,7 +14,19 @@ use serde::{Deserialize, Serialize};
 ///
 /// Determines the system prompt and behavioural guidance given to the LLM
 /// when it makes betting decisions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Default,
+    Serialize,
+    Deserialize,
+    Elicit,
+    schemars::JsonSchema,
+)]
 pub enum AgentPersonality {
     /// Sticks to Pass/Don't Pass, minimum bets, avoids proposition bets.
     Conservative,

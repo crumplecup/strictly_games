@@ -6,6 +6,7 @@
 //! per participant type.
 
 use elicitation::{Elicit, Prompt, Select};
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 /// A craps betting action — either a bet/done or a state query.
@@ -14,7 +15,17 @@ use tracing::instrument;
 /// caller elicits the actual bet amount separately (using the styled `u64`
 /// prompt). Explore variants query live table state and loop back for
 /// another selection.
-#[derive(Debug, Clone, PartialEq, Eq, Elicit, derive_more::Display)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Elicit,
+    derive_more::Display,
+    schemars::JsonSchema,
+)]
 pub enum CrapsAction {
     /// Place a new bet (amount elicited separately).
     #[display("Place Bet")]

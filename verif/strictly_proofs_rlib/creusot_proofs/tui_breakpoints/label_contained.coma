@@ -1,0 +1,45 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 57 0 57 75 *)
+
+let%span stui_breakpoints = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 58 45 58 46
+let%span stui_breakpoints'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 58 19 58 47
+let%span snum = "/home/erik/repos/creusot/creusot-std/src/std/num.rs" 325 20 326 51
+let%span snum'0 = "/home/erik/repos/creusot/creusot-std/src/std/num.rs" 329 26 329 83
+let%span snum'1 = "/home/erik/repos/creusot/creusot-std/src/std/num.rs" 330 26 330 83
+
+use creusot.int.UInt64
+use creusot.prelude.Any
+use int.Int
+
+constant const_MIN: UInt64.t = (0: UInt64.t)
+
+constant const_MAX: UInt64.t = (18446744073709551615: UInt64.t)
+
+let rec saturating_sub (self_: UInt64.t) (rhs: UInt64.t) (return (x: UInt64.t)) = any
+  [ return (result: UInt64.t) ->
+  {[@stop_split] [@expl:saturating_sub ensures] ([@stop_split] [@expl:saturating_sub ensures #0] [%#snum] UInt64.t'int self_
+            - UInt64.t'int rhs
+          >= UInt64.t'int const_MIN
+        /\ UInt64.t'int self_ - UInt64.t'int rhs <= UInt64.t'int const_MAX
+      -> UInt64.t'int result = UInt64.t'int self_ - UInt64.t'int rhs)
+    /\ ([@stop_split] [@expl:saturating_sub ensures #1] [%#snum'0] UInt64.t'int self_ - UInt64.t'int rhs
+        < UInt64.t'int const_MIN -> UInt64.t'int result = UInt64.t'int const_MIN)
+    /\ ([@stop_split] [@expl:saturating_sub ensures #2] [%#snum'1] UInt64.t'int self_ - UInt64.t'int rhs
+      > UInt64.t'int const_MAX -> UInt64.t'int result = UInt64.t'int const_MAX)}
+    (! return {result}) ]
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec label_contained
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 57 0 57 75]
+  (label_width: UInt64.t) (cell_width: UInt64.t) (return (x: bool)) = (! bb0
+  [ bb0 = s0
+    [ s0 = saturating_sub [%#stui_breakpoints'0] {cell_width} {[%#stui_breakpoints] (2: UInt64.t)}
+        (fun (_x: UInt64.t) -> [ &_4 <- _x ] s1)
+    | s1 = [ &_ret <- UInt64.le label_width _4 ] s2
+    | s2 = return {_ret} ] ]
+  [ & _ret: bool = Any.any_l ()
+  | & label_width: UInt64.t = label_width
+  | & cell_width: UInt64.t = cell_width
+  | & _4: UInt64.t = Any.any_l () ]) [ return (result: bool) -> (! return {result}) ]

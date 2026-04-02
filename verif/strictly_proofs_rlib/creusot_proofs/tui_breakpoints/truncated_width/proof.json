@@ -1,0 +1,8 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_truncated_width": { "prover": "alt-ergo@2.6.2", "time": 0.022 }
+    }
+  }
+}

@@ -4,7 +4,9 @@ use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 
 /// Outcome of a finished game.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
+)]
 pub enum Outcome {
     /// Player won the game.
     Winner(super::Player),

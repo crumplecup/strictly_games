@@ -6,6 +6,7 @@
 
 use elicitation::contracts::Established;
 use elicitation::{Elicit, Generator, Prompt, Select};
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::{
@@ -19,7 +20,7 @@ use crate::{MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 // ─────────────────────────────────────────────────────────────
 
 /// Game in setup phase — ready to start.
-#[derive(Debug, Clone, Default, Elicit)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameSetup {
     shoe: Shoe,
 }
@@ -54,7 +55,7 @@ impl GameSetup {
 // ─────────────────────────────────────────────────────────────
 
 /// Game in betting phase — player places bet.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameBetting {
     shoe: Shoe,
     bankroll: u64,
@@ -181,7 +182,7 @@ impl GameBetting {
 // ─────────────────────────────────────────────────────────────
 
 /// Game in player turn phase — player takes actions.
-#[derive(Clone, Elicit)]
+#[derive(Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GamePlayerTurn {
     pub(crate) shoe: Shoe,
     pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
@@ -192,6 +193,7 @@ pub struct GamePlayerTurn {
     /// Financial ledger proving the bet was deducted exactly once.
     pub(crate) ledger: BankrollLedger,
     /// Proof token that the bet has been debited; consumed at settlement.
+    #[serde(skip, default = "elicitation::contracts::Established::assert")]
     pub(crate) bet_deducted: Established<BetDeducted>,
 }
 
@@ -281,7 +283,7 @@ impl GamePlayerTurn {
 // ─────────────────────────────────────────────────────────────
 
 /// Game in dealer turn phase — dealer plays by fixed rules.
-#[derive(Clone, Elicit)]
+#[derive(Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameDealerTurn {
     pub(crate) shoe: Shoe,
     pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
@@ -291,6 +293,7 @@ pub struct GameDealerTurn {
     /// Financial ledger threading the BetDeducted proof to settlement.
     pub(crate) ledger: BankrollLedger,
     /// Proof token: bet was deducted; required by BankrollLedger::settle.
+    #[serde(skip, default = "elicitation::contracts::Established::assert")]
     pub(crate) bet_deducted: Established<BetDeducted>,
 }
 
@@ -377,7 +380,7 @@ impl GameDealerTurn {
 // ─────────────────────────────────────────────────────────────
 
 /// Game finished — outcomes determined.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameFinished {
     player_hands: [Hand; MAX_PLAYER_HANDS],
     num_hands: usize,
@@ -419,7 +422,7 @@ impl GameFinished {
 // ─────────────────────────────────────────────────────────────
 
 /// Result of a game transition — carries the game to the next phase.
-#[derive(Debug, Elicit)]
+#[derive(Debug, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub enum GameResult {
     /// Game in player turn phase.
     PlayerTurn(GamePlayerTurn),
@@ -427,5 +430,9 @@ pub enum GameResult {
     DealerTurn(GameDealerTurn),
     /// Game finished — carries proof that [`BankrollLedger::settle`] ran
     /// exactly once with a valid [`BetDeducted`] token.
-    Finished(GameFinished, Established<PayoutSettled>),
+    Finished(
+        GameFinished,
+        #[serde(skip, default = "elicitation::contracts::Established::assert")]
+        Established<PayoutSettled>,
+    ),
 }

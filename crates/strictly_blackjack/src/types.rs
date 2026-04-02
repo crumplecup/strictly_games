@@ -4,7 +4,19 @@ use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 
 /// Outcome of a blackjack hand.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Elicit,
+    schemars::JsonSchema,
+)]
 pub enum Outcome {
     /// Player won (hand closer to 21 than dealer).
     Win,

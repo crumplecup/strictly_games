@@ -24,6 +24,7 @@
 use elicitation::Elicit;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::Established;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::CrapsError;
@@ -36,7 +37,7 @@ use crate::payout::BetOutcome;
 ///
 /// Established exclusively by [`CrapsLedger::debit`].
 /// Required by [`CrapsLedger::settle_round`].
-#[derive(Debug, Clone, Elicit, elicitation::Prop)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, elicitation::Prop, schemars::JsonSchema)]
 pub struct BetDeducted;
 impl VerifiedWorkflow for BetDeducted {}
 
@@ -45,7 +46,7 @@ impl VerifiedWorkflow for BetDeducted {}
 /// Established exclusively by [`CrapsLedger::settle_round`].
 /// Consuming `Established<BetDeducted>` guarantees settlement happened
 /// exactly once.
-#[derive(Debug, Clone, Elicit, elicitation::Prop)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, elicitation::Prop, schemars::JsonSchema)]
 pub struct RoundSettled;
 impl VerifiedWorkflow for RoundSettled {}
 
@@ -55,7 +56,7 @@ impl VerifiedWorkflow for RoundSettled {}
 ///
 /// Tracks cumulative deductions for multiple bets and settles them all
 /// at round end.
-#[derive(Debug, Clone, Elicit)]
+#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct CrapsLedger {
     /// Original bankroll before any bets this round.
     original_bankroll: u64,

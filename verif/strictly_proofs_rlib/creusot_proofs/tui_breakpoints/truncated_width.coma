@@ -1,0 +1,29 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 42 0 42 74 *)
+
+let%span stui_breakpoints = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 43 19 43 20
+let%span stui_breakpoints'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 44 8 44 9
+
+use creusot.int.UInt64
+use creusot.prelude.Any
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec truncated_width
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 42 0 42 74]
+  (input_width: UInt64.t) (max_cols: UInt64.t) (return (x: UInt64.t)) = (! bb0
+  [ bb0 = s0
+    [ s0 = [ &_3 <- max_cols = ([%#stui_breakpoints] (0: UInt64.t)) ] s1
+    | s1 = any [ br0 -> {_3 = false} (! bb2) | br1 -> {_3} (! bb1) ] ]
+  | bb1 = s0 [ s0 = [ &_ret <- [%#stui_breakpoints'0] (0: UInt64.t) ] s1 | s1 = return {_ret} ]
+  | bb2 = s0
+    [ s0 = [ &_5 <- UInt64.le input_width max_cols ] s1
+    | s1 = any [ br0 -> {_5 = false} (! bb4) | br1 -> {_5} (! bb3) ] ]
+  | bb3 = s0 [ s0 = [ &_ret <- input_width ] s1 | s1 = return {_ret} ]
+  | bb4 = s0 [ s0 = [ &_ret <- max_cols ] s1 | s1 = return {_ret} ] ]
+  [ & _ret: UInt64.t = Any.any_l ()
+  | & input_width: UInt64.t = input_width
+  | & max_cols: UInt64.t = max_cols
+  | & _3: bool = Any.any_l ()
+  | & _5: bool = Any.any_l () ]) [ return (result: UInt64.t) -> (! return {result}) ]

@@ -206,8 +206,8 @@ fn breakpoint_minimum_blackjack_layout() {
 #[cfg(kani)]
 #[kani::proof]
 fn breakpoint_small_layout() {
-    const COLS: u16 = BP_SMALL.0;  // 100
-    const ROWS: u16 = BP_SMALL.1;  // 30
+    const COLS: u16 = BP_SMALL.0; // 100
+    const ROWS: u16 = BP_SMALL.1; // 30
 
     // Craps has 4 nodes with widest label "PointPhase" = 10 chars.
     const MAX_LABEL: u16 = 10;
@@ -251,7 +251,10 @@ fn breakpoint_medium_layout() {
     let slot_w = GRAPH_COLS / NUM_NODES; // 13 per node
     let inner = slot_w.saturating_sub(2); // 11 — inner width after border
     let effective_label: u16 = MAX_LABEL.min(inner); // 10 ≤ 11 — fits!
-    assert!(effective_label <= inner, "Label fits in 45% graph column at 120 cols");
+    assert!(
+        effective_label <= inner,
+        "Label fits in 45% graph column at 120 cols"
+    );
 
     // Row budget: 40 rows total, 3 node + 2 arc + 1 connector + 5 callout = 11
     const USED: u16 = 3 + 2 + 1 + 5;
@@ -268,8 +271,8 @@ fn breakpoint_medium_layout() {
 #[cfg(kani)]
 #[kani::proof]
 fn breakpoint_large_layout() {
-    const COLS: u16 = BP_LARGE.0;  // 160
-    const ROWS: u16 = BP_LARGE.1;  // 50
+    const COLS: u16 = BP_LARGE.0; // 160
+    const ROWS: u16 = BP_LARGE.1; // 50
 
     // At 160 cols, the 45% graph column = 72 cols.
     // "PlayerTurn" (10) + 4 = 14 per node; 4 nodes + 3 gaps = 59 ≤ 72. ✓
@@ -277,7 +280,10 @@ fn breakpoint_large_layout() {
     const MAX_LABEL: u16 = 10;
     const BOX_W: u16 = MAX_LABEL + 4;
     const MIN_TOTAL_W: u16 = BOX_W * 4 + 3;
-    assert!(MIN_TOTAL_W <= GRAPH_COLS, "Node row fits in 45% at 160 cols");
+    assert!(
+        MIN_TOTAL_W <= GRAPH_COLS,
+        "Node row fits in 45% at 160 cols"
+    );
 
     // Row budget: 50 rows total.
     const USED: u16 = 3 + 2 + 1 + 5 + 10; // node + arc + conn + callout + prompt
@@ -384,11 +390,17 @@ fn symbolic_must_pass_range_safe() {
 
     // Label fits after truncation (worst case: 10 chars, truncated to inner).
     let effective_label = 10u16.min(inner);
-    assert!(effective_label <= inner, "Label fits after truncation in all must-pass sizes");
+    assert!(
+        effective_label <= inner,
+        "Label fits after truncation in all must-pass sizes"
+    );
 
     // Row safety: node row + prompt pane must fit in rows.
     const NODE_ROW_H: u16 = 3;
     const PROMPT_H: u16 = 10;
     // This holds for rows ≥ 24 (minimum breakpoint has 24 rows, 3+10=13 ≤ 24).
-    assert!(NODE_ROW_H + PROMPT_H <= rows, "Node row and prompt fit at all must-pass sizes");
+    assert!(
+        NODE_ROW_H + PROMPT_H <= rows,
+        "Node row and prompt fit at all must-pass sizes"
+    );
 }
