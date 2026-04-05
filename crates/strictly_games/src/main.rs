@@ -118,10 +118,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     let game_sessions = SessionManager::new();
 
     // Configure for STATEFUL mode (required for elicitation loops)
-    let config = StreamableHttpServerConfig {
-        stateful_mode: true, // Keep connections alive for bidirectional communication
-        ..Default::default()
-    };
+    let config = StreamableHttpServerConfig::default().with_stateful_mode(true);
     debug!(?config, "HTTP service configuration");
 
     // Clone sessions for different uses (cheap - clones internal Arc)

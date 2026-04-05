@@ -1081,7 +1081,9 @@ dependencies = [
 
 [[package]]
 name = "elicit_accesskit"
-version = "0.9.1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "380934e3597332591b043394152075ef21b34a356b5efa9c1c8dd324391be4da"
 dependencies = [
  "accesskit",
  "elicitation",
@@ -1098,10 +1100,12 @@ dependencies = [
 
 [[package]]
 name = "elicit_ratatui"
-version = "0.9.1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "998ac7780c21f1f0dc83691058928d6e1ecc40b63103eca40945ec61fc8d88d7"
 dependencies = [
  "accesskit",
- "crossterm 0.28.1",
+ "crossterm 0.29.0",
  "elicit_ui",
  "elicitation",
  "elicitation_derive",
@@ -1119,7 +1123,9 @@ dependencies = [
 
 [[package]]
 name = "elicit_ui"
-version = "0.9.1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9567e20ad3f0c167554459cf2e2e3d4080750254c5bdce9783bed00848405bd5"
 dependencies = [
  "accesskit",
  "derive-getters",
@@ -1141,7 +1147,9 @@ dependencies = [
 
 [[package]]
 name = "elicitation"
-version = "0.9.1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9c1da0691d850391dba4e4e428c08bc816e89f0f03d5e750fa3d1cd17c4d1dc"
 dependencies = [
  "accesskit",
  "anodized",
@@ -1186,7 +1194,9 @@ dependencies = [
 
 [[package]]
 name = "elicitation_derive"
-version = "0.9.1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "604d38cdb9b990476e45f3c10e8ff4b629050be279c15bfd4997b9e46158d9f8"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1197,7 +1207,9 @@ dependencies = [
 
 [[package]]
 name = "elicitation_macros"
-version = "0.9.1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c93435e8874a78af0e018cfa873f1f6fa2a6d43720cfd3337c11c18065cf41c1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1206,7 +1218,9 @@ dependencies = [
 
 [[package]]
 name = "elicitation_rand"
-version = "0.9.1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "529f10a0921a2b0d1625ee440e43734874f5b95eeda363c142fca4c909ef9a64"
 dependencies = [
  "elicitation",
  "kani-verifier",
@@ -3438,9 +3452,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba6b9d2f0efe2258b23767f1f9e0054cfbcac9c2d6f81a031214143096d7864f"
+checksum = "2231b2c085b371c01bc90c0e6c1cab8834711b6394533375bdbf870b0166d419"
 dependencies = [
  "async-trait",
  "base64",
@@ -3471,9 +3485,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp-macros"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab9d95d7ed26ad8306352b0d5f05b593222b272790564589790d210aa15caa9e"
+checksum = "36ea0e100fadf81be85d7ff70f86cd805c7572601d4ab2946207f36540854b43"
 dependencies = [
  "darling 0.23.0",
  "proc-macro2",
