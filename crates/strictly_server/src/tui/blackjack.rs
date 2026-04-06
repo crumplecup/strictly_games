@@ -100,7 +100,21 @@ where
     // ── Spawn server ──────────────────────────────────────────────────────────
     let server = spawn_server(port).await?;
 
-    // ── Spawn one agent subprocess per seated agent ───────────────────────────
+    // ── Connect human MCP session FIRST to initialise the shared table ────────
+    let human = HumanBlackjackClient::connect(&server_url).await?;
+    human
+        .call_tool(
+            "blackjack_deal",
+            serde_json::json!({
+                "initial_bankroll": initial_bankroll,
+                "session_id": HUMAN_SESSION,
+                "num_seats": num_seats,
+                "player_name": player_name
+            }),
+        )
+        .await?;
+
+    // ── Spawn one agent subprocess per seated agent (after table is init'd) ───
     let mut agent_children = Vec::with_capacity(agent_slots.len());
     let mut agent_session_ids: Vec<String> = Vec::with_capacity(agent_slots.len());
 
@@ -127,20 +141,6 @@ where
     }
 
     let _guards = ProcessGuards::many(server, agent_children);
-
-    // ── Connect human MCP session ─────────────────────────────────────────────
-    let human = HumanBlackjackClient::connect(&server_url).await?;
-    human
-        .call_tool(
-            "blackjack_deal",
-            serde_json::json!({
-                "initial_bankroll": initial_bankroll,
-                "session_id": HUMAN_SESSION,
-                "num_seats": num_seats,
-                "player_name": player_name
-            }),
-        )
-        .await?;
 
     // ── Observers ─────────────────────────────────────────────────────────────
     let human_observer = BlackjackObserver::new(server_url.clone(), HUMAN_SESSION.to_string());

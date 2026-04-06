@@ -484,7 +484,11 @@ async fn place_bet_and_transition(
         let seat_registries: Vec<DynamicToolRegistry> =
             seats.iter().map(|s| s.registry.clone()).collect();
         let seat_session_ids: Vec<String> = seats.iter().map(|s| s.session_id.clone()).collect();
-        let seat_bankrolls: Vec<u64> = seats.iter().map(|s| s.bankroll).collect();
+        // Post-bet bankrolls (after debit): bankroll - bet amount.
+        let seat_bankrolls: Vec<u64> = seats
+            .iter()
+            .map(|s| s.bankroll.saturating_sub(s.bet.unwrap_or(0)))
+            .collect();
 
         let round = MultiRound::deal_with_shoe(seat_bets, shoe).map_err(|e| {
             ErrorData::internal_error(format!("deal failed: {e}"), None)
