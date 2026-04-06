@@ -4,7 +4,7 @@ use crate::games::blackjack::session::BlackjackSession;
 use crate::games::tictactoe::{AnyGame, GameSetup, Mark, Position};
 use elicitation::DynamicToolRegistry;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use strictly_blackjack::{MultiRound, SeatResult};
 use tokio::sync::watch;
@@ -374,12 +374,13 @@ pub enum SharedTablePhase {
         /// Total seats expected before dealing.
         num_seats: usize,
     },
-    /// All bets placed; players take turns in seat order.
+    /// All bets placed; all players act concurrently on their hands.
     PlayerTurns {
         /// Active multi-player round (shared shoe + all seat hands).
         round: MultiRound,
-        /// Which seat index is currently acting (0-based).
-        current_seat: usize,
+        /// Seats that have finished their turn (stand/bust/blackjack/surrender).
+        /// When this set reaches `seat_registries.len()` the dealer plays.
+        seats_done: HashSet<usize>,
         /// Cloned registries in seat order (for cross-seat notifications).
         seat_registries: Vec<DynamicToolRegistry>,
         /// Session IDs in seat order.
@@ -412,9 +413,10 @@ impl std::fmt::Debug for SharedTablePhase {
                 .field("num_seats", num_seats)
                 .field("seats_joined", &seats.len())
                 .finish(),
-            Self::PlayerTurns { current_seat, seat_session_ids, .. } => f
+            Self::PlayerTurns { seats_done, seat_session_ids, seat_registries, .. } => f
                 .debug_struct("PlayerTurns")
-                .field("current_seat", current_seat)
+                .field("seats_done", &seats_done.len())
+                .field("seats_total", &seat_registries.len())
                 .field("session_ids", seat_session_ids)
                 .finish(),
             Self::Finished { ready_count, num_seats, seat_session_ids, .. } => f
@@ -493,40 +495,37 @@ impl SharedTableSeatView {
             }
             SharedTablePhase::PlayerTurns {
                 round,
-                current_seat,
+                seats_done,
                 seat_bankrolls,
                 ..
             } => {
                 let bankroll = seat_bankrolls.get(seat_index).copied().unwrap_or(0);
-                if *current_seat == seat_index {
-                    let hand = &round.seats[seat_index].hand;
-                    let dealer_up = &round.dealer_hand.cards()[0];
+                let seat = &round.seats[seat_index];
+                let dealer_up = &round.dealer_hand.cards()[0];
+                let done_count = seats_done.len();
+                let total = seat_bankrolls.len();
+                if seats_done.contains(&seat_index) {
+                    Self {
+                        phase: "waiting".to_string(),
+                        bankroll,
+                        description: format!(
+                            "Your hand: {} — done\nWaiting for {}/{} players to finish...",
+                            seat.hand.display(),
+                            done_count,
+                            total
+                        ),
+                        is_terminal: false,
+                    }
+                } else {
                     Self {
                         phase: "player_turn".to_string(),
                         bankroll,
                         description: format!(
                             "Your hand: {} (value: {})\nDealer shows: {}\n",
-                            hand.display(),
-                            hand.value().best(),
+                            seat.hand.display(),
+                            seat.hand.value().best(),
                             dealer_up
                         ),
-                        is_terminal: false,
-                    }
-                } else {
-                    let seat = &round.seats[seat_index];
-                    let hand_desc = if seat.is_done() {
-                        format!("Your hand: {} — done", seat.hand.display())
-                    } else {
-                        format!(
-                            "Your hand: {} (waiting for seat {} to act)",
-                            seat.hand.display(),
-                            current_seat + 1
-                        )
-                    };
-                    Self {
-                        phase: "waiting".to_string(),
-                        bankroll,
-                        description: hand_desc,
                         is_terminal: false,
                     }
                 }

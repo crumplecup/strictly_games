@@ -12,6 +12,7 @@
 //! | [`NextHandFactory`] | [`NextContext`] | `next__deal_again`, `next__cash_out` | → Betting / Idle |
 //! | [`ClearFactory`] | `()` | _(none)_ | Clears a prefix |
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use elicitation::{ContextualFactory, DynamicToolDescriptor, DynamicToolRegistry};
@@ -521,6 +522,19 @@ async fn place_bet_and_transition(
                 num_seats: *num_seats,
             };
         } else {
+            // Register action tools for every seat simultaneously.
+            let player_ctx = PlayerActionContext {
+                can_double: false,
+                can_split: false,
+                can_surrender: false,
+            };
+            for (idx, reg) in seat_registries.iter().enumerate() {
+                let hand = &round.seats[idx].hand;
+                let _ = (hand.display(), hand.value().best()); // touch to assert accessible
+                clear_prefix(reg, "bet");
+                register_action_tools(reg, player_ctx, seat_bankrolls[idx], table.clone(), idx);
+            }
+
             seat0_bankroll = seat_bankrolls.first().copied().unwrap_or(0);
             let hand = &round.seats[0].hand;
             seat0_desc = format!(
@@ -530,25 +544,11 @@ async fn place_bet_and_transition(
                 &round.dealer_hand.cards()[0]
             );
 
-            // Register action tools for seat 0; clear bet for all others.
-            let player_ctx = PlayerActionContext {
-                can_double: false,
-                can_split: false,
-                can_surrender: false,
-            };
-            let s0_reg = &seat_registries[0];
-            clear_prefix(s0_reg, "bet");
-            register_action_tools(s0_reg, player_ctx, seat_bankrolls[0], table.clone(), 0);
-
-            for reg in seat_registries.iter().skip(1) {
-                clear_prefix(reg, "bet");
-            }
-
             registries_to_notify = seat_registries.clone();
 
             guard.phase = SharedTablePhase::PlayerTurns {
                 round,
-                current_seat: 0,
+                seats_done: HashSet::new(),
                 seat_registries,
                 seat_session_ids,
                 seat_bankrolls,
@@ -586,7 +586,7 @@ async fn take_action_and_transition(
         let mut guard = table.lock().await;
         let SharedTablePhase::PlayerTurns {
             round,
-            current_seat,
+            seats_done,
             seat_registries,
             seat_session_ids: _,
             seat_bankrolls,
@@ -598,9 +598,9 @@ async fn take_action_and_transition(
             ));
         };
 
-        if *current_seat != seat_index {
+        if seats_done.contains(&seat_index) {
             return Err(ErrorData::invalid_params(
-                format!("Not your turn — seat {} is acting", current_seat),
+                "Your turn is already complete",
                 None,
             ));
         }
@@ -626,7 +626,7 @@ async fn take_action_and_transition(
         );
 
         if !round.seats[seat_index].is_done() {
-            // Seat still playing — re-register action tools.
+            // Seat still playing — refresh action tools.
             let player_ctx = PlayerActionContext {
                 can_double: false,
                 can_split: false,
@@ -637,41 +637,24 @@ async fn take_action_and_transition(
             registries_to_notify = vec![dynamic.clone()];
             result_text = hand_desc;
         } else {
-            // Seat done — advance to next undone seat.
-            let num_seats = seat_registries.len();
-            let next = (*current_seat + 1..num_seats)
-                .find(|&i| !round.seats[i].is_done());
-
+            // Seat finished — mark done and remove their action tools.
+            seats_done.insert(seat_index);
             clear_prefix(&dynamic, "blackjack");
 
-            if let Some(next_seat) = next {
-                // Another seat to act.
-                *current_seat = next_seat;
-                let player_ctx = PlayerActionContext {
-                    can_double: false,
-                    can_split: false,
-                    can_surrender: false,
-                };
-                let next_reg = &seat_registries[next_seat];
-                register_action_tools(
-                    next_reg,
-                    player_ctx,
-                    seat_bankrolls[next_seat],
-                    table.clone(),
-                    next_seat,
-                );
-                registries_to_notify = vec![dynamic.clone(), next_reg.clone()];
+            let all_done = seats_done.len() == seat_registries.len();
+
+            if !all_done {
+                let remaining = seat_registries.len() - seats_done.len();
+                registries_to_notify = vec![dynamic.clone()];
                 result_text = format!(
-                    "{hand_desc}Your turn is done. Waiting for other players...",
+                    "{hand_desc}Your turn is done. Waiting for {remaining} more player(s)...",
                 );
             } else {
-                // All player turns complete — play dealer, then settle.
-                // First play dealer (mut borrow of round inside phase).
+                // All seats done — play dealer, then settle.
                 if let SharedTablePhase::PlayerTurns { round, .. } = &mut guard.phase {
                     round.play_dealer();
                 }
 
-                // Capture dealer display before moving round.
                 let dealer_desc = if let SharedTablePhase::PlayerTurns { round, .. } = &guard.phase {
                     format!(
                         "Dealer's hand: {} ({})\n",
