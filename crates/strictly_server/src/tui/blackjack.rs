@@ -346,36 +346,12 @@ where
                         .split(*col_area)
                         .to_vec();
 
-                    // The last cell in the whole grid shares its space with the
-                    // chat pane (state on top, chat on bottom), regardless of
-                    // how many agents are present.
-                    let last_agent_idx = num_agents - 1;
-                    let last_col_idx = (last_agent_idx) / grid_rows;
-                    let last_row_idx = (last_agent_idx) % grid_rows;
-
                     for (row_idx, cell) in row_areas.iter().enumerate() {
                         let agent_idx = agents_before + row_idx;
                         if agent_idx >= num_agents { break; }
 
                         let slot = &agent_slots[agent_idx];
                         let state = &agent_states[agent_idx];
-
-                        // The last agent cell always shows state + chat.
-                        let is_last = col_idx == last_col_idx && row_idx == last_row_idx;
-                        let agent_chunks = if is_last {
-                            Layout::default()
-                                .direction(Direction::Vertical)
-                                .constraints([
-                                    Constraint::Percentage(50),
-                                    Constraint::Percentage(50),
-                                ])
-                                .split(*cell)
-                        } else {
-                            Layout::default()
-                                .direction(Direction::Vertical)
-                                .constraints([Constraint::Percentage(100)])
-                                .split(*cell)
-                        };
 
                         let agent_block = Block::default()
                             .title(format!(" {} — {} ", slot.name, state.phase))
@@ -384,33 +360,12 @@ where
                         Paragraph::new(state.description.as_str())
                             .block(agent_block)
                             .wrap(ratatui::widgets::Wrap { trim: false })
-                            .render(agent_chunks[0], f.buffer_mut());
-
-                        if is_last {
-                            // Chat pane: all agents' dialogue combined,
-                            // labelled by agent name.
-                            let messages: Vec<ChatMessage> = agent_dialogues
-                                .iter()
-                                .zip(agent_slots.iter())
-                                .flat_map(|(dialogue, s)| {
-                                    dialogue.iter().map(move |e| {
-                                        let participant = if e.role == "Agent" {
-                                            Participant::Agent(s.name.clone())
-                                        } else {
-                                            Participant::Host
-                                        };
-                                        ChatMessage::new(participant, e.text.clone())
-                                    })
-                                })
-                                .collect();
-                            let (chat_widget, _proof) = ChatWidget::new(&messages);
-                            chat_widget.render(agent_chunks[1], f.buffer_mut());
-                        }
+                            .render(*cell, f.buffer_mut());
                     }
                 }
             }
 
-            // ── Typestate graph ───────────────────────────────────────────────
+            // ── Typestate graph + chat ────────────────────────────────────────
             if show_typestate_graph && h_chunks.len() > 1 {
                 let ts_area = h_chunks[1];
                 let active_idx = blackjack_active(&human_state.phase);
@@ -419,8 +374,38 @@ where
                         render_resize_prompt(f, &e);
                         elicitation::contracts::Established::assert()
                     });
-                TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &event_log)
-                    .render(ts_area, f.buffer_mut());
+
+                // Build the combined agent chat messages once.
+                let chat_messages: Vec<ChatMessage> = agent_dialogues
+                    .iter()
+                    .zip(agent_slots.iter())
+                    .flat_map(|(dialogue, s)| {
+                        dialogue.iter().map(move |e| {
+                            let participant = if e.role == "Agent" {
+                                Participant::Agent(s.name.clone())
+                            } else {
+                                Participant::Host
+                            };
+                            ChatMessage::new(participant, e.text.clone())
+                        })
+                    })
+                    .collect();
+
+                if chat_messages.is_empty() {
+                    // No agents yet — give the whole column to the graph.
+                    TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &event_log)
+                        .render(ts_area, f.buffer_mut());
+                } else {
+                    // Split the right column: typestate graph on top, chat below.
+                    let ts_chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
+                        .split(ts_area);
+                    TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &event_log)
+                        .render(ts_chunks[0], f.buffer_mut());
+                    let (chat_widget, _chat_proof) = ChatWidget::new(&chat_messages);
+                    chat_widget.render(ts_chunks[1], f.buffer_mut());
+                }
             }
         })?;
 
