@@ -59,7 +59,7 @@ pub use llm_client::{LlmClient, LlmConfig, LlmError, LlmProvider, ToolSpec};
 pub use server::GameServer;
 
 // Public API exports - Session
-pub use session::{DialogueEntry, ExploreStats, GameSession, SessionManager};
+pub use session::{DialogueEntry, ExploreStats, GameSession, SessionManager, SharedTable, SharedTablePhase, SharedTableSeatView, SharedTableState, SeatEntry, new_shared_table};
 
 // Public API exports - TUI
 pub use tui::{run as tui_run, run_blackjack_mcp_session, run_game_session};

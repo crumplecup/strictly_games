@@ -213,12 +213,13 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 let sessions = blackjack_sessions.clone();
                 move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                     use axum::Json;
-                    use strictly_server::BlackjackStateView;
-                    if let Some(bj) = sessions.get_blackjack_session(&session_id) {
-                        let guard = bj.lock().await;
-                        Json(BlackjackStateView::from_phase(&guard))
+                    use strictly_server::SharedTableSeatView;
+                    if let Some(table) = sessions.get_shared_table() {
+                        let seat_index = sessions.get_seat_index(&session_id).unwrap_or(0);
+                        let guard = table.lock().await;
+                        Json(SharedTableSeatView::from_table(&guard, seat_index))
                     } else {
-                        Json(BlackjackStateView {
+                        Json(SharedTableSeatView {
                             phase: "idle".to_string(),
                             bankroll: 0,
                             description: "No active blackjack session.".to_string(),

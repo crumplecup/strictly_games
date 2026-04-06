@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use strictly_blackjack::{GameBetting, GameFinished, GamePlayerTurn};
+use strictly_blackjack::{GameBetting, GamePlayerTurn};
 use tokio::sync::Mutex;
 
 /// The current phase of a single agent's blackjack session.
@@ -26,11 +26,6 @@ pub enum BlackjackPhase {
 
 /// Shared, async-safe handle to the phase state for a single connection.
 pub type BlackjackSession = Arc<Mutex<BlackjackPhase>>;
-
-/// Create a new session in the `Idle` phase.
-pub fn new_session() -> BlackjackSession {
-    Arc::new(Mutex::new(BlackjackPhase::Idle))
-}
 
 /// Serializable snapshot of the current blackjack phase for REST observers.
 ///
@@ -96,36 +91,4 @@ pub fn describe_player_turn(game: &GamePlayerTurn) -> String {
         hand.value().best(),
         dealer_card
     )
-}
-
-/// Format a finished-game state for the agent.
-pub fn describe_finished(game: &GameFinished) -> String {
-    let mut s = String::new();
-    s.push_str(&format!(
-        "Dealer's hand: {}\n",
-        game.dealer_hand().display()
-    ));
-    for (i, (hand, outcome)) in game
-        .player_hands()
-        .iter()
-        .zip(game.outcomes().iter())
-        .enumerate()
-    {
-        s.push_str(&format!(
-            "Hand {}: {} — {}\n",
-            i + 1,
-            hand.display(),
-            outcome
-        ));
-        let payout = outcome.calculate_payout(game.bets()[i]);
-        if payout > 0 {
-            s.push_str(&format!("Won: ${payout}\n"));
-        } else if payout < 0 {
-            s.push_str(&format!("Lost: ${}\n", payout.unsigned_abs()));
-        } else {
-            s.push_str("Push\n");
-        }
-    }
-    s.push_str(&format!("💰 Bankroll: ${}\n", game.bankroll()));
-    s
 }

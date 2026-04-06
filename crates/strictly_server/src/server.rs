@@ -1,8 +1,7 @@
 //! MCP server setup and configuration.
 
 use crate::games::blackjack::{
-    BetConstraints, BlackjackPhase, BlackjackSession, DEFAULT_PRESETS, new_session,
-    register_bet_tools,
+    BetConstraints, DEFAULT_PRESETS, register_bet_tools,
 };
 use crate::games::tictactoe::{TttGameContext, register_await_turn_tool, register_move_tools};
 use crate::session::{DialogueEntry, PlayerType, SessionManager};
@@ -18,7 +17,7 @@ use rmcp::service::{Peer, RequestContext, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use strictly_blackjack::GameSetup;
+use std::sync::{Arc, OnceLock};
 use tracing::{debug, error, info, instrument, warn};
 
 /// Request for registering a player.
@@ -56,14 +55,26 @@ pub struct PlayGameRequest {
 /// Request for playing blackjack with elicitation.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PlayBlackjackRequest {
-    /// Session ID for state observation (e.g. `"tui_session"`).
+    /// Session ID for state observation (e.g. `"human_bj"`).
     ///
-    /// When provided, the live blackjack phase Arc is registered in the
-    /// `SessionManager` so the TUI can poll `/api/sessions/{id}/blackjack_state`.
+    /// When provided, the session manager tracks this seat's index so the TUI
+    /// can poll `/api/sessions/{id}/blackjack_state`.
     #[serde(default)]
     pub session_id: Option<String>,
     /// Initial bankroll for the player.
     pub initial_bankroll: u64,
+    /// Total number of seats at the table (first caller sets this; others ignored).
+    ///
+    /// Defaults to 1 if not supplied.
+    #[serde(default = "default_num_seats")]
+    pub num_seats: u64,
+    /// Display name for this player (shown in TUI panel title).
+    #[serde(default)]
+    pub player_name: Option<String>,
+}
+
+fn default_num_seats() -> u64 {
+    1
 }
 
 /// Request for getting board state.
@@ -86,8 +97,10 @@ pub struct GameServer {
     tool_router: ToolRouter<Self>,
     /// Dynamic tool registry — holds betting, action, and ttt move tools.
     dynamic: DynamicToolRegistry,
-    /// Per-connection blackjack game state.
-    blackjack_phase: BlackjackSession,
+    /// Seat index for this connection's blackjack seat.
+    ///
+    /// Set once when `blackjack_deal` is called; never changes after that.
+    seat_index: Arc<OnceLock<usize>>,
     /// Type-spec plugin — exposes `type_spec__describe_type` and
     /// `type_spec__explore_type` so agents can query game-type contracts.
     type_spec: TypeSpecPlugin,
@@ -110,7 +123,7 @@ impl GameServer {
             sessions,
             tool_router: Self::tool_router(),
             dynamic: DynamicToolRegistry::new(),
-            blackjack_phase: new_session(),
+            seat_index: Arc::new(OnceLock::new()),
             type_spec: TypeSpecPlugin::new(),
         }
     }
@@ -470,14 +483,18 @@ impl GameServer {
         }
     }
 
-    /// Start a blackjack session with the given initial bankroll.
+    /// Join the shared blackjack table and register bet tools.
     ///
-    /// Registers bet tools into the dynamic registry so the agent can place
-    /// a bet immediately after calling this tool.  Sends
-    /// `notify_tool_list_changed` so the agent refreshes its tool list.
-    #[instrument(skip(self, peer, req), fields(initial_bankroll = req.initial_bankroll, session_id = ?req.session_id))]
+    /// The first caller specifies `num_seats`; subsequent callers join the
+    /// same table regardless of that parameter.  Fires
+    /// `notify_tool_list_changed` so the agent can place a bet immediately.
+    #[instrument(skip(self, peer, req), fields(
+        initial_bankroll = req.initial_bankroll,
+        session_id = ?req.session_id,
+        num_seats = req.num_seats,
+    ))]
     #[tool(
-        description = "Start a new blackjack session. After calling this, use the `bet__place` or `bet__preset_N` tools to place your bet."
+        description = "Join the blackjack table. After calling this, use the `bet__place` or `bet__preset_N` tools to place your bet."
     )]
     pub async fn blackjack_deal(
         &self,
@@ -485,7 +502,8 @@ impl GameServer {
         Parameters(req): Parameters<PlayBlackjackRequest>,
     ) -> Result<CallToolResult, McpError> {
         let bankroll = req.initial_bankroll;
-        info!(bankroll, "Starting blackjack session");
+        let num_seats = req.num_seats.max(1) as usize;
+        info!(bankroll, num_seats, "Joining blackjack table");
 
         if bankroll == 0 {
             return Err(McpError::invalid_params(
@@ -494,26 +512,51 @@ impl GameServer {
             ));
         }
 
-        // Wire peer so `notify_tool_list_changed` can fire.
+        // Wire peer so `notify_tool_list_changed` can fire for this connection.
         self.dynamic.set_peer(peer);
 
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(42);
-        let game = GameSetup::new(seed).start_betting(bankroll);
+        // Initialise (or get) the shared table.
+        let table = self.sessions.init_shared_table(num_seats);
 
-        {
-            let mut guard = self.blackjack_phase.lock().await;
-            *guard = BlackjackPhase::Betting(Box::new(game));
-        }
+        // Join the table — add our seat entry.
+        let seat_index = {
+            let mut guard = table.lock().await;
+            match &mut guard.phase {
+                crate::session::SharedTablePhase::Betting { seats, .. } => {
+                    let idx = seats.len();
+                    let session_id = req
+                        .session_id
+                        .clone()
+                        .unwrap_or_else(|| format!("seat_{idx}"));
+                    seats.push(crate::session::SeatEntry {
+                        session_id: session_id.clone(),
+                        bankroll,
+                        bet: None,
+                        registry: self.dynamic.clone(),
+                    });
+                    info!(idx, session_id, "Seat joined table");
+                    idx
+                }
+                _ => {
+                    warn!("blackjack_deal called but table is not in Betting phase");
+                    return Err(McpError::invalid_params(
+                        "Table is already in progress. Wait for the next hand.",
+                        None,
+                    ));
+                }
+            }
+        };
 
-        // Register the live phase Arc in SessionManager for TUI observation.
-        if let Some(session_id) = &req.session_id {
+        // Record seat index on this GameServer instance (idempotent via OnceLock).
+        let _ = self.seat_index.set(seat_index);
+
+        // Record seat index in SessionManager so REST endpoint can look it up.
+        if let Some(ref session_id) = req.session_id {
             self.sessions
-                .store_blackjack_session(session_id.clone(), self.blackjack_phase.clone());
+                .register_seat_index(session_id.clone(), seat_index);
         }
 
+        // Register bet tools for this seat.
         register_bet_tools(
             &self.dynamic,
             BetConstraints {
@@ -521,12 +564,19 @@ impl GameServer {
                 max: bankroll,
                 presets: DEFAULT_PRESETS,
             },
-            self.blackjack_phase.clone(),
+            table,
+            seat_index,
         );
         self.dynamic.notify_tool_list_changed().await;
 
+        let player_name = req
+            .player_name
+            .as_deref()
+            .unwrap_or("Player")
+            .to_string();
         let prologue = format!(
-            "🃏 Blackjack — Session Started\n\
+            "🃏 Blackjack — Seat {seat}\n\
+             Player: {player_name}\n\
              Bankroll: ${bankroll} chips\n\n\
              Rules: Beat the dealer by getting closer to 21 without going over. \
              Face cards are worth 10; Aces are 1 or 11. \
@@ -534,13 +584,14 @@ impl GameServer {
              Place your bet to begin: use `bet__place` (custom amount 1–{bankroll}) \
              or a `bet__preset_N` shortcut. \
              View tools (hand, dealer card, shoe, bankroll) become available \
-             once cards are dealt."
+             once cards are dealt.",
+            seat = seat_index + 1,
         );
 
         if let Some(session_id) = &req.session_id {
             self.sessions.push_dialogue(
                 session_id,
-                crate::session::DialogueEntry::server(prologue.clone()),
+                DialogueEntry::server(prologue.clone()),
             );
         }
 

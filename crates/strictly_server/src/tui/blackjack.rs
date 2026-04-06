@@ -51,7 +51,7 @@ pub async fn run_blackjack_mcp_session<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
-    use crate::games::blackjack::BlackjackStateView;
+    use crate::session::SharedTableSeatView;
     use crate::session::DialogueEntry;
     use crate::tui::chat_widget::ChatWidget;
     use crate::tui::rest_client::{BlackjackObserver, BlackjackTool, HumanBlackjackClient};
@@ -94,6 +94,7 @@ where
         "Starting blackjack MCP session"
     );
 
+    let num_seats = players.len() as u64;
     let server_url = format!("http://localhost:{}", port);
 
     // ── Spawn server ──────────────────────────────────────────────────────────
@@ -134,7 +135,9 @@ where
             "blackjack_deal",
             serde_json::json!({
                 "initial_bankroll": initial_bankroll,
-                "session_id": HUMAN_SESSION
+                "session_id": HUMAN_SESSION,
+                "num_seats": num_seats,
+                "player_name": player_name
             }),
         )
         .await?;
@@ -156,7 +159,7 @@ where
 
     loop {
         // ── Poll state ────────────────────────────────────────────────────────
-        let idle_state = BlackjackStateView {
+        let idle_state = SharedTableSeatView {
             phase: "idle".to_string(),
             bankroll: 0,
             description: "Connecting...".to_string(),
@@ -168,7 +171,7 @@ where
             .await
             .unwrap_or_else(|_| idle_state.clone());
 
-        let mut agent_states: Vec<BlackjackStateView> = Vec::with_capacity(agent_observers.len());
+        let mut agent_states: Vec<SharedTableSeatView> = Vec::with_capacity(agent_observers.len());
         for (i, obs) in agent_observers.iter().enumerate() {
             let state = obs
                 .get_blackjack_state()

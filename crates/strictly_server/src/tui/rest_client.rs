@@ -334,7 +334,7 @@ impl BlackjackObserver {
 
     /// Fetches the current blackjack phase state.
     #[instrument(skip(self))]
-    pub async fn get_blackjack_state(&self) -> Result<crate::games::blackjack::BlackjackStateView> {
+    pub async fn get_blackjack_state(&self) -> Result<crate::session::SharedTableSeatView> {
         let url = format!(
             "{}/api/sessions/{}/blackjack_state",
             self.base_url, self.session_id
