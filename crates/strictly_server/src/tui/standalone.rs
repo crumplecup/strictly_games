@@ -112,13 +112,13 @@ pub async fn spawn_agent(port: u16, agent_config: PathBuf, mode: GameMode) -> Re
         .arg("--config")
         .arg(agent_config)
         .arg("--server-url")
-        .arg(&server_url)
-        .arg("--test-session")
-        .arg("tui_session");
+        .arg(&server_url);
 
     match mode {
         GameMode::TicTacToe => {
-            cmd.arg("--test-play");
+            cmd.arg("--test-play")
+                .arg("--test-session")
+                .arg("tui_session");
         }
         GameMode::Blackjack {
             bankroll,

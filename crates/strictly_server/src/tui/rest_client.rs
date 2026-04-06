@@ -380,6 +380,32 @@ pub struct BlackjackTool {
     pub description: String,
 }
 
+/// Extracts JSON from a Streamable HTTP MCP response body.
+///
+/// The server may respond with raw JSON or with an SSE-wrapped body like:
+/// `data: {"jsonrpc":"2.0","id":1,"result":{...}}\n\n`.
+/// This strips the SSE framing and returns the first parseable JSON object.
+fn parse_mcp_response(body: &str) -> Result<serde_json::Value> {
+    // Try direct JSON first.
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+        return Ok(v);
+    }
+    // Strip SSE framing: find the first `data: ` line and parse its content.
+    for line in body.lines() {
+        let json_str = if let Some(stripped) = line.strip_prefix("data: ") {
+            stripped.trim()
+        } else {
+            line.trim()
+        };
+        if json_str.starts_with('{')
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str)
+        {
+            return Ok(v);
+        }
+    }
+    anyhow::bail!("No parseable JSON found in MCP response: {body}")
+}
+
 /// MCP client for a human player driving blackjack via keyboard.
 ///
 /// Holds an initialized MCP session ID and sends JSON-RPC `tools/call`
@@ -513,7 +539,7 @@ impl HumanBlackjackClient {
             .await?;
 
         let parsed: serde_json::Value =
-            serde_json::from_str(&response_text).context("Failed to parse tools/list response")?;
+            parse_mcp_response(&response_text).context("Failed to parse tools/list response")?;
 
         let tools = parsed["result"]["tools"]
             .as_array()
