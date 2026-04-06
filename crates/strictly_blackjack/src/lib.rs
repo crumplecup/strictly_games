@@ -15,6 +15,7 @@
 #![warn(missing_docs)]
 
 mod action;
+mod bet_amount;
 mod card;
 mod contracts;
 pub mod error;
@@ -30,7 +31,8 @@ mod view;
 pub mod workflow;
 
 // Core types
-pub use action::{BasicAction, PlayerAction};
+pub use action::{BasicAction, PlayerAction, PlayerActionContext};
+pub use bet_amount::BetAmount;
 pub use card::{Card, Rank, Suit};
 pub use contracts::{LegalAction, NotBust, ValidAction, execute_action, validate_action};
 pub use error::ActionError;

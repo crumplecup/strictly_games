@@ -40,6 +40,20 @@ pub struct PlayerAction {
     hand_index: usize,
 }
 
+/// Runtime context describing which player actions are valid for the current hand.
+///
+/// Passed to `BlackjackActionFactory` to produce only the tools the agent may
+/// legitimately call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlayerActionContext {
+    /// Whether doubling down is valid (sufficient bankroll, first two cards).
+    pub can_double: bool,
+    /// Whether splitting is valid (pair in hand, sufficient bankroll).
+    pub can_split: bool,
+    /// Whether surrender is valid (first action only, if rule is enabled).
+    pub can_surrender: bool,
+}
+
 impl PlayerAction {
     /// Creates a new player action.
     #[instrument]

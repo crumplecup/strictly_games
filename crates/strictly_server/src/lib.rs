@@ -53,7 +53,7 @@ pub use lobby::{
 pub use profile_service::ProfileService;
 
 // Public API exports - LLM client
-pub use llm_client::{LlmClient, LlmConfig, LlmError, LlmProvider};
+pub use llm_client::{LlmClient, LlmConfig, LlmError, LlmProvider, ToolSpec};
 
 // Public API exports - Server
 pub use server::GameServer;

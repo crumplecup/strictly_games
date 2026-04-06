@@ -23,11 +23,15 @@ strictly_craps = { path = "crates/strictly_craps" }
 strictly_server = { path = "crates/strictly_server" }
 
 # Elicitation framework (local dev)
-elicitation = { version = "0.10", features = ["rand"] }
-elicitation_derive = "0.10"
-elicitation_rand = "0.10"
-elicit_ratatui = { version = "0.10", features = ["runtime"] }
-elicit_ui = "0.10"
+elicitation = { path = "../elicitation/crates/elicitation/", features = [
+  "rand",
+] }
+elicitation_derive = { path = "../elicitation/crates/elicitation_derive/" }
+elicitation_rand = { path = "../elicitation/crates/elicitation_rand/" }
+elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui/", features = [
+  "runtime",
+] }
+elicit_ui = { path = "../elicitation/crates/elicit_ui/" }
 
 # Verification
 creusot-std = { path = "/home/erik/repos/creusot/creusot-std", version = "0.10.0" }
