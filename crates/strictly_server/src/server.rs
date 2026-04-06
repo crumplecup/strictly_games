@@ -101,6 +101,9 @@ pub struct GameServer {
     ///
     /// Set once when `blackjack_deal` is called; never changes after that.
     seat_index: Arc<OnceLock<usize>>,
+    /// Session ID for this connection — set once when `blackjack_deal` or
+    /// `play_game` is called, used to log dialogue entries.
+    session_id: Arc<OnceLock<String>>,
     /// Type-spec plugin — exposes `type_spec__describe_type` and
     /// `type_spec__explore_type` so agents can query game-type contracts.
     type_spec: TypeSpecPlugin,
@@ -124,6 +127,7 @@ impl GameServer {
             tool_router: Self::tool_router(),
             dynamic: DynamicToolRegistry::new(),
             seat_index: Arc::new(OnceLock::new()),
+            session_id: Arc::new(OnceLock::new()),
             type_spec: TypeSpecPlugin::new(),
         }
     }
@@ -550,10 +554,11 @@ impl GameServer {
         // Record seat index on this GameServer instance (idempotent via OnceLock).
         let _ = self.seat_index.set(seat_index);
 
-        // Record seat index in SessionManager so REST endpoint can look it up.
-        if let Some(ref session_id) = req.session_id {
+        // Record session_id on this connection (used by call_tool dialogue logging).
+        if let Some(ref sid) = req.session_id {
+            let _ = self.session_id.set(sid.clone());
             self.sessions
-                .register_seat_index(session_id.clone(), seat_index);
+                .register_seat_index(sid.clone(), seat_index);
         }
 
         // Register bet tools for this seat.
@@ -653,7 +658,34 @@ impl ServerHandler for GameServer {
                     .await
                     .map_err(|e| McpError::internal_error(e.message, None));
             }
-            self.dynamic.call_tool(request, context).await
+
+            // Dynamic tool — log agent call and server response as dialogue.
+            let tool_name = request.name.clone();
+            if let Some(session_id) = self.session_id.get() {
+                self.sessions.push_dialogue(
+                    session_id,
+                    DialogueEntry::agent(format!("→ `{tool_name}`")),
+                );
+            }
+
+            let result = self.dynamic.call_tool(request, context).await?;
+
+            if let Some(session_id) = self.session_id.get() {
+                let response_text = result
+                    .content
+                    .iter()
+                    .filter_map(|c| c.as_text().map(|t| t.text.as_ref()))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if !response_text.is_empty() {
+                    self.sessions.push_dialogue(
+                        session_id,
+                        DialogueEntry::server(response_text),
+                    );
+                }
+            }
+
+            Ok(result)
         }
     }
 }
