@@ -1710,7 +1710,7 @@ where
         }
 
         // Right: chat.
-        let chat = ChatWidget::new(chat_messages);
+        let (chat, _chat_proof) = ChatWidget::new(chat_messages);
         chat.render(cols[2], frame.buffer_mut());
     })?;
     Ok(both(game_proof, Established::assert()))

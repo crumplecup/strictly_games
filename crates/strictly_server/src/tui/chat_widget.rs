@@ -10,10 +10,13 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget, Wrap},
 };
 use tokio::sync::mpsc;
 use tracing::{debug, instrument};
+
+use crate::tui::contracts::ChatWrapped;
+use elicitation::contracts::Established;
 
 // ─────────────────────────────────────────────────────────────
 //  Participant
@@ -54,12 +57,6 @@ impl Participant {
             Participant::Agent(_) => Color::Green,
         }
     }
-
-    /// Returns `true` if this participant is the game host.
-    #[instrument]
-    pub fn is_host(&self) -> bool {
-        matches!(self, Participant::Host)
-    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -86,33 +83,17 @@ impl ChatMessage {
 
     /// Converts this message into a styled [`Line`] for rendering.
     ///
-    /// Host messages are left-aligned with a `[Host]` prefix.
-    /// Human/agent messages are right-aligned by padding with leading spaces.
+    /// Returns a single `Line` containing the participant prefix and full
+    /// message text.  Long lines are word-wrapped by ratatui's `Wrap` on the
+    /// enclosing `Paragraph` — no clipping occurs here.
     #[instrument(skip(self))]
-    fn to_line(&self, width: usize) -> Line<'static> {
+    fn to_line(&self) -> Line<'static> {
         let style = Style::default().fg(self.participant.color());
-
-        if self.participant.is_host() {
-            let prefix = format!("[{}] ", self.participant.display_name());
-            let available = width.saturating_sub(prefix.len());
-            let text = clip_to_string(&self.text, available);
-            Line::from(vec![
-                Span::styled(prefix, style.add_modifier(Modifier::BOLD)),
-                Span::styled(text, style),
-            ])
-        } else {
-            let prefix = format!("{}: ", self.participant.display_name());
-            let available = width.saturating_sub(prefix.len());
-            let text = clip_to_string(&self.text, available);
-            let label = format!("{prefix}{text}");
-            let label_len = label.chars().count();
-            let padding = " ".repeat(width.saturating_sub(label_len));
-            Line::from(vec![
-                Span::raw(padding),
-                Span::styled(prefix, style.add_modifier(Modifier::BOLD)),
-                Span::styled(text, style),
-            ])
-        }
+        let prefix = format!("[{}] ", self.participant.display_name());
+        Line::from(vec![
+            Span::styled(prefix, style.add_modifier(Modifier::BOLD)),
+            Span::styled(self.text.clone(), style),
+        ])
     }
 }
 
@@ -131,14 +112,18 @@ pub struct ChatWidget<'a> {
 }
 
 impl<'a> ChatWidget<'a> {
-    /// Creates a new [`ChatWidget`] with the default title `" 💬 Chat "`.
+    /// Creates a new [`ChatWidget`], returning a `ChatWrapped` proof token.
+    ///
+    /// The proof is established by construction: this widget always enables
+    /// ratatui word-wrap on the inner `Paragraph`, so text never overflows.
     #[instrument(skip(messages))]
-    pub fn new(messages: &'a [ChatMessage]) -> Self {
+    pub fn new(messages: &'a [ChatMessage]) -> (Self, Established<ChatWrapped>) {
         debug!(message_count = messages.len(), "Creating ChatWidget");
-        Self {
+        let widget = Self {
             messages,
             title: " 💬 Chat ",
-        }
+        };
+        (widget, Established::assert())
     }
 }
 
@@ -157,8 +142,6 @@ impl Widget for ChatWidget<'_> {
             return;
         }
 
-        let width = inner.width as usize;
-
         let lines: Vec<Line<'static>> = if self.messages.is_empty() {
             debug!("No messages; rendering placeholder");
             vec![Line::from(Span::styled(
@@ -166,32 +149,17 @@ impl Widget for ChatWidget<'_> {
                 Style::default().fg(Color::DarkGray),
             ))]
         } else {
-            let max_rows = inner.height as usize;
-            let start = self.messages.len().saturating_sub(max_rows);
-            let visible = &self.messages[start..];
-
-            debug!(
-                total = self.messages.len(),
-                visible = visible.len(),
-                "Rendering chat messages"
-            );
-
-            visible.iter().map(|msg| msg.to_line(width)).collect()
+            debug!(total = self.messages.len(), "Rendering chat messages");
+            self.messages.iter().map(|msg| msg.to_line()).collect()
         };
 
-        let paragraph = Paragraph::new(lines).block(block);
+        // Word-wrap is always enabled — the ChatWrapped contract is proved by
+        // the fact that this Paragraph always carries Wrap { trim: false }.
+        let paragraph = Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false });
         paragraph.render(area, buf);
     }
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────────────────────
-
-/// Returns at most `max` chars from `s` as an owned [`String`].
-#[instrument(skip(s))]
-fn clip_to_string(s: &str, max: usize) -> String {
-    s.chars().take(max).collect()
 }
 
 // ─────────────────────────────────────────────────────────────

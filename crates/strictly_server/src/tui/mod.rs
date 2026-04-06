@@ -848,7 +848,10 @@ struct FrameData<'a> {
 #[instrument(skip_all)]
 fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
     use crate::tui::chat_widget::{ChatMessage, ChatWidget, Participant};
-    use crate::tui::contracts::{NoOverflow, render_resize_prompt, verified_draw};
+    use crate::tui::contracts::{
+        NoOverflow, min_typestate_width, render_resize_prompt, verified_draw,
+        verify_typestate_readable,
+    };
     use elicit_ratatui::{
         BlockJson, BordersJson, ConstraintJson, DirectionJson, ModifierJson, ParagraphText,
         StyleJson, TuiNode, WidgetJson,
@@ -883,27 +886,42 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
     // --- Story lines as TextJson ---
     let story_text = build_story_text(data.event_log, &pal);
 
-    // --- Column constraints based on active panels ---
+    // --- Adaptive column constraints ---
+    // The board is a small 3×3 grid — cap it so it doesn't hoard space.
+    // The typestate widget needs at least min_typestate_width cols to render
+    // node labels un-truncated; giving it Constraint::Min ensures it always
+    // gets enough, stealing from chat/story only when the terminal is large.
+    let min_ts = if data.graph.show {
+        min_typestate_width(data.graph.nodes)
+    } else {
+        0
+    };
+    const BOARD_WIDTH: u16 = 22;
+
+    // When the typestate graph is shown it embeds the story log internally —
+    // the standalone story column is omitted to avoid duplication.
     let col_constraints: Vec<ConstraintJson> = match (data.graph.show, has_chat) {
         (true, true) => vec![
-            ConstraintJson::Percentage { value: 30 },
-            ConstraintJson::Percentage { value: 20 },
-            ConstraintJson::Percentage { value: 25 },
-            ConstraintJson::Percentage { value: 25 },
+            // Board (capped) | Chat (fills) | Typestate (min for readability)
+            ConstraintJson::Length { value: BOARD_WIDTH },
+            ConstraintJson::Min { value: 20 },
+            ConstraintJson::Min { value: min_ts },
         ],
         (true, false) => vec![
-            ConstraintJson::Percentage { value: 40 },
-            ConstraintJson::Percentage { value: 30 },
-            ConstraintJson::Percentage { value: 30 },
+            // Board (capped) | Typestate (min for readability)
+            ConstraintJson::Length { value: BOARD_WIDTH },
+            ConstraintJson::Min { value: min_ts },
         ],
         (false, true) => vec![
-            ConstraintJson::Percentage { value: 40 },
-            ConstraintJson::Percentage { value: 30 },
-            ConstraintJson::Percentage { value: 30 },
+            // Board (capped) | Story (fills) | Chat (fills)
+            ConstraintJson::Length { value: BOARD_WIDTH },
+            ConstraintJson::Min { value: 20 },
+            ConstraintJson::Min { value: 20 },
         ],
         (false, false) => vec![
-            ConstraintJson::Percentage { value: 55 },
-            ConstraintJson::Percentage { value: 45 },
+            // Board (capped) | Story (fills)
+            ConstraintJson::Length { value: BOARD_WIDTH },
+            ConstraintJson::Min { value: 0 },
         ],
     };
 
@@ -950,8 +968,12 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
         widget: Box::new(WidgetJson::Clear),
     };
 
-    // Build the content row children
-    let mut content_children = vec![board_node, story_node];
+    // When the typestate graph is shown, its widget embeds the story log
+    // internally — omit the standalone story column to avoid duplication.
+    let mut content_children = vec![board_node];
+    if !data.graph.show {
+        content_children.push(story_node);
+    }
     if has_chat {
         content_children.push(clear_node.clone());
     }
@@ -1030,6 +1052,7 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
     });
 
     // Compute the same layout areas to render custom widgets into.
+    // Must mirror col_constraints exactly so custom widgets land in the right slots.
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -1041,22 +1064,20 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
 
     let col_constraints_ratatui: Vec<Constraint> = match (data.graph.show, has_chat) {
         (true, true) => vec![
-            Constraint::Percentage(30),
-            Constraint::Percentage(20),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
+            Constraint::Length(BOARD_WIDTH),
+            Constraint::Min(20),
+            Constraint::Min(min_ts),
         ],
         (true, false) => vec![
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-            Constraint::Percentage(30),
+            Constraint::Length(BOARD_WIDTH),
+            Constraint::Min(min_ts),
         ],
         (false, true) => vec![
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-            Constraint::Percentage(30),
+            Constraint::Length(BOARD_WIDTH),
+            Constraint::Min(20),
+            Constraint::Min(20),
         ],
-        (false, false) => vec![Constraint::Percentage(55), Constraint::Percentage(45)],
+        (false, false) => vec![Constraint::Length(BOARD_WIDTH), Constraint::Min(0)],
     };
 
     let content_areas = Layout::default()
@@ -1065,8 +1086,10 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
         .split(outer[1]);
 
     // Chat pane — custom widget rendered into the layout area.
+    // Column index: when graph is shown, story column is absent so chat is col 1;
+    // when graph is not shown, story is col 1 and chat is col 2.
     if has_chat {
-        let chat_col = 2;
+        let chat_col = if data.graph.show { 1 } else { 2 };
         let chat_messages: Vec<ChatMessage> = data
             .dialogue
             .iter()
@@ -1079,14 +1102,26 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
                 ChatMessage::new(participant, &entry.text)
             })
             .collect();
-        let chat = ChatWidget::new(&chat_messages);
+        // ChatWidget::new returns a ChatWrapped proof token — wrapping is
+        // guaranteed by construction, no runtime check needed.
+        let (chat, _chat_proof) = ChatWidget::new(&chat_messages);
         f.render_widget(chat, content_areas[chat_col]);
     }
 
     // Typestate graph — custom widget rendered into the layout area.
+    // Column index: board is always 0; story absent when graph shown;
+    // chat (if present) precedes typestate.
     if data.graph.show {
-        let type_col = if has_chat { 3 } else { 2 };
+        let type_col = if has_chat { 2 } else { 1 };
         if content_areas.len() > type_col {
+            let ts_area = content_areas[type_col];
+            // Verify the column is wide enough before rendering — fall back to
+            // resize prompt on the typestate area if the terminal is too narrow.
+            let _ts_proof = verify_typestate_readable(data.graph.nodes, ts_area)
+                .unwrap_or_else(|e| {
+                    render_resize_prompt(f, &e);
+                    Established::assert()
+                });
             let widget = TypestateGraphWidget::new(
                 data.graph.nodes,
                 data.graph.edges,
@@ -1094,7 +1129,7 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
                 data.event_log,
             )
             .with_explore_stats(data.graph.explore_stats);
-            f.render_widget(widget, content_areas[type_col]);
+            f.render_widget(widget, ts_area);
         }
     }
 }

@@ -36,6 +36,8 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use tracing::instrument;
 use unicode_width::UnicodeWidthStr as _;
 
+use crate::tui::typestate_widget::NodeDef;
+
 // ─────────────────────────────────────────────────────────────
 //  Error type
 // ─────────────────────────────────────────────────────────────
@@ -115,6 +117,20 @@ impl VerifiedWorkflow for CrapsRoundActive {}
 #[derive(elicitation::Prop)]
 pub struct MultiRoundActive;
 impl VerifiedWorkflow for MultiRoundActive {}
+
+/// Proposition: Chat widget was constructed with wrapping enabled.
+///
+/// Proven by construction — `ChatWidget::new` is the only constructor and
+/// always enables ratatui word-wrap on its inner `Paragraph`.
+#[derive(elicitation::Prop)]
+pub struct ChatWrapped;
+impl VerifiedWorkflow for ChatWrapped {}
+
+/// Proposition: The typestate column is wide enough to render all node labels
+/// without truncation.
+#[derive(elicitation::Prop)]
+pub struct TypestateReadable;
+impl VerifiedWorkflow for TypestateReadable {}
 
 /// Composite: `LabelContained ∧ TextWrapped ∧ AreaSufficient`.
 /// `And<…>: VerifiedWorkflow` via blanket impl — proof composition is automatic.
@@ -292,6 +308,56 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
             Ok(())
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  TypestateReadable validator
+// ─────────────────────────────────────────────────────────────
+
+/// Returns the minimum column width required to render all typestate nodes
+/// without truncation.
+///
+/// Each node box needs `label_display_width + 4` columns (2 border chars +
+/// 1 padding on each side).  Adjacent nodes require at least 1 column for the
+/// connecting arrow gap.
+pub fn min_typestate_width(nodes: &[NodeDef]) -> u16 {
+    if nodes.is_empty() {
+        return 0;
+    }
+    let node_cols: u16 = nodes
+        .iter()
+        .map(|n| n.label.width() as u16 + 4)
+        .sum();
+    let arrow_gaps = nodes.len().saturating_sub(1) as u16;
+    // +2 for the outer typestate widget border
+    node_cols + arrow_gaps + 2
+}
+
+/// Validates that `area` is wide enough to render every node label in full.
+///
+/// Returns `Err(LayoutError::LabelOverflow)` naming the widest node if the
+/// area is too narrow, so the caller can fall back to a resize prompt or
+/// widen the column before rendering.
+#[instrument(skip(nodes))]
+pub fn verify_typestate_readable(
+    nodes: &[NodeDef],
+    area: Rect,
+) -> Result<Established<TypestateReadable>, LayoutError> {
+    let needed = min_typestate_width(nodes);
+    if area.width < needed {
+        // Report the longest label as the overflow culprit.
+        let worst = nodes
+            .iter()
+            .max_by_key(|n| n.label.width())
+            .map(|n| n.label)
+            .unwrap_or("<none>");
+        return Err(LayoutError::LabelOverflow {
+            label: worst.to_string(),
+            label_width: worst.width(),
+            cell_width: area.width.saturating_sub(4) as usize,
+        });
+    }
+    Ok(Established::assert())
 }
 
 // ─────────────────────────────────────────────────────────────
