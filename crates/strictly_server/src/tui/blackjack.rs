@@ -30,19 +30,22 @@ pub enum BlackjackSessionOutcome {
 
 impl BlackjackSessionOutcome {}
 
-/// Run a blackjack session with the human playing via keyboard and an agent
-/// playing concurrently via MCP.
+/// Run a blackjack session with the human playing via keyboard and zero or
+/// more AI agents playing concurrently via MCP.
 ///
-/// Both players have independent sessions on the same HTTP server.
-/// The human calls tools directly (keyboard → JSON-RPC).
-/// The agent drives its own session via the spawned subprocess.
-#[instrument(skip_all, fields(port, player_name = %player_name, initial_bankroll, show_typestate_graph))]
+/// `players` must have the human slot first (`PlayerKind::Human`), followed
+/// by any number of agent slots (`PlayerKind::Agent`).  Each agent gets its
+/// own independent session on the shared HTTP server and is rendered in its
+/// own panel to the right of the human panel.
+///
+/// `fallback_agent_config` is used when an agent slot carries no explicit
+/// config path.
+#[instrument(skip_all, fields(port, num_players = players.len(), show_typestate_graph))]
 pub async fn run_blackjack_mcp_session<B: Backend>(
     terminal: &mut Terminal<B>,
-    agent_config_path: std::path::PathBuf,
-    player_name: String,
+    players: Vec<crate::PlayerSlot>,
     port: u16,
-    initial_bankroll: u64,
+    fallback_agent_config: std::path::PathBuf,
     show_typestate_graph: bool,
 ) -> Result<BlackjackSessionOutcome>
 where
@@ -55,6 +58,7 @@ where
     use crate::tui::standalone::{GameMode, ProcessGuards, spawn_agent, spawn_server};
     use crate::tui::typestate_widget::{TypestateGraphWidget, blackjack_active};
     use crate::tui::{ChatMessage, Participant};
+    use crate::{PlayerKind, PlayerSlot};
     use crossterm::event::{Event, KeyCode};
     use ratatui::layout::{Constraint, Direction, Layout};
     use ratatui::prelude::Widget;
@@ -62,28 +66,69 @@ where
     use ratatui::widgets::{Block, Borders, Paragraph};
 
     const HUMAN_SESSION: &str = "human_bj";
-    const AGENT_SESSION: &str = "agent_bj";
 
-    info!("Starting human+agent blackjack MCP session");
+    // ── Partition slots ───────────────────────────────────────────────────────
+    let human_slot = players
+        .iter()
+        .find(|s| matches!(s.kind, PlayerKind::Human))
+        .cloned()
+        .unwrap_or_else(|| PlayerSlot {
+            name: "You".to_string(),
+            bankroll: 1_000,
+            kind: PlayerKind::Human,
+        });
+
+    let agent_slots: Vec<_> = players
+        .iter()
+        .filter(|s| matches!(s.kind, PlayerKind::Agent(_)))
+        .cloned()
+        .collect();
+
+    let player_name = human_slot.name.clone();
+    let initial_bankroll = human_slot.bankroll;
+
+    info!(
+        player = %player_name,
+        bankroll = initial_bankroll,
+        num_agents = agent_slots.len(),
+        "Starting blackjack MCP session"
+    );
+
     let server_url = format!("http://localhost:{}", port);
 
-    // ── Spawn infrastructure ──────────────────────────────────────────────────
+    // ── Spawn server ──────────────────────────────────────────────────────────
     let server = spawn_server(port).await?;
-    let agent = spawn_agent(
-        port,
-        agent_config_path,
-        GameMode::Blackjack {
-            bankroll: initial_bankroll,
-            session_id: AGENT_SESSION.to_string(),
-        },
-    )
-    .await?;
-    let _guards = ProcessGuards::new(server, agent);
+
+    // ── Spawn one agent subprocess per seated agent ───────────────────────────
+    let mut agent_children = Vec::with_capacity(agent_slots.len());
+    let mut agent_session_ids: Vec<String> = Vec::with_capacity(agent_slots.len());
+
+    for (idx, slot) in agent_slots.iter().enumerate() {
+        let session_id = format!("agent_bj_{idx}");
+        let config_path = match &slot.kind {
+            PlayerKind::Agent(cfg) => cfg
+                .config_path()
+                .clone()
+                .unwrap_or_else(|| fallback_agent_config.clone()),
+            PlayerKind::Human => fallback_agent_config.clone(),
+        };
+        let child = spawn_agent(
+            port,
+            config_path,
+            GameMode::Blackjack {
+                bankroll: slot.bankroll,
+                session_id: session_id.clone(),
+            },
+        )
+        .await?;
+        agent_children.push(child);
+        agent_session_ids.push(session_id);
+    }
+
+    let _guards = ProcessGuards::many(server, agent_children);
 
     // ── Connect human MCP session ─────────────────────────────────────────────
     let human = HumanBlackjackClient::connect(&server_url).await?;
-
-    // Start the human's first hand
     human
         .call_tool(
             "blackjack_deal",
@@ -94,16 +139,18 @@ where
         )
         .await?;
 
-    let agent_observer = BlackjackObserver::new(server_url, AGENT_SESSION.to_string());
-    let human_observer = BlackjackObserver::new(
-        format!("http://localhost:{}", port),
-        HUMAN_SESSION.to_string(),
-    );
+    // ── Observers ─────────────────────────────────────────────────────────────
+    let human_observer = BlackjackObserver::new(server_url.clone(), HUMAN_SESSION.to_string());
+    let agent_observers: Vec<BlackjackObserver> = agent_session_ids
+        .iter()
+        .map(|sid| BlackjackObserver::new(server_url.clone(), sid.clone()))
+        .collect();
 
     let bj_nodes = blackjack_nodes();
     let bj_edges = blackjack_edges();
 
-    let mut agent_dialogue: Vec<DialogueEntry> = Vec::new();
+    // Per-agent mutable state
+    let mut agent_dialogues: Vec<Vec<DialogueEntry>> = vec![Vec::new(); agent_slots.len()];
     let mut available_tools: Vec<BlackjackTool> = Vec::new();
     let mut tool_refresh_counter: u8 = 0;
 
@@ -115,17 +162,23 @@ where
             description: "Connecting...".to_string(),
             is_terminal: false,
         };
+
         let human_state = human_observer
             .get_blackjack_state()
             .await
             .unwrap_or_else(|_| idle_state.clone());
-        let agent_state = agent_observer
-            .get_blackjack_state()
-            .await
-            .unwrap_or(idle_state);
 
-        if let Ok(entries) = agent_observer.get_dialogue().await {
-            agent_dialogue = entries;
+        let mut agent_states: Vec<BlackjackStateView> = Vec::with_capacity(agent_observers.len());
+        for (i, obs) in agent_observers.iter().enumerate() {
+            let state = obs
+                .get_blackjack_state()
+                .await
+                .unwrap_or_else(|_| idle_state.clone());
+            agent_states.push(state);
+
+            if let Ok(entries) = obs.get_dialogue().await {
+                agent_dialogues[i] = entries;
+            }
         }
 
         // Refresh available tools every ~500ms (every 2 loop iterations)
@@ -135,25 +188,15 @@ where
         {
             available_tools = tools;
         }
-        let agent_messages: Vec<ChatMessage> = agent_dialogue
-            .iter()
-            .map(|e| {
-                let participant = if e.role == "Agent" {
-                    Participant::Agent("Agent".to_string())
-                } else {
-                    Participant::Host
-                };
-                ChatMessage::new(participant, e.text.clone())
-            })
-            .collect();
 
         // ── Render ────────────────────────────────────────────────────────────
+        let num_agents = agent_slots.len();
         terminal.draw(|f| {
             let area = f.area();
 
             let outer = Block::default()
                 .title(format!(
-                    " 🎰 Blackjack — {} vs Agent | Your bankroll: ${} ",
+                    " 🎰 Blackjack — {} | Bankroll: ${} ",
                     player_name, human_state.bankroll
                 ))
                 .borders(Borders::ALL)
@@ -161,29 +204,23 @@ where
             let inner = outer.inner(area);
             outer.render(area, f.buffer_mut());
 
-            // Split horizontally: left=human+controls, right=agent+graph
+            // Build column constraints: human + agents + optional graph
+            let total_cols = 1 + num_agents + usize::from(show_typestate_graph);
+            let col_pct = (100u16) / (total_cols as u16);
+            let mut constraints: Vec<Constraint> =
+                std::iter::repeat_n(Constraint::Percentage(col_pct), total_cols).collect();
+            // Give any remainder to the last real column
+            if let Some(last) = constraints.last_mut() {
+                *last = Constraint::Min(0);
+            }
+
             let h_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints(if show_typestate_graph {
-                    vec![
-                        Constraint::Percentage(35),
-                        Constraint::Percentage(30),
-                        Constraint::Percentage(35),
-                    ]
-                } else {
-                    vec![Constraint::Percentage(45), Constraint::Percentage(55)]
-                })
+                .constraints(constraints)
                 .split(inner);
 
-            let human_area = h_chunks[0];
-            let agent_area = h_chunks[1];
-            let ts_area = if show_typestate_graph {
-                Some(h_chunks[2])
-            } else {
-                None
-            };
-
             // ── Human panel ───────────────────────────────────────────────────
+            let human_area = h_chunks[0];
             let human_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -198,7 +235,6 @@ where
                 .wrap(ratatui::widgets::Wrap { trim: false })
                 .render(human_chunks[0], f.buffer_mut());
 
-            // Controls pane — show available tools as keyboard shortcuts
             let hints = if available_tools.is_empty() {
                 "Waiting for your turn...  [q] Quit".to_string()
             } else {
@@ -224,29 +260,56 @@ where
                 .wrap(ratatui::widgets::Wrap { trim: false })
                 .render(human_chunks[1], f.buffer_mut());
 
-            // ── Agent panel ───────────────────────────────────────────────────
-            let agent_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-                .split(agent_area);
+            // ── Agent panels ──────────────────────────────────────────────────
+            for (idx, (slot, state)) in agent_slots.iter().zip(agent_states.iter()).enumerate() {
+                let agent_area = h_chunks[1 + idx];
+                let show_chat = num_agents == 1; // only show chat when there's one agent
 
-            let agent_block = Block::default()
-                .title(format!(" Agent — {} ", agent_state.phase))
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Cyan));
-            Paragraph::new(agent_state.description.as_str())
-                .block(agent_block)
-                .wrap(ratatui::widgets::Wrap { trim: false })
-                .render(agent_chunks[0], f.buffer_mut());
+                let agent_chunks = if show_chat {
+                    Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+                        .split(agent_area)
+                } else {
+                    // When multiple agents, give the whole area to the state panel
+                    Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Percentage(100)])
+                        .split(agent_area)
+                };
 
-            let (chat_widget, _proof) = ChatWidget::new(&agent_messages);
-            chat_widget.render(agent_chunks[1], f.buffer_mut());
+                let agent_block = Block::default()
+                    .title(format!(" {} — {} ", slot.name, state.phase))
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::Cyan));
+                Paragraph::new(state.description.as_str())
+                    .block(agent_block)
+                    .wrap(ratatui::widgets::Wrap { trim: false })
+                    .render(agent_chunks[0], f.buffer_mut());
+
+                if show_chat {
+                    let messages: Vec<ChatMessage> = agent_dialogues[idx]
+                        .iter()
+                        .map(|e| {
+                            let participant = if e.role == "Agent" {
+                                Participant::Agent(slot.name.clone())
+                            } else {
+                                Participant::Host
+                            };
+                            ChatMessage::new(participant, e.text.clone())
+                        })
+                        .collect();
+                    let (chat_widget, _proof) = ChatWidget::new(&messages);
+                    chat_widget.render(agent_chunks[1], f.buffer_mut());
+                }
+            }
 
             // ── Typestate graph ───────────────────────────────────────────────
-            if let Some(ts) = ts_area {
+            if show_typestate_graph {
+                let ts_area = h_chunks[1 + num_agents];
                 let active_idx = blackjack_active(&human_state.phase);
                 TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &[])
-                    .render(ts, f.buffer_mut());
+                    .render(ts_area, f.buffer_mut());
             }
         })?;
 
@@ -258,7 +321,6 @@ where
                 KeyCode::Char('q') | KeyCode::Char('Q') => {
                     return Ok(BlackjackSessionOutcome::Abandoned);
                 }
-                // Number or letter keys map to available tools by index
                 KeyCode::Char(c) => {
                     let idx = if c.is_ascii_digit() && c != '0' {
                         Some((c as usize) - ('1' as usize))
@@ -271,7 +333,6 @@ where
                     if let Some(Some(tool)) = idx.map(|i| available_tools.get(i)) {
                         let name = tool.name.clone();
                         let args = if name.ends_with("__place") {
-                            // Use TuiCommunicator + custom style to prompt for bet amount.
                             use crate::tui::tui_communicator::TuiCommunicator;
                             use elicitation::ElicitCommunicator as _;
                             let comm = TuiCommunicator::new();
@@ -289,7 +350,6 @@ where
                         };
                         if args != serde_json::Value::Null {
                             let _ = human.call_tool(&name, args).await;
-                            // Force immediate tool refresh after action
                             available_tools.clear();
                         }
                     }

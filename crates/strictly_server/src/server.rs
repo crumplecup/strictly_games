@@ -531,13 +531,10 @@ impl GameServer {
              Rules: Beat the dealer by getting closer to 21 without going over. \
              Face cards are worth 10; Aces are 1 or 11. \
              The dealer hits on soft 16 and stands on 17.\n\n\
-             You may call view tools before acting to inspect game state:\n\
-             - blackjack__view_your_hand   — your cards and total\n\
-             - blackjack__view_dealer_showing — dealer's visible card\n\
-             - blackjack__view_shoe_status    — cards remaining in shoe\n\
-             - blackjack__view_bankroll       — your current chip count\n\n\
              Place your bet to begin: use `bet__place` (custom amount 1–{bankroll}) \
-             or a `bet__preset_N` shortcut."
+             or a `bet__preset_N` shortcut. \
+             View tools (hand, dealer card, shoe, bankroll) become available \
+             once cards are dealt."
         );
 
         if let Some(session_id) = &req.session_id {

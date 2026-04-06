@@ -18,14 +18,23 @@ pub enum GameMode {
 /// Guards for spawned subprocesses. Kills processes on drop.
 pub struct ProcessGuards {
     server: Option<Child>,
-    agent: Option<Child>,
+    agents: Vec<Child>,
 }
 
 impl ProcessGuards {
+    /// Guard a server and a single agent subprocess.
     pub fn new(server: Child, agent: Child) -> Self {
         Self {
             server: Some(server),
-            agent: Some(agent),
+            agents: vec![agent],
+        }
+    }
+
+    /// Guard a server and zero or more agent subprocesses.
+    pub fn many(server: Child, agents: Vec<Child>) -> Self {
+        Self {
+            server: Some(server),
+            agents,
         }
     }
 }
@@ -34,7 +43,7 @@ impl Drop for ProcessGuards {
     fn drop(&mut self) {
         info!("Cleaning up spawned subprocesses");
 
-        if let Some(mut agent) = self.agent.take() {
+        for agent in &mut self.agents {
             debug!("Killing agent process");
             let _ = agent.start_kill();
         }

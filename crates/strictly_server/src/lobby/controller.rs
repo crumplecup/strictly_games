@@ -440,12 +440,25 @@ impl LobbyController {
                     "Launching Blackjack MCP session"
                 );
 
+                // Build a minimal players list: human + selected agent.
+                let players = vec![
+                    crate::PlayerSlot {
+                        name: player_name.clone(),
+                        bankroll: 1_000,
+                        kind: crate::PlayerKind::Human,
+                    },
+                    crate::PlayerSlot {
+                        name: agent_config.name().to_string(),
+                        bankroll: 1_000,
+                        kind: crate::PlayerKind::Agent(agent_config),
+                    },
+                ];
+
                 let outcome = run_blackjack_mcp_session(
                     terminal,
-                    config_path,
-                    player_name.clone(),
+                    players,
                     *self.server_port(),
-                    1_000, // default starting bankroll
+                    config_path,
                     show_typestate_graph,
                 )
                 .await?;
@@ -596,7 +609,7 @@ impl LobbyController {
     /// Runs a blackjack session via the MCP HTTP server architecture.
     ///
     /// Called when `GoToBlackjackTable` is intercepted in the event loop.
-    /// Extracts the first agent seat from `players` to drive the MCP agent subprocess.
+    /// The first slot is the human; remaining slots are agent seats.
     #[instrument(skip(self, terminal, players), fields(num_seats = players.len()))]
     async fn execute_blackjack_table<B: Backend + std::io::Write>(
         &mut self,
@@ -608,7 +621,6 @@ impl LobbyController {
     where
         <B as Backend>::Error: Send + Sync + 'static,
     {
-        use crate::lobby::settings::PlayerKind;
         use crate::tui::run_blackjack_mcp_session;
 
         let lobby_screen = |u: &Option<crate::User>| match u {
@@ -619,40 +631,18 @@ impl LobbyController {
             None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(&self.profile_service)),
         };
 
-        // Extract the first agent seat to drive via MCP.
-        let agent_config = players.iter().find_map(|s| {
-            if let PlayerKind::Agent(cfg) = &s.kind {
-                Some(cfg.clone())
-            } else {
-                None
-            }
-        });
-
-        let config_path = agent_config
-            .as_ref()
-            .and_then(|c| c.config_path().clone())
-            .unwrap_or_else(|| self.agent_config_path.clone());
-
-        let bankroll = players
-            .iter()
-            .find(|s| matches!(s.kind, PlayerKind::Agent(_)))
-            .map(|s| s.bankroll)
-            .unwrap_or(1_000);
-
         info!(
             player_name = %player_name,
-            config_path = %config_path.display(),
+            num_seats = players.len(),
             port = self.server_port,
-            bankroll,
             "Launching blackjack MCP session from table setup"
         );
 
         let outcome = run_blackjack_mcp_session(
             terminal,
-            config_path,
-            player_name.clone(),
+            players,
             *self.server_port(),
-            bankroll,
+            self.agent_config_path.clone(),
             show_typestate_graph,
         )
         .await?;
