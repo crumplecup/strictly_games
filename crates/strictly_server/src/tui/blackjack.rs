@@ -6,6 +6,7 @@
 //! The TUI shows both hands and the agent's chat log.
 
 use crate::tui::typestate_widget::{blackjack_edges, blackjack_nodes};
+use crate::tui::typestate_widget::GameEvent;
 use anyhow::Result;
 use elicitation::Elicitation as _;
 use ratatui::{Terminal, backend::Backend};
@@ -156,6 +157,11 @@ where
     let mut agent_dialogues: Vec<Vec<DialogueEntry>> = vec![Vec::new(); agent_slots.len()];
     let mut available_tools: Vec<BlackjackTool> = Vec::new();
     let mut tool_refresh_counter: u8 = 0;
+    let mut event_log: Vec<GameEvent> = vec![GameEvent::story(format!(
+        "🃏  Blackjack — {player_name} joined (bankroll: ${initial_bankroll})"
+    ))];
+    let mut prev_human_phase = "idle".to_string();
+    let mut prev_agent_phases: Vec<String> = vec!["idle".to_string(); agent_slots.len()];
 
     loop {
         // ── Poll state ────────────────────────────────────────────────────────
@@ -190,6 +196,30 @@ where
             && let Ok(tools) = human.list_blackjack_tools().await
         {
             available_tools = tools;
+        }
+
+        // ── Record story events on phase transitions ───────────────────────────
+        if human_state.phase != prev_human_phase {
+            let story = phase_transition_story(
+                &player_name,
+                &prev_human_phase,
+                &human_state.phase,
+                &human_state.description,
+            );
+            event_log.push(story);
+            prev_human_phase = human_state.phase.clone();
+        }
+        for (i, (state, prev)) in agent_states
+            .iter()
+            .zip(prev_agent_phases.iter_mut())
+            .enumerate()
+        {
+            if state.phase != *prev {
+                let name = agent_slots.get(i).map(|s| s.name.as_str()).unwrap_or("Agent");
+                let story = phase_transition_story(name, prev, &state.phase, &state.description);
+                event_log.push(story);
+                *prev = state.phase.clone();
+            }
         }
 
         // ── Render ────────────────────────────────────────────────────────────
@@ -311,7 +341,7 @@ where
             if show_typestate_graph {
                 let ts_area = h_chunks[1 + num_agents];
                 let active_idx = blackjack_active(&human_state.phase);
-                TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &[])
+                TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &event_log)
                     .render(ts_area, f.buffer_mut());
             }
         })?;
@@ -362,6 +392,41 @@ where
         }
 
         tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Story event helpers
+// ─────────────────────────────────────────────────────────────
+
+/// Build a [`GameEvent`] that narrates a phase transition for `player`.
+fn phase_transition_story(
+    player: &str,
+    from: &str,
+    to: &str,
+    description: &str,
+) -> GameEvent {
+    match to {
+        "betting" if from == "idle" || from == "finished" => {
+            GameEvent::story(format!("🃏  {player} — ready to bet"))
+        }
+        "player_turn" => {
+            // Grab the first line of the description (hand + dealer card).
+            let summary = description.lines().next().unwrap_or("cards dealt");
+            GameEvent::story(format!("🎴  {player} — {summary}"))
+        }
+        "waiting" => {
+            GameEvent::phase_change(&format!("{player}: {from}"), "waiting for other seats")
+        }
+        "finished" => {
+            // Pull the outcome line from description (first non-empty line after hand).
+            let outcome = description
+                .lines()
+                .find(|l| l.contains('$') || l.contains("Push") || l.contains("Surrender"))
+                .unwrap_or("hand settled");
+            GameEvent::result(format!("🏁  {player} — {outcome}"))
+        }
+        other => GameEvent::phase_change(from, other),
     }
 }
 
