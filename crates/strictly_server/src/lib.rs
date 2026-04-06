@@ -62,7 +62,7 @@ pub use server::GameServer;
 pub use session::{DialogueEntry, ExploreStats, GameSession, SessionManager};
 
 // Public API exports - TUI
-pub use tui::{run as tui_run, run_game_session};
+pub use tui::{run as tui_run, run_blackjack_mcp_session, run_game_session};
 
 // Public API exports - Verification
 pub use verify::{run_all as run_verification_all, run_creusot, run_kani, run_verus};
@@ -77,7 +77,7 @@ pub use games::tictactoe::{
 pub use games::tictactoe::{PlayerTurn, SquareEmpty};
 
 // Public API exports - Blackjack types (game logic from strictly_blackjack, workflow from server)
-pub use games::blackjack::{BlackjackWorkflow, HandResult};
+pub use games::blackjack::{BlackjackStateView, BlackjackWorkflow, HandResult};
 pub use strictly_blackjack::{
     ActionError, BasicAction, BetPlaced, GameBetting, GameDealerTurn,
     GameFinished as BlackjackFinished, GamePlayerTurn, GameResult as BlackjackResult,

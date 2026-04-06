@@ -113,7 +113,8 @@ impl LlmClient {
         }
     }
 
-    /// Sends the context and tool schemas to the model and returns the tool name it selected.
+    /// Sends the context and tool schemas to the model and returns the tool name it selected
+    /// along with the input arguments the model provided.
     ///
     /// `tool_choice` is forced to `required`/`any`, so the model *must* call one of the
     /// supplied tools rather than returning plain text.  This is the native tool-use path —
@@ -124,28 +125,26 @@ impl LlmClient {
         system_prompt: &str,
         context: &str,
         tools: &[ToolSpec],
-    ) -> Result<String, LlmError> {
+    ) -> Result<(String, serde_json::Map<String, serde_json::Value>), LlmError> {
         debug!("Choosing tool via native tool-use API");
         match self.config.provider {
             LlmProvider::Anthropic => {
                 self.choose_tool_anthropic(system_prompt, context, tools)
                     .await
             }
-            LlmProvider::OpenAI => {
-                self.choose_tool_openai(system_prompt, context, tools).await
-            }
+            LlmProvider::OpenAI => self.choose_tool_openai(system_prompt, context, tools).await,
         }
     }
 
     /// Anthropic tool-use: passes schemas, forces `tool_choice: {type: "any"}`,
-    /// returns the `name` from the first `tool_use` content block.
+    /// returns the name and input args from the first `tool_use` content block.
     #[instrument(skip(self, system_prompt, context, tools))]
     async fn choose_tool_anthropic(
         &self,
         system_prompt: &str,
         context: &str,
         tools: &[ToolSpec],
-    ) -> Result<String, LlmError> {
+    ) -> Result<(String, serde_json::Map<String, serde_json::Value>), LlmError> {
         let client = reqwest::Client::new();
 
         let tools_json: Vec<serde_json::Value> = tools
@@ -192,15 +191,18 @@ impl LlmClient {
         let json: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| LlmError::new(format!("Failed to parse response: {e}")))?;
 
-        // Find the first tool_use content block and return its name.
+        // Find the first tool_use content block and return its name + input args.
         json["content"]
             .as_array()
             .and_then(|blocks| {
                 blocks
                     .iter()
                     .find(|b| b["type"] == "tool_use")
-                    .and_then(|b| b["name"].as_str())
-                    .map(|s| s.to_string())
+                    .and_then(|b| {
+                        let name = b["name"].as_str()?.to_string();
+                        let args = b["input"].as_object().cloned().unwrap_or_default();
+                        Some((name, args))
+                    })
             })
             .ok_or_else(|| {
                 error!(response = %json, "No tool_use block in Anthropic response");
@@ -209,14 +211,14 @@ impl LlmClient {
     }
 
     /// OpenAI tool-use: passes function schemas, forces `tool_choice: required`,
-    /// returns the `function.name` from the first tool call.
+    /// returns the name and input args from the first tool call.
     #[instrument(skip(self, system_prompt, context, tools))]
     async fn choose_tool_openai(
         &self,
         system_prompt: &str,
         context: &str,
         tools: &[ToolSpec],
-    ) -> Result<String, LlmError> {
+    ) -> Result<(String, serde_json::Map<String, serde_json::Value>), LlmError> {
         use async_openai::types::chat::ChatCompletionTools;
 
         let client = OpenAIClient::with_config(
@@ -225,21 +227,21 @@ impl LlmClient {
 
         let oai_tools: Vec<ChatCompletionTools> = tools
             .iter()
-            .map(|t| ChatCompletionTools::Function(ChatCompletionTool {
-                function: FunctionObject {
-                    name: t.name.clone(),
-                    description: Some(t.description.clone()),
-                    parameters: Some(t.input_schema.clone()),
-                    strict: None,
-                },
-            }))
+            .map(|t| {
+                ChatCompletionTools::Function(ChatCompletionTool {
+                    function: FunctionObject {
+                        name: t.name.clone(),
+                        description: Some(t.description.clone()),
+                        parameters: Some(t.input_schema.clone()),
+                        strict: None,
+                    },
+                })
+            })
             .collect();
 
         let messages = vec![
             ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-                content: ChatCompletionRequestSystemMessageContent::Text(
-                    system_prompt.to_string(),
-                ),
+                content: ChatCompletionRequestSystemMessageContent::Text(system_prompt.to_string()),
                 name: None,
             }),
             ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
@@ -267,7 +269,14 @@ impl LlmClient {
             .and_then(|c| c.message.tool_calls.as_ref())
             .and_then(|calls| calls.first())
             .and_then(|call| match call {
-                ChatCompletionMessageToolCalls::Function(f) => Some(f.function.name.clone()),
+                ChatCompletionMessageToolCalls::Function(f) => {
+                    let name = f.function.name.clone();
+                    let args = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(
+                        &f.function.arguments,
+                    )
+                    .unwrap_or_default();
+                    Some((name, args))
+                }
                 _ => None,
             })
             .ok_or_else(|| {
@@ -275,7 +284,6 @@ impl LlmClient {
                 LlmError::new("No tool call in OpenAI response".to_string())
             })
     }
-
 
     #[instrument(skip(self, system_prompt, user_message))]
     async fn generate_anthropic(

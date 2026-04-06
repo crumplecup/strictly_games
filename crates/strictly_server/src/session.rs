@@ -1,5 +1,6 @@
 //! Game session management for HTTP multiplayer.
 
+use crate::games::blackjack::session::BlackjackSession;
 use crate::games::tictactoe::{AnyGame, GameSetup, Mark, Position};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -341,6 +342,11 @@ pub struct SessionManager {
     sessions: Arc<Mutex<HashMap<SessionId, GameSession>>>,
     /// Server↔agent dialogue log, keyed by session ID.
     dialogue: Arc<Mutex<HashMap<SessionId, Vec<DialogueEntry>>>>,
+    /// Shared blackjack phase state, keyed by session ID.
+    ///
+    /// The `BlackjackSession` Arc is cloned from the live `GameServer` instance,
+    /// so the REST endpoint always reads the current phase state.
+    blackjack_sessions: Arc<Mutex<HashMap<SessionId, BlackjackSession>>>,
 }
 
 impl SessionManager {
@@ -351,6 +357,7 @@ impl SessionManager {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             dialogue: Arc::new(Mutex::new(HashMap::new())),
+            blackjack_sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -505,6 +512,26 @@ impl SessionManager {
         let mut dialogue = self.dialogue.lock().unwrap();
         dialogue.remove(session_id);
         debug!("Cleared dialogue log");
+    }
+
+    // ── Blackjack shared state ────────────────────────────────────────────────
+
+    /// Registers a live blackjack phase Arc for the given session.
+    ///
+    /// The Arc is shared with the `GameServer` instance, so readers always see
+    /// the current phase without any extra update calls from the factories.
+    #[instrument(skip(self, session))]
+    pub fn store_blackjack_session(&self, session_id: SessionId, session: BlackjackSession) {
+        let mut map = self.blackjack_sessions.lock().unwrap();
+        map.insert(session_id.clone(), session);
+        debug!(session_id = %session_id, "Stored blackjack session");
+    }
+
+    /// Returns the live blackjack phase Arc for the given session, if registered.
+    #[instrument(skip(self))]
+    pub fn get_blackjack_session(&self, session_id: &str) -> Option<BlackjackSession> {
+        let map = self.blackjack_sessions.lock().unwrap();
+        map.get(session_id).cloned()
     }
 }
 

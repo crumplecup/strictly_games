@@ -16,7 +16,9 @@ use std::sync::Arc;
 use elicitation::{ContextualFactory, DynamicToolDescriptor, DynamicToolRegistry};
 use rmcp::model::{CallToolResult, Content, ErrorData};
 use serde_json::json;
-use strictly_blackjack::{BasicAction, GameResult, GameSetup, PlayerAction, PlayerActionContext};
+use strictly_blackjack::{
+    BasicAction, BlackjackPlayerView, GameResult, GameSetup, PlayerAction, PlayerActionContext,
+};
 use tracing::instrument;
 
 use super::session::{BlackjackPhase, BlackjackSession, describe_finished, describe_player_turn};
@@ -137,6 +139,8 @@ impl ContextualFactory for BetAmountFactory {
 pub struct ActionContext {
     /// Which actions are currently valid.
     pub player_ctx: PlayerActionContext,
+    /// Player's bankroll (post-bet balance) — used by explore tools.
+    pub bankroll: u64,
     /// Shared game phase.
     pub phase: BlackjackSession,
     /// Registry for re-registering tools on phase transition.
@@ -199,6 +203,47 @@ impl ContextualFactory for BlackjackActionFactory {
                 BasicAction::Hit, // TODO: implement Double in blackjack crate
             );
         }
+
+        // ── Explore tools (consume-and-remove on agent side) ────────────────
+        let bankroll = ctx.bankroll;
+        let phase_for_explore = ctx.phase.clone();
+        let make_explore = |category: &'static str, description: &str| {
+            let phase = phase_for_explore.clone();
+            DynamicToolDescriptor {
+                name: format!("{prefix}__view_{category}"),
+                description: description.to_string(),
+                schema: json!({ "type": "object", "properties": {} }),
+                handler: Arc::new(move |_args| {
+                    let phase = phase.clone();
+                    Box::pin(async move {
+                        let guard = phase.lock().await;
+                        let text = match &*guard {
+                            BlackjackPhase::PlayerTurn(game) => {
+                                let view = BlackjackPlayerView::from_game_state(game, 0, bankroll);
+                                view.describe_category(category)
+                                    .unwrap_or_else(|| format!("No data for '{category}'"))
+                            }
+                            _ => format!("Not in player turn — '{category}' unavailable"),
+                        };
+                        Ok(CallToolResult::success(vec![Content::text(text)]))
+                    })
+                }),
+            }
+        };
+
+        tools.push(make_explore(
+            "your_hand",
+            "View your current hand and its total value.",
+        ));
+        tools.push(make_explore(
+            "dealer_showing",
+            "View the dealer's face-up card.",
+        ));
+        tools.push(make_explore(
+            "shoe_status",
+            "View how many cards remain in the shoe.",
+        ));
+        tools.push(make_explore("bankroll", "View your current bankroll."));
 
         Ok(tools)
     }
@@ -318,6 +363,7 @@ pub fn register_bet_tools(
 pub fn register_action_tools(
     dynamic: &DynamicToolRegistry,
     player_ctx: PlayerActionContext,
+    bankroll: u64,
     phase: BlackjackSession,
 ) {
     let _ = dynamic.clone().register_contextual(
@@ -325,6 +371,7 @@ pub fn register_action_tools(
         BlackjackActionFactory,
         ActionContext {
             player_ctx,
+            bankroll,
             phase,
             dynamic: dynamic.clone(),
         },
@@ -382,12 +429,13 @@ async fn place_bet_and_transition(
                 can_split: false,
                 can_surrender: false,
             };
+            let bankroll = player_game.bankroll();
             {
                 let mut guard = phase.lock().await;
                 *guard = BlackjackPhase::PlayerTurn(Box::new(player_game));
             }
             clear_prefix(&dynamic, "bet");
-            register_action_tools(&dynamic, player_ctx, phase);
+            register_action_tools(&dynamic, player_ctx, bankroll, phase);
             dynamic.notify_tool_list_changed().await;
             Ok(CallToolResult::success(vec![Content::text(format!(
                 "Bet {amount} chips placed.\n{desc}"
@@ -456,13 +504,14 @@ async fn take_action_and_transition(
                 can_split: false,
                 can_surrender: false,
             };
+            let bankroll = next_game.bankroll();
             {
                 let mut guard = phase.lock().await;
                 *guard = BlackjackPhase::PlayerTurn(Box::new(next_game));
             }
             // Re-register action tools (hand may have changed).
             clear_prefix(&dynamic, "blackjack");
-            register_action_tools(&dynamic, player_ctx, phase);
+            register_action_tools(&dynamic, player_ctx, bankroll, phase);
             dynamic.notify_tool_list_changed().await;
             Ok(CallToolResult::success(vec![Content::text(desc)]))
         }

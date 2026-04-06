@@ -56,6 +56,12 @@ pub struct PlayGameRequest {
 /// Request for playing blackjack with elicitation.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PlayBlackjackRequest {
+    /// Session ID for state observation (e.g. `"tui_session"`).
+    ///
+    /// When provided, the live blackjack phase Arc is registered in the
+    /// `SessionManager` so the TUI can poll `/api/sessions/{id}/blackjack_state`.
+    #[serde(default)]
+    pub session_id: Option<String>,
     /// Initial bankroll for the player.
     pub initial_bankroll: u64,
 }
@@ -435,7 +441,11 @@ impl GameServer {
 
         if session.game.is_over() {
             let result = if let Some(winner) = session.game.winner() {
-                let who = if winner == mark { &req.player_name } else { "opponent" };
+                let who = if winner == mark {
+                    &req.player_name
+                } else {
+                    "opponent"
+                };
                 format!("Game already over — {who} wins!\n\n{board}")
             } else {
                 format!("Game already over — draw!\n\n{board}")
@@ -465,7 +475,7 @@ impl GameServer {
     /// Registers bet tools into the dynamic registry so the agent can place
     /// a bet immediately after calling this tool.  Sends
     /// `notify_tool_list_changed` so the agent refreshes its tool list.
-    #[instrument(skip(self, peer, req), fields(initial_bankroll = req.initial_bankroll))]
+    #[instrument(skip(self, peer, req), fields(initial_bankroll = req.initial_bankroll, session_id = ?req.session_id))]
     #[tool(
         description = "Start a new blackjack session. After calling this, use the `bet__place` or `bet__preset_N` tools to place your bet."
     )]
@@ -498,6 +508,12 @@ impl GameServer {
             *guard = BlackjackPhase::Betting(Box::new(game));
         }
 
+        // Register the live phase Arc in SessionManager for TUI observation.
+        if let Some(session_id) = &req.session_id {
+            self.sessions
+                .store_blackjack_session(session_id.clone(), self.blackjack_phase.clone());
+        }
+
         register_bet_tools(
             &self.dynamic,
             BetConstraints {
@@ -509,10 +525,29 @@ impl GameServer {
         );
         self.dynamic.notify_tool_list_changed().await;
 
-        Ok(CallToolResult::success(vec![Content::text(format!(
-            "🃏 Blackjack session started. Bankroll: ${bankroll}.\n\
-             Use `bet__place` to place a custom bet or `bet__preset_N` for a preset amount."
-        ))]))
+        let prologue = format!(
+            "🃏 Blackjack — Session Started\n\
+             Bankroll: ${bankroll} chips\n\n\
+             Rules: Beat the dealer by getting closer to 21 without going over. \
+             Face cards are worth 10; Aces are 1 or 11. \
+             The dealer hits on soft 16 and stands on 17.\n\n\
+             You may call view tools before acting to inspect game state:\n\
+             - blackjack__view_your_hand   — your cards and total\n\
+             - blackjack__view_dealer_showing — dealer's visible card\n\
+             - blackjack__view_shoe_status    — cards remaining in shoe\n\
+             - blackjack__view_bankroll       — your current chip count\n\n\
+             Place your bet to begin: use `bet__place` (custom amount 1–{bankroll}) \
+             or a `bet__preset_N` shortcut."
+        );
+
+        if let Some(session_id) = &req.session_id {
+            self.sessions.push_dialogue(
+                session_id,
+                crate::session::DialogueEntry::server(prologue.clone()),
+            );
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(prologue)]))
     }
 }
 
@@ -559,17 +594,17 @@ impl ServerHandler for GameServer {
                 let ctx = ToolCallContext::new(self, request, context);
                 return self.tool_router.call(ctx).await;
             }
-        // Route type_spec__ prefixed tools to the TypeSpecPlugin.
-        if let Some(bare) = request.name.strip_prefix("type_spec__") {
-            let bare_name: std::borrow::Cow<'static, str> = bare.to_string().into();
-            let mut inner = request;
-            inner.name = bare_name;
-            return self
-                .type_spec
-                .call_tool(inner, context)
-                .await
-                .map_err(|e| McpError::internal_error(e.message, None));
-        }
+            // Route type_spec__ prefixed tools to the TypeSpecPlugin.
+            if let Some(bare) = request.name.strip_prefix("type_spec__") {
+                let bare_name: std::borrow::Cow<'static, str> = bare.to_string().into();
+                let mut inner = request;
+                inner.name = bare_name;
+                return self
+                    .type_spec
+                    .call_tool(inner, context)
+                    .await
+                    .map_err(|e| McpError::internal_error(e.message, None));
+            }
             self.dynamic.call_tool(request, context).await
         }
     }

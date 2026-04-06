@@ -1,5 +1,6 @@
 //! Per-connection blackjack game phase state.
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use strictly_blackjack::{GameBetting, GameFinished, GamePlayerTurn};
 use tokio::sync::Mutex;
@@ -8,6 +9,7 @@ use tokio::sync::Mutex;
 ///
 /// Stored per-connection (each HTTP connection gets its own `GameServer`).
 /// Transitions are driven by the dynamic tool handlers in [`super::factories`].
+#[derive(Debug)]
 pub enum BlackjackPhase {
     /// No game in progress.
     Idle,
@@ -28,6 +30,60 @@ pub type BlackjackSession = Arc<Mutex<BlackjackPhase>>;
 /// Create a new session in the `Idle` phase.
 pub fn new_session() -> BlackjackSession {
     Arc::new(Mutex::new(BlackjackPhase::Idle))
+}
+
+/// Serializable snapshot of the current blackjack phase for REST observers.
+///
+/// Polled by the TUI spectator loop to render the game state without sharing
+/// process memory with the MCP handler.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlackjackStateView {
+    /// Current phase: `"idle"`, `"betting"`, `"player_turn"`, or `"finished"`.
+    pub phase: String,
+    /// Player's bankroll in the current phase (0 when idle or finished).
+    pub bankroll: u64,
+    /// Human-readable summary of the game state for TUI display.
+    pub description: String,
+    /// True when the session has ended (agent cashed out).
+    pub is_terminal: bool,
+}
+
+impl BlackjackStateView {
+    /// Builds a view from the current phase lock guard.
+    pub fn from_phase(phase: &BlackjackPhase) -> Self {
+        match phase {
+            BlackjackPhase::Idle => Self {
+                phase: "idle".to_string(),
+                bankroll: 0,
+                description: "No active session.".to_string(),
+                is_terminal: true,
+            },
+            BlackjackPhase::Betting(game) => {
+                let bankroll = game.bankroll();
+                Self {
+                    phase: "betting".to_string(),
+                    bankroll,
+                    description: format!("💰 Bankroll: ${bankroll}\n\nWaiting for bet..."),
+                    is_terminal: false,
+                }
+            }
+            BlackjackPhase::PlayerTurn(game) => {
+                let bankroll = game.bankroll();
+                Self {
+                    phase: "player_turn".to_string(),
+                    bankroll,
+                    description: describe_player_turn(game),
+                    is_terminal: false,
+                }
+            }
+            BlackjackPhase::Finished => Self {
+                phase: "finished".to_string(),
+                bankroll: 0,
+                description: "Hand complete. Awaiting next decision...".to_string(),
+                is_terminal: false,
+            },
+        }
+    }
 }
 
 /// Format a player-turn state for the agent.

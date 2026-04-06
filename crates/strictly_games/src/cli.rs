@@ -59,13 +59,21 @@ pub enum Command {
         #[arg(short, long)]
         server_command: Option<String>,
 
-        /// Auto-trigger play_game tool for testing
+        /// Auto-trigger play_game for TicTacToe testing
         #[arg(long)]
         test_play: bool,
 
         /// Session ID for test mode play_game (optional, auto-generates if not provided)
         #[arg(long)]
         test_session: Option<String>,
+
+        /// Auto-trigger blackjack_deal for Blackjack testing
+        #[arg(long)]
+        test_blackjack: bool,
+
+        /// Initial bankroll for blackjack test mode (default: 1000)
+        #[arg(long, default_value = "1000")]
+        bankroll: u64,
     },
 
     /// Run formal verification (Kani, Verus, Creusot)

@@ -6,6 +6,15 @@ use tokio::process::{Child, Command};
 use tokio::time::{Duration, sleep, timeout};
 use tracing::{debug, info, instrument};
 
+/// Which game the agent subprocess should play.
+#[derive(Debug, Clone)]
+pub enum GameMode {
+    /// TicTacToe with `--test-play`.
+    TicTacToe,
+    /// Blackjack with `--test-blackjack` and an initial bankroll.
+    Blackjack { bankroll: u64 },
+}
+
 /// Guards for spawned subprocesses. Kills processes on drop.
 pub struct ProcessGuards {
     server: Option<Child>,
@@ -91,21 +100,34 @@ pub async fn spawn_server(port: u16) -> Result<Child> {
 ///
 /// Returns the agent [`Child`] process. The caller is responsible for keeping
 /// it alive (typically via [`ProcessGuards`]).
-#[instrument(fields(port, agent_config = %agent_config.display()))]
-pub async fn spawn_agent(port: u16, agent_config: PathBuf) -> Result<Child> {
+#[instrument(fields(port, agent_config = %agent_config.display(), mode = ?mode))]
+pub async fn spawn_agent(port: u16, agent_config: PathBuf, mode: GameMode) -> Result<Child> {
     let exe = std::env::current_exe().context("Failed to get current executable path")?;
     let server_url = format!("http://localhost:{}", port);
 
     info!("Spawning agent subprocess");
-    let agent = Command::new(&exe)
-        .arg("agent")
+
+    let mut cmd = Command::new(&exe);
+    cmd.arg("agent")
         .arg("--config")
         .arg(agent_config)
         .arg("--server-url")
         .arg(&server_url)
-        .arg("--test-play")
         .arg("--test-session")
-        .arg("tui_session")
+        .arg("tui_session");
+
+    match mode {
+        GameMode::TicTacToe => {
+            cmd.arg("--test-play");
+        }
+        GameMode::Blackjack { bankroll } => {
+            cmd.arg("--test-blackjack")
+                .arg("--bankroll")
+                .arg(bankroll.to_string());
+        }
+    }
+
+    let agent = cmd
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::inherit())
         .spawn()

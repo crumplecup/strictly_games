@@ -17,7 +17,7 @@ use crate::lobby::settings::GameType;
 use crate::lobby::settings::LobbySettings;
 use crate::run_game_session;
 use crate::tui::{
-    BlackjackSessionOutcome, CrapsCoPlayer, CrapsSessionOutcome, run_blackjack_session,
+    BlackjackSessionOutcome, CrapsCoPlayer, CrapsSessionOutcome, run_blackjack_mcp_session,
     run_craps_session, run_multi_craps_session,
 };
 use crate::{
@@ -418,11 +418,33 @@ impl LobbyController {
         };
 
         match self.settings.selected_game {
-            // ── Blackjack ── local typestate game, no REST server ────────
+            // ── Blackjack ── MCP agent game via HTTP server ──────────────
             GameType::Blackjack => {
-                let outcome = run_blackjack_session(
+                let agent_config = match self.agent_library.get_by_name(agent_name) {
+                    Some(c) => c.clone(),
+                    None => {
+                        warn!(agent_name = %agent_name, "Agent not found in library");
+                        return Ok(lobby_screen(&self.current_user));
+                    }
+                };
+
+                let config_path = agent_config
+                    .config_path()
+                    .clone()
+                    .unwrap_or_else(|| self.agent_config_path.clone());
+
+                info!(
+                    config_path = %config_path.display(),
+                    player_name = %player_name,
+                    port = self.server_port,
+                    "Launching Blackjack MCP session"
+                );
+
+                let outcome = run_blackjack_mcp_session(
                     terminal,
+                    config_path,
                     player_name.clone(),
+                    *self.server_port(),
                     1_000, // default starting bankroll
                     show_typestate_graph,
                 )

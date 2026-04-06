@@ -102,12 +102,6 @@ impl VerifiedWorkflow for TextWrapped {}
 pub struct AreaSufficient;
 impl VerifiedWorkflow for AreaSufficient {}
 
-/// Established when a `GameBetting` object is live and the player is
-/// actively choosing a bet amount.
-#[derive(elicitation::Prop)]
-pub struct BettingActive;
-impl VerifiedWorkflow for BettingActive {}
-
 /// Established when a craps session is active (any phase).
 #[derive(elicitation::Prop)]
 pub struct CrapsRoundActive;
@@ -324,10 +318,7 @@ pub fn min_typestate_width(nodes: &[NodeDef]) -> u16 {
     if nodes.is_empty() {
         return 0;
     }
-    let node_cols: u16 = nodes
-        .iter()
-        .map(|n| n.label.width() as u16 + 4)
-        .sum();
+    let node_cols: u16 = nodes.iter().map(|n| n.label.width() as u16 + 4).sum();
     let arrow_gaps = nodes.len().saturating_sub(1) as u16;
     // +2 for the outer typestate widget border
     node_cols + arrow_gaps + 2

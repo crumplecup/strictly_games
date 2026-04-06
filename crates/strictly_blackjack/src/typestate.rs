@@ -276,6 +276,11 @@ impl GamePlayerTurn {
     pub fn current_hand_index(&self) -> usize {
         self.current_hand_index
     }
+
+    /// Returns the player's current bankroll (balance after the bet was deducted).
+    pub fn bankroll(&self) -> u64 {
+        self.ledger.post_bet_balance()
+    }
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -308,3 +308,63 @@ impl RestGameClient {
         Ok(())
     }
 }
+
+// ── Blackjack observer (no player registration needed) ───────────────────────
+
+/// Lightweight HTTP observer for a blackjack agent session.
+///
+/// The TUI spectator loop uses this to poll game state and dialogue without
+/// registering as a player — the agent drives the game entirely via MCP.
+#[derive(Debug, Clone)]
+pub struct BlackjackObserver {
+    base_url: String,
+    client: reqwest::Client,
+    pub session_id: String,
+}
+
+impl BlackjackObserver {
+    /// Creates a new observer pointing at `base_url` for `session_id`.
+    pub fn new(base_url: String, session_id: String) -> Self {
+        Self {
+            base_url,
+            client: reqwest::Client::new(),
+            session_id,
+        }
+    }
+
+    /// Fetches the current blackjack phase state.
+    #[instrument(skip(self))]
+    pub async fn get_blackjack_state(&self) -> Result<crate::games::blackjack::BlackjackStateView> {
+        let url = format!(
+            "{}/api/sessions/{}/blackjack_state",
+            self.base_url, self.session_id
+        );
+        let view = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("Failed to deserialize blackjack state")?;
+        Ok(view)
+    }
+
+    /// Fetches the server↔agent dialogue log.
+    #[instrument(skip(self))]
+    pub async fn get_dialogue(&self) -> Result<Vec<crate::session::DialogueEntry>> {
+        let url = format!(
+            "{}/api/sessions/{}/dialogue",
+            self.base_url, self.session_id
+        );
+        let entries = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json()
+            .await
+            .context("Failed to deserialize dialogue")?;
+        Ok(entries)
+    }
+}

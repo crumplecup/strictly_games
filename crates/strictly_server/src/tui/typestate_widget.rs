@@ -125,15 +125,6 @@ impl PhaseContext {
         }
     }
 
-    /// Create a context with a narrative and choices.
-    pub fn with_choices(narrative: impl Into<String>, choices: Vec<ChoiceHint>) -> Self {
-        Self {
-            narrative: narrative.into(),
-            choices,
-            pending_prompt: None,
-        }
-    }
-
     /// Attach a live in-flight prompt snapshot from [`ObservableCommunicator`].
     pub fn with_pending_prompt(mut self, prompt: Option<String>) -> Self {
         self.pending_prompt = prompt;

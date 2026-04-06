@@ -79,9 +79,21 @@ impl ContextualFactory for TttMoveFactory {
         // These let the agent query board state before committing to a move.
         // Each call is recorded as an explore (not a play) in ExploreStats.
         let explore_tools: &[(&str, &str, &str)] = &[
-            ("view_board",       "board",        "View the current board layout as a grid."),
-            ("view_legal_moves", "legal_moves",  "List all empty positions you can play."),
-            ("view_threats",     "threats",      "Show immediate win/block opportunities."),
+            (
+                "view_board",
+                "board",
+                "View the current board layout as a grid.",
+            ),
+            (
+                "view_legal_moves",
+                "legal_moves",
+                "List all empty positions you can play.",
+            ),
+            (
+                "view_threats",
+                "threats",
+                "Show immediate win/block opportunities.",
+            ),
         ];
         for &(suffix, category, desc) in explore_tools {
             let tool_name = format!("{prefix}__{suffix}");
@@ -136,7 +148,8 @@ async fn handle_move(
 
     let game_over = session.game.is_over();
     let board = session.game.board().display();
-    ctx.sessions.update_game_atomic(&ctx.session_id, session.game.clone())
+    ctx.sessions
+        .update_game_atomic(&ctx.session_id, session.game.clone())
         .map_err(|e| ErrorData::internal_error(e, None))?;
 
     if game_over {
@@ -157,10 +170,8 @@ async fn handle_move(
         } else {
             format!("🤝 Draw!\n\n{board}")
         };
-        ctx.sessions.push_dialogue(
-            &ctx.session_id,
-            DialogueEntry::server(result_text.clone()),
-        );
+        ctx.sessions
+            .push_dialogue(&ctx.session_id, DialogueEntry::server(result_text.clone()));
         return Ok(CallToolResult::success(vec![Content::text(result_text)]));
     }
 
@@ -286,7 +297,11 @@ async fn handle_await_turn(
                     .get_player(&ctx.player_id)
                     .map(|p| p.mark)
                     .ok_or_else(|| ErrorData::internal_error("player not found", None))?;
-                if winner == agent_mark { "You win" } else { "Opponent wins" }
+                if winner == agent_mark {
+                    "You win"
+                } else {
+                    "Opponent wins"
+                }
             } else {
                 "Unknown outcome"
             };
@@ -294,8 +309,10 @@ async fn handle_await_turn(
         } else {
             format!("🤝 Draw!\n\n{board}")
         };
-        ctx.sessions
-            .push_dialogue(&ctx.session_id, DialogueEntry::agent("→ `ttt__await_turn`".to_string()));
+        ctx.sessions.push_dialogue(
+            &ctx.session_id,
+            DialogueEntry::agent("→ `ttt__await_turn`".to_string()),
+        );
         ctx.sessions
             .push_dialogue(&ctx.session_id, DialogueEntry::server(result.clone()));
         return Ok(CallToolResult::success(vec![Content::text(result)]));
@@ -315,15 +332,21 @@ async fn handle_await_turn(
             },
         );
         ctx.dynamic.notify_tool_list_changed().await;
-        let msg = format!("Your turn!\n\n{board}\n\nChoose a square: call one of the `{prefix}__*` tools.");
-        ctx.sessions
-            .push_dialogue(&ctx.session_id, DialogueEntry::agent("→ `ttt__await_turn`".to_string()));
+        let msg = format!(
+            "Your turn!\n\n{board}\n\nChoose a square: call one of the `{prefix}__*` tools."
+        );
+        ctx.sessions.push_dialogue(
+            &ctx.session_id,
+            DialogueEntry::agent("→ `ttt__await_turn`".to_string()),
+        );
         ctx.sessions
             .push_dialogue(&ctx.session_id, DialogueEntry::server(msg.clone()));
         Ok(CallToolResult::success(vec![Content::text(msg)]))
     } else {
         // Still waiting for opponent — don't flood the chat log with silent polls.
-        let msg = format!("Opponent has not moved yet.\n\n{board}\n\nCall `{prefix}__await_turn` again in a moment.");
+        let msg = format!(
+            "Opponent has not moved yet.\n\n{board}\n\nCall `{prefix}__await_turn` again in a moment."
+        );
         Ok(CallToolResult::success(vec![Content::text(msg)]))
     }
 }
@@ -347,7 +370,11 @@ impl ContextualFactory for TttClearFactory {
 // ── Registration helpers ──────────────────────────────────────────────────────
 
 /// Register move tools for the current board state.
-pub fn register_move_tools(dynamic: &DynamicToolRegistry, ctx: TttGameContext, board: &strictly_tictactoe::Board) {
+pub fn register_move_tools(
+    dynamic: &DynamicToolRegistry,
+    ctx: TttGameContext,
+    board: &strictly_tictactoe::Board,
+) {
     let empty = Position::valid_moves(board);
     let _ = dynamic.clone().register_contextual(
         "ttt",
@@ -361,10 +388,10 @@ pub fn register_move_tools(dynamic: &DynamicToolRegistry, ctx: TttGameContext, b
 
 /// Register the `ttt__await_turn` tool.
 pub fn register_await_turn_tool(ctx: &TttGameContext, prefix: &str) {
-    let _ = ctx
-        .dynamic
-        .clone()
-        .register_contextual(prefix.to_string(), TttAwaitFactory, ctx.clone());
+    let _ =
+        ctx.dynamic
+            .clone()
+            .register_contextual(prefix.to_string(), TttAwaitFactory, ctx.clone());
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -383,4 +410,3 @@ pub fn position_snake(pos: Position) -> &'static str {
         Position::BottomRight => "bottom_right",
     }
 }
-

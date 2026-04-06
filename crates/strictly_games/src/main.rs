@@ -45,9 +45,20 @@ async fn main() -> Result<()> {
             server_command,
             test_play,
             test_session,
+            test_blackjack,
+            bankroll,
         } => {
             // Agent sets up its own file logging
-            run_agent(config, server_url, server_command, test_play, test_session).await
+            run_agent(
+                config,
+                server_url,
+                server_command,
+                test_play,
+                test_session,
+                test_blackjack,
+                bankroll,
+            )
+            .await
         }
         Command::Verify { tool, verbose } => {
             init_logging();
@@ -124,6 +135,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     // Clone sessions for different uses (cheap - clones internal Arc)
     let rest_sessions = game_sessions.clone();
     let explore_sessions = game_sessions.clone();
+    let blackjack_sessions = game_sessions.clone();
     let mcp_game_sessions = game_sessions.clone();
 
     debug!("About to create StreamableHttpService");
@@ -192,6 +204,27 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                     use axum::Json;
                     Json(sessions.get_dialogue(&session_id))
+                }
+            }),
+        )
+        .route(
+            "/api/sessions/{session_id}/blackjack_state",
+            axum::routing::get({
+                let sessions = blackjack_sessions.clone();
+                move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
+                    use axum::Json;
+                    use strictly_server::BlackjackStateView;
+                    if let Some(bj) = sessions.get_blackjack_session(&session_id) {
+                        let guard = bj.lock().await;
+                        Json(BlackjackStateView::from_phase(&guard))
+                    } else {
+                        Json(BlackjackStateView {
+                            phase: "idle".to_string(),
+                            bankroll: 0,
+                            description: "No active blackjack session.".to_string(),
+                            is_terminal: true,
+                        })
+                    }
                 }
             }),
         )
@@ -330,6 +363,8 @@ async fn run_agent(
     server_command: Option<String>,
     test_play: bool,
     test_session: Option<String>,
+    test_blackjack: bool,
+    bankroll: u64,
 ) -> Result<()> {
     // Load .env file (needed when run as subprocess)
     dotenvy::dotenv().ok();
@@ -399,6 +434,25 @@ async fn run_agent(
                 }
             }
         }
+    } else if test_blackjack {
+        info!(
+            bankroll,
+            "Agent mode: driving blackjack via tool-per-transition protocol"
+        );
+        let session_id = test_session.unwrap_or_else(|| format!("auto_bj_{}", std::process::id()));
+        loop {
+            info!("Starting new blackjack hand");
+            match play_blackjack_game(peer, &config, bankroll, &session_id).await {
+                Ok(_) => {
+                    info!("Blackjack hand completed, waiting before next");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                }
+                Err(e) => {
+                    warn!(error = %e, "Blackjack loop error, retrying");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                }
+            }
+        }
     } else {
         info!("Agent running. Press Ctrl+C to exit.");
         tokio::signal::ctrl_c().await?;
@@ -422,8 +476,8 @@ async fn play_ttt_game(
     config: &AgentConfig,
     session_id: &str,
 ) -> Result<()> {
-    use strictly_server::ToolSpec;
     use serde_json::json;
+    use strictly_server::ToolSpec;
     use tokio::time::{Duration, sleep};
 
     info!(session_id, player_name = %config.name(), "Joining game via play_game");
@@ -454,7 +508,8 @@ async fn play_ttt_game(
     // Track which explore tools the agent has already used this turn.
     // Once a view tool's result is in `context`, calling it again adds no new info.
     // Reset when a move is committed so the next turn starts fresh.
-    let mut explored_this_turn: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut explored_this_turn: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
 
     loop {
         sleep(Duration::from_millis(300)).await;
@@ -505,24 +560,27 @@ async fn play_ttt_game(
             .find(|t| t.name.ends_with("__await_turn"))
             .map(|t| t.name.to_string());
 
-        let tool_to_call = if !move_specs.is_empty() {
+        let (tool_to_call, tool_args) = if !move_specs.is_empty() {
             // Present move tools AND explore tools so the LLM can introspect
             // before committing. The model returns a tool_use block — not text.
             let mut all_specs = move_specs.clone();
             all_specs.extend(explore_specs);
-            match llm.choose_tool(TTT_SYSTEM_PROMPT, &context, &all_specs).await {
-                Ok(name) => {
+            match llm
+                .choose_tool(TTT_SYSTEM_PROMPT, &context, &all_specs)
+                .await
+            {
+                Ok((name, args)) => {
                     info!(chosen = %name, "LLM chose tool via tool-use API");
-                    name
+                    (name, args)
                 }
                 Err(e) => {
                     warn!(error = %e, "choose_tool failed, using first move");
-                    move_specs[0].name.clone()
+                    (move_specs[0].name.clone(), serde_json::Map::new())
                 }
             }
         } else if let Some(name) = await_name {
             // Waiting for opponent — no LLM reasoning needed, just poll.
-            name
+            (name, serde_json::Map::new())
         } else {
             sleep(Duration::from_millis(500)).await;
             continue;
@@ -532,7 +590,7 @@ async fn play_ttt_game(
         let result = peer
             .call_tool(
                 rmcp::model::CallToolRequestParams::new(tool_to_call.clone())
-                    .with_arguments(serde_json::Map::new()),
+                    .with_arguments(tool_args),
             )
             .await?;
 
@@ -569,6 +627,169 @@ You may call view_board, view_legal_moves, or view_threats to inspect the game s
 before committing to a move. Use these to make better decisions — especially when \
 blocking or completing a winning line. \
 Each ttt__<square> tool commits your mark to that square.";
+
+/// Drives a single Blackjack hand to completion via the tool-per-transition protocol.
+///
+/// The agent calls `blackjack_deal` to start, then loops:
+/// - Betting phase (`bet__*`): choose a bet amount, with optional bankroll view.
+/// - Player turn (`blackjack__*`): hit or stand, with optional hand/dealer/shoe views.
+///   View tools are consumed and removed once called — calling the same view twice
+///   adds no new information, so it is simply gone from the tool list.
+/// - Post-hand (`next__*`): deal again or cash out.
+/// - Returns when the agent cashes out or goes bust.
+#[instrument(skip(peer, config))]
+async fn play_blackjack_game(
+    peer: &rmcp::Peer<rmcp::RoleClient>,
+    config: &AgentConfig,
+    initial_bankroll: u64,
+    session_id: &str,
+) -> Result<()> {
+    use serde_json::json;
+    use strictly_server::ToolSpec;
+    use tokio::time::{Duration, sleep};
+
+    info!(
+        initial_bankroll,
+        session_id, "Starting blackjack hand via blackjack_deal"
+    );
+
+    let llm = config
+        .create_llm_config()
+        .map(strictly_server::LlmClient::new)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let result = peer
+        .call_tool(
+            rmcp::model::CallToolRequestParams::new("blackjack_deal").with_arguments(
+                json!({ "initial_bankroll": initial_bankroll, "session_id": session_id })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await?;
+
+    let mut context = tool_result_text(&result);
+    info!(response = %context, "blackjack_deal response");
+
+    // Track which view tools have been used this turn; reset on any commit action.
+    let mut explored_this_turn: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+
+    loop {
+        sleep(Duration::from_millis(300)).await;
+
+        let tool_list = peer.list_tools(Default::default()).await?;
+
+        // Separate tools into:
+        // - action tools (bet__*, blackjack__hit/stand, next__*) — commit a decision
+        // - explore tools (*__view_*) — query state without committing
+        let action_specs: Vec<ToolSpec> = tool_list
+            .tools
+            .iter()
+            .filter(|t| {
+                (t.name.starts_with("bet__")
+                    || t.name.starts_with("blackjack__")
+                    || t.name.starts_with("next__"))
+                    && !t.name.contains("__view_")
+            })
+            .map(|t| ToolSpec {
+                name: t.name.to_string(),
+                description: t
+                    .description
+                    .as_deref()
+                    .unwrap_or("Make a decision.")
+                    .to_string(),
+                input_schema: serde_json::Value::Object(t.input_schema.as_ref().clone()),
+            })
+            .collect();
+
+        let explore_specs: Vec<ToolSpec> = tool_list
+            .tools
+            .iter()
+            .filter(|t| t.name.contains("__view_") && !explored_this_turn.contains(t.name.as_ref()))
+            .map(|t| ToolSpec {
+                name: t.name.to_string(),
+                description: t
+                    .description
+                    .as_deref()
+                    .unwrap_or("Query game state.")
+                    .to_string(),
+                input_schema: serde_json::Value::Object(t.input_schema.as_ref().clone()),
+            })
+            .collect();
+
+        if action_specs.is_empty() {
+            sleep(Duration::from_millis(500)).await;
+            continue;
+        }
+
+        // Offer both action and (remaining) explore tools so the LLM can
+        // inspect state before committing. The LLM fills in any required args
+        // (e.g. `amount` for `bet__place`) via the native tool-use API.
+        let mut all_specs = action_specs.clone();
+        all_specs.extend(explore_specs);
+
+        let (tool_to_call, tool_args) = match llm
+            .choose_tool(BLACKJACK_SYSTEM_PROMPT, &context, &all_specs)
+            .await
+        {
+            Ok((name, args)) => {
+                info!(chosen = %name, "LLM chose blackjack tool");
+                (name, args)
+            }
+            Err(e) => {
+                warn!(error = %e, "choose_tool failed, using first action");
+                (action_specs[0].name.clone(), serde_json::Map::new())
+            }
+        };
+
+        info!(tool = %tool_to_call, "Calling blackjack tool");
+
+        let result = peer
+            .call_tool(
+                rmcp::model::CallToolRequestParams::new(tool_to_call.clone())
+                    .with_arguments(tool_args),
+            )
+            .await?;
+
+        let result_text = tool_result_text(&result);
+        info!(tool = %tool_to_call, response = %result_text, "Blackjack tool response");
+
+        if tool_to_call.contains("__view_") {
+            explored_this_turn.insert(tool_to_call.clone());
+            context = format!("{context}\n\n{result_text}");
+        } else {
+            explored_this_turn.clear();
+            context = result_text;
+        }
+
+        if context.contains("cash_out")
+            || context.contains("Bust")
+            || context.contains("bankroll: $0")
+            || context.contains("Bankroll: $0")
+        {
+            info!("Blackjack session ended");
+            return Ok(());
+        }
+    }
+}
+
+const BLACKJACK_SYSTEM_PROMPT: &str = "\
+You are playing Blackjack. Your goal is to beat the dealer by getting a hand total \
+closer to 21 without going over. Face cards are worth 10; Aces are 1 or 11. \
+The dealer hits on soft 16 and stands on 17.\n\
+\n\
+Before committing to a decision you may call view tools to inspect game state:\n\
+- blackjack__view_your_hand     — your cards and total\n\
+- blackjack__view_dealer_showing — dealer's face-up card\n\
+- blackjack__view_shoe_status   — remaining cards in the shoe\n\
+- blackjack__view_bankroll      — your chip count\n\
+\n\
+Each view tool is removed once used — calling the same view twice adds no new info.\n\
+\n\
+Strategy hints: Stand on hard 17+. Hit on hard 8 or less. Double on 10 or 11 \
+when dealer shows 2–9. Never bust chasing a low dealer card — let the dealer bust.";
 
 /// Extract the text content from a [`CallToolResult`].
 fn tool_result_text(result: &rmcp::model::CallToolResult) -> String {

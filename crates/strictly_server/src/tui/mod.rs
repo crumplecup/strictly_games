@@ -16,7 +16,9 @@ mod standalone;
 pub mod tui_communicator;
 mod typestate_widget;
 
-pub use blackjack::{BlackjackSessionOutcome, run_blackjack_session, run_multi_blackjack_session};
+pub use blackjack::{
+    BlackjackSessionOutcome, run_blackjack_mcp_session, run_multi_blackjack_session,
+};
 pub use chat_widget::{ChatMessage, ChatWidget, Participant, chat_channel};
 pub use craps::{CrapsCoPlayer, CrapsSessionOutcome, run_craps_session, run_multi_craps_session};
 pub use mcp_communicator::LlmElicitCommunicator;
@@ -94,7 +96,8 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
     // so human gets X and moves first
     let _guards = if let (Some(server), None) = (server_child, agent_child) {
         info!("Spawning agent after human registration (human plays X)");
-        let agent = standalone::spawn_agent(port, agent_config).await?;
+        let agent =
+            standalone::spawn_agent(port, agent_config, standalone::GameMode::TicTacToe).await?;
         Some(standalone::ProcessGuards::new(server, agent))
     } else {
         None
@@ -329,13 +332,17 @@ where
             let client =
                 RestGameClient::register(server_url, "tui_session".to_string(), player_name)
                     .await?;
-            let agent = standalone::spawn_agent(port, agent_config_path).await?;
+            let agent =
+                standalone::spawn_agent(port, agent_config_path, standalone::GameMode::TicTacToe)
+                    .await?;
             (client, standalone::ProcessGuards::new(server, agent))
         }
         FirstPlayer::Agent => {
             // Spawn agent first → agent plays as X (moves first), human gets O.
             info!("Spawning agent first (agent goes first)");
-            let agent = standalone::spawn_agent(port, agent_config_path).await?;
+            let agent =
+                standalone::spawn_agent(port, agent_config_path, standalone::GameMode::TicTacToe)
+                    .await?;
             let client =
                 RestGameClient::register(server_url, "tui_session".to_string(), player_name)
                     .await?;
@@ -1068,10 +1075,7 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
             Constraint::Min(20),
             Constraint::Min(min_ts),
         ],
-        (true, false) => vec![
-            Constraint::Length(BOARD_WIDTH),
-            Constraint::Min(min_ts),
-        ],
+        (true, false) => vec![Constraint::Length(BOARD_WIDTH), Constraint::Min(min_ts)],
         (false, true) => vec![
             Constraint::Length(BOARD_WIDTH),
             Constraint::Min(20),
@@ -1117,8 +1121,8 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
             let ts_area = content_areas[type_col];
             // Verify the column is wide enough before rendering — fall back to
             // resize prompt on the typestate area if the terminal is too narrow.
-            let _ts_proof = verify_typestate_readable(data.graph.nodes, ts_area)
-                .unwrap_or_else(|e| {
+            let _ts_proof =
+                verify_typestate_readable(data.graph.nodes, ts_area).unwrap_or_else(|e| {
                     render_resize_prompt(f, &e);
                     Established::assert()
                 });
