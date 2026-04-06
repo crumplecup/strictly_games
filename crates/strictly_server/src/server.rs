@@ -1,16 +1,24 @@
 //! MCP server setup and configuration.
 
-use crate::games::tictactoe::{Player, Position};
-use crate::session::{PlayerType, SessionManager};
-use elicitation::{ChoiceSet, ElicitServer, Elicitation};
+use crate::games::blackjack::{
+    BetConstraints, BlackjackPhase, BlackjackSession, DEFAULT_PRESETS, new_session,
+    register_bet_tools,
+};
+use crate::games::tictactoe::{TttGameContext, register_await_turn_tool, register_move_tools};
+use crate::session::{DialogueEntry, PlayerType, SessionManager};
+use elicitation::{DynamicToolRegistry, ElicitPlugin as _, TypeSpecPlugin};
 use rmcp::handler::server::router::tool::ToolRouter;
+use rmcp::handler::server::tool::ToolCallContext;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
-use rmcp::service::{Peer, RoleServer};
-use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_handler, tool_router};
+use rmcp::model::{
+    CallToolRequestParams, CallToolResult, Content, ListToolsResult, PaginatedRequestParams,
+    ServerCapabilities, ServerInfo,
+};
+use rmcp::service::{Peer, RequestContext, RoleServer};
+use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use strictly_blackjack::{BasicAction, GameSetup};
+use strictly_blackjack::GameSetup;
 use tracing::{debug, error, info, instrument, warn};
 
 /// Request for registering a player.
@@ -70,6 +78,13 @@ pub struct CancelGameRequest {
 pub struct GameServer {
     sessions: SessionManager,
     tool_router: ToolRouter<Self>,
+    /// Dynamic tool registry — holds betting, action, and ttt move tools.
+    dynamic: DynamicToolRegistry,
+    /// Per-connection blackjack game state.
+    blackjack_phase: BlackjackSession,
+    /// Type-spec plugin — exposes `type_spec__describe_type` and
+    /// `type_spec__explore_type` so agents can query game-type contracts.
+    type_spec: TypeSpecPlugin,
 }
 
 impl Default for GameServer {
@@ -88,6 +103,9 @@ impl GameServer {
         Self {
             sessions,
             tool_router: Self::tool_router(),
+            dynamic: DynamicToolRegistry::new(),
+            blackjack_phase: new_session(),
+            type_spec: TypeSpecPlugin::new(),
         }
     }
 
@@ -348,31 +366,27 @@ impl GameServer {
     /// Play a game of tic-tac-toe using elicitation
     #[instrument(skip(self, peer, req), fields(session_id = %req.session_id, player_name = %req.player_name))]
     #[tool(
-        description = "Play a complete game of tic-tac-toe. The agent will be prompted for moves interactively until the game ends."
+        description = "Join a tic-tac-toe session as an agent player. Returns immediately with the current board state and either the first set of move tools (`ttt__*`) if it is your turn, or `ttt__await_turn` if you must wait for the opponent."
     )]
     pub async fn play_game(
         &self,
         peer: Peer<RoleServer>,
         Parameters(req): Parameters<PlayGameRequest>,
     ) -> Result<CallToolResult, McpError> {
-        info!(session_id = %req.session_id, player_name = %req.player_name, "Starting elicitation-based game");
+        info!(session_id = %req.session_id, player_name = %req.player_name, "Joining tictactoe session");
 
-        // Register the agent player
         let player_id = format!(
             "{}_{}",
             req.session_id,
             req.player_name.to_lowercase().replace(' ', "_")
         );
 
-        // Get or create session
         if self.sessions.get_session(&req.session_id).is_none() {
-            info!(session_id = %req.session_id, "Creating new session for game");
             self.sessions
                 .create_session(req.session_id.clone())
                 .map_err(|e: String| McpError::internal_error(e, None))?;
         }
 
-        // Register player atomically (thread-safe)
         let mark = self
             .sessions
             .register_player_atomic(
@@ -383,533 +397,180 @@ impl GameServer {
             )
             .map_err(|e| {
                 error!(error = %e, "Failed to register player");
-                let msg = format!("Failed to register: {}", e);
-                McpError::invalid_params(msg, None)
+                McpError::invalid_params(format!("Failed to register: {e}"), None)
             })?;
 
-        info!(player_id = %player_id, mark = ?mark, "Agent registered, entering elicitation loop");
+        info!(player_id = %player_id, mark = ?mark, "Agent registered");
 
-        // Game loop - continue until game is over
-        loop {
-            // PASSIVE-AFFIRM: Escape hatch check (no user prompt, just flag)
-            // This is the building block for control flow - user can press 'q' to cancel
-            let session = self
-                .sessions
-                .get_session(&req.session_id)
-                .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+        // Wire peer for notify_tool_list_changed (OnceLock: first call wins).
+        self.dynamic.set_peer(peer);
 
-            if !session.affirm_continue() {
-                info!("Game loop cancelled by user request (passive-affirm escape hatch)");
-                return Ok(CallToolResult::success(vec![Content::text(
-                    "Game cancelled by user.".to_string(),
-                )]));
-            }
+        let game_ctx = TttGameContext {
+            session_id: req.session_id.clone(),
+            player_id: player_id.clone(),
+            sessions: self.sessions.clone(),
+            dynamic: self.dynamic.clone(),
+        };
 
-            // Get fresh session state at start of each iteration
-            let mut session = self
-                .sessions
-                .get_session(&req.session_id)
-                .ok_or_else(|| McpError::internal_error("Session not found", None))?;
+        let session = self
+            .sessions
+            .get_session(&req.session_id)
+            .ok_or_else(|| McpError::internal_error("Session not found", None))?;
 
-            // Check if game is over
-            if session.game.is_over() {
-                if let Some(winner) = session.game.winner() {
-                    let winner_name = if winner == mark {
-                        req.player_name.clone()
-                    } else {
-                        "opponent".to_string()
-                    };
+        let board = session.game.board().display();
 
-                    let message = format!(
-                        "🎉 Game Over! {} wins!\n\nFinal Board:\n{}\n\nMoves: {}",
-                        winner_name,
-                        session.game.board().display(),
-                        session.game.history().len()
-                    );
-
-                    tracing::info!(winner = ?winner, moves = session.game.history().len(), "Game ended with winner");
-                    self.sessions.update_session(session);
-                    return Ok(CallToolResult::success(vec![Content::text(message)]));
-                } else {
-                    let message = format!(
-                        "🤝 Game Over! It's a draw.\n\nFinal Board:\n{}\n\nMoves: {}",
-                        session.game.board().display(),
-                        session.game.history().len()
-                    );
-
-                    tracing::info!(moves = session.game.history().len(), "Game ended in draw");
-                    self.sessions.update_session(session);
-                    return Ok(CallToolResult::success(vec![Content::text(message)]));
-                }
-            }
-
-            // Check if it's our turn
-            if !session.is_players_turn(&player_id) {
-                // Wait for opponent's move (agent vs agent mode)
-                tracing::info!(mark = ?mark, "Not our turn, waiting for opponent");
-                // Don't update - we haven't modified anything
-
-                // Poll for opponent's move
-                let max_polls = 300; // 5 minutes (1 second per poll)
-                for poll_count in 0..max_polls {
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-                    // PASSIVE-AFFIRM: Check escape hatch while waiting
-                    let check_session = self
-                        .sessions
-                        .get_session(&req.session_id)
-                        .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
-
-                    if !check_session.affirm_continue() {
-                        info!("Game loop cancelled while waiting for opponent");
-                        return Ok(CallToolResult::success(vec![Content::text(
-                            "Game cancelled by user.".to_string(),
-                        )]));
-                    }
-
-                    // Refresh session state
-                    let refreshed_session = self
-                        .sessions
-                        .get_session(&req.session_id)
-                        .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
-
-                    // Check if game ended while we were waiting
-                    if refreshed_session.game.is_over() {
-                        break; // Exit to outer loop to handle game end
-                    }
-
-                    // Check if it's now our turn
-                    if refreshed_session.is_players_turn(&player_id) {
-                        tracing::info!(poll_count, "Opponent moved, now our turn");
-                        break; // Exit poll loop, continue to our move
-                    }
-
-                    if poll_count % 10 == 0 {
-                        tracing::debug!(poll_count, "Still waiting for opponent");
-                    }
-                }
-
-                // Loop continues to check game status and make our move
-                continue;
-            }
-
-            // It's our turn - use pure elicitation (walled garden pattern)
-            tracing::info!(mark = ?mark, "Agent's turn - entering elicitation walled garden");
-
-            // Elicitation + Validation loop (demonstrates composition)
-            // Elicitation ensures TYPE safety (Position enum)
-            // Validation ensures SEMANTIC correctness (square is empty)
-            let position = loop {
-                // THE ONLY WAY TO GET A POSITION: Through filtered elicitation
-                // Server wraps Position::valid_moves into the elicitation call stack
-                let candidate = self
-                    .elicit_position_filtered(peer.clone(), &req.session_id)
-                    .await?;
-
-                tracing::info!(position = ?candidate, "Position elicited via framework Select paradigm");
-
-                // Validate against board state (composition of elicitation + contracts)
-                // Note: With filtering above, this should always pass, but defensive check
-                let session = self
-                    .sessions
-                    .get_session(&req.session_id)
-                    .ok_or_else(|| McpError::internal_error("Session disappeared", None))?;
-
-                let board = session.game.board();
-                if board.is_empty(candidate) {
-                    tracing::debug!(position = ?candidate, "Position validated as empty");
-                    break candidate;
-                } else {
-                    tracing::warn!(
-                        position = ?candidate,
-                        "Position occupied despite filtering - retrying"
-                    );
-                    continue;
-                }
-            };
-
-            tracing::info!(position = ?position, "Position elicited via framework Select paradigm");
-
-            // Elicitation guarantees type safety, validation loop ensures semantic correctness
-            // Session API handles final validation + typestate transitions
-            match session.make_move(&player_id, position) {
-                Ok(()) => {
-                    tracing::info!(position = ?position, "Move executed - typestate transition complete");
-                }
-                Err(e) => {
-                    // Should not happen - we validated above - but defensive
-                    tracing::error!(error = %e, position = ?position, "Move rejected despite validation");
-                    return Err(McpError::internal_error(
-                        format!("Move rejected: {}", e),
-                        None,
-                    ));
-                }
-            }
-
-            // Update game state atomically (preserves player registrations)
-            self.sessions
-                .update_game_atomic(&req.session_id, session.game)
-                .map_err(|e| McpError::internal_error(e, None))?;
-        }
-    }
-
-    /// Elicit a position with board-state filtering and agent exploration.
-    ///
-    /// Agents see both commit (Play) and explore (ViewBoard, ViewLegalMoves,
-    /// ViewThreats) variants via [`TicTacToeAction`]. Explore selections
-    /// build a [`TicTacToeView`] snapshot, send the description through the
-    /// communicator, and re-elicit. When the agent selects Play(pos) the
-    /// position is returned.
-    #[instrument(skip(self, peer), fields(session_id))]
-    async fn elicit_position_filtered(
-        &self,
-        peer: Peer<RoleServer>,
-        session_id: &str,
-    ) -> Result<Position, McpError> {
-        use crate::session::DialogueEntry;
-        use crate::tui::contextual_communicator::{ContextualCommunicator, knowledge_cache};
-        use elicitation::ElicitCommunicator as _;
-        use strictly_tictactoe::{TicTacToeAction, TicTacToeView};
-
-        let knowledge = knowledge_cache();
-        let comm = ContextualCommunicator::new(ElicitServer::new(peer), knowledge.clone());
-
+        // Record the game briefing in the chat log so the chat pane shows the
+        // instructions given to the agent at the start of every game.
         self.sessions.push_dialogue(
-            session_id,
-            DialogueEntry::server("Eliciting move — select a position or explore."),
+            &req.session_id,
+            DialogueEntry::server(format!(
+                "🎮 {} joined as {:?}. \
+                 You are competing in Tic-Tac-Toe against a human opponent. \
+                 Win by occupying three squares in a row — horizontally, vertically, or diagonally. \
+                 Block your opponent if they are about to win. \
+                 Each available tool represents one empty square.",
+                req.player_name, mark
+            )),
         );
 
-        loop {
-            let action = TicTacToeAction::elicit(&comm)
-                .await
-                .map_err(|e| McpError::internal_error(format!("Elicitation failed: {e}"), None))?;
+        if session.game.is_over() {
+            let result = if let Some(winner) = session.game.winner() {
+                let who = if winner == mark { &req.player_name } else { "opponent" };
+                format!("Game already over — {who} wins!\n\n{board}")
+            } else {
+                format!("Game already over — draw!\n\n{board}")
+            };
+            return Ok(CallToolResult::success(vec![Content::text(result)]));
+        }
 
-            if let Some(pos) = action.to_position() {
-                // Commit — validate the position is still legal
-                let session = self
-                    .sessions
-                    .get_session(session_id)
-                    .ok_or_else(|| McpError::internal_error("Session not found", None))?;
-
-                let board = session.game.board();
-                if board.is_empty(pos) {
-                    self.sessions.record_play(session_id);
-                    self.sessions.push_dialogue(
-                        session_id,
-                        DialogueEntry::agent(format!("Play {}", pos.label())),
-                    );
-                    tracing::info!(position = ?pos, "Position elicited and validated");
-                    return Ok(pos);
-                }
-                // Occupied despite agent choice — inform and retry
-                self.sessions.push_dialogue(
-                    session_id,
-                    DialogueEntry::agent(format!("Play {} (invalid)", pos.label())),
-                );
-                let rejection = format!(
-                    "[Invalid Move] Position {} is occupied. Please choose an empty square.",
-                    pos
-                );
-                self.sessions
-                    .push_dialogue(session_id, DialogueEntry::server(&rejection));
-                knowledge
-                    .lock()
-                    .unwrap()
-                    .push(format!("[Invalid Move] Position {} is occupied.", pos));
-                let _ = comm.send_prompt(&rejection).await;
-                continue;
-            }
-
-            // Explore — record, build view, cache knowledge, and loop
-            self.sessions.record_explore(session_id);
-            let category = action.explore_category().unwrap_or("unknown");
-            self.sessions.push_dialogue(
-                session_id,
-                DialogueEntry::agent(format!("Explore: {category}")),
-            );
-
-            let session = self
-                .sessions
-                .get_session(session_id)
-                .ok_or_else(|| McpError::internal_error("Session not found", None))?;
-
-            let current_player = session
-                .game
-                .to_move()
-                .ok_or_else(|| McpError::internal_error("No player to move", None))?;
-
-            let view = TicTacToeView::from_board(session.game.board(), current_player);
-            let description = view
-                .describe_category(category)
-                .unwrap_or_else(|| "No information available".to_string());
-
-            tracing::debug!(category, "Agent exploring game state");
-
-            // Record the server's response to the explore request.
-            self.sessions.push_dialogue(
-                session_id,
-                DialogueEntry::server(format!("[{category}] {description}")),
-            );
-
-            // Add to the growing knowledge cache so the agent sees it
-            // in every subsequent prompt until it commits.
-            knowledge
-                .lock()
-                .unwrap()
-                .push(format!("[{category}] {description}"));
-
-            let _ = comm
-                .send_prompt(&format!("[Game State — {category}] {description}"))
-                .await;
+        if session.is_players_turn(&player_id) {
+            register_move_tools(&self.dynamic, game_ctx, session.game.board());
+            self.dynamic.notify_tool_list_changed().await;
+            Ok(CallToolResult::success(vec![Content::text(format!(
+                "You are {:?}. It's your turn!\n\n{board}\n\nChoose a square — call one of the `ttt__*` tools.",
+                mark
+            ))]))
+        } else {
+            register_await_turn_tool(&game_ctx, "ttt");
+            self.dynamic.notify_tool_list_changed().await;
+            Ok(CallToolResult::success(vec![Content::text(format!(
+                "You are {:?}. Waiting for opponent's first move.\n\n{board}\n\nCall `ttt__await_turn` once the opponent has moved.",
+                mark
+            ))]))
         }
     }
 
-    /// Play a complete game of blackjack with elicitation.
-    #[instrument(skip(self, peer, req), fields(initial_bankroll = %req.initial_bankroll))]
+    /// Start a blackjack session with the given initial bankroll.
+    ///
+    /// Registers bet tools into the dynamic registry so the agent can place
+    /// a bet immediately after calling this tool.  Sends
+    /// `notify_tool_list_changed` so the agent refreshes its tool list.
+    #[instrument(skip(self, peer, req), fields(initial_bankroll = req.initial_bankroll))]
     #[tool(
-        description = "Play blackjack. You will be prompted for betting and actions (hit/stand) until the game ends."
+        description = "Start a new blackjack session. After calling this, use the `bet__place` or `bet__preset_N` tools to place your bet."
     )]
-    pub async fn play_blackjack(
+    pub async fn blackjack_deal(
         &self,
         peer: Peer<RoleServer>,
         Parameters(req): Parameters<PlayBlackjackRequest>,
     ) -> Result<CallToolResult, McpError> {
-        info!(initial_bankroll = %req.initial_bankroll, "Starting blackjack game");
+        let bankroll = req.initial_bankroll;
+        info!(bankroll, "Starting blackjack session");
 
-        // Initialize game
-        let mut bankroll = req.initial_bankroll;
-        let mut result_messages = Vec::new();
-
-        // Game loop - play hands until bankroll is depleted or player quits
-        loop {
-            // Check if player has funds
-            if bankroll == 0 {
-                let message = format!(
-                    "💸 Game Over! You've run out of chips.\n\nFinal bankroll: ${}\n\n",
-                    bankroll
-                );
-                result_messages.push(message);
-                break;
-            }
-
-            // Display current bankroll
-            result_messages.push(format!("\n💰 Current bankroll: ${}\n", bankroll));
-
-            // Create new betting state
-            let seed = std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
-                .unwrap_or(42);
-            let game = GameSetup::new(seed).start_betting(bankroll);
-
-            // Elicit bet amount
-            let bet = self.elicit_bet(peer.clone(), bankroll).await?;
-
-            result_messages.push(format!("Bet: ${}\n", bet));
-
-            // Place bet and deal cards
-            let mut game_result = game
-                .place_bet(bet)
-                .map_err(|e| McpError::invalid_params(format!("Invalid bet: {}", e), None))?;
-
-            // Show initial deal
-            match &game_result {
-                strictly_blackjack::GameResult::PlayerTurn(player_game) => {
-                    result_messages.push(format!(
-                        "Your hand: {}\n",
-                        player_game.player_hands()[0].display()
-                    ));
-                    result_messages.push(format!(
-                        "Dealer shows: {}\n",
-                        player_game.dealer_hand().cards()[0]
-                    ));
-                }
-                strictly_blackjack::GameResult::Finished(finished, _settled) => {
-                    // Immediate blackjack
-                    result_messages.push(format!(
-                        "🃏 Blackjack! Your hand: {}\n",
-                        finished.player_hands()[0].display()
-                    ));
-                    result_messages.push(self.format_game_result(finished));
-                    bankroll = finished.bankroll();
-                    continue;
-                }
-                _ => {}
-            }
-
-            // Player turn - elicit actions
-            while let strictly_blackjack::GameResult::PlayerTurn(player_game) = game_result {
-                let action = self
-                    .elicit_blackjack_action(peer.clone(), &player_game)
-                    .await?;
-
-                result_messages.push(format!("Action: {:?}\n", action));
-
-                let player_action =
-                    strictly_blackjack::PlayerAction::new(action, player_game.current_hand_index());
-
-                game_result = player_game
-                    .take_action(player_action)
-                    .map_err(|e| McpError::internal_error(format!("Action failed: {}", e), None))?;
-
-                // Show updated hand after action
-                if let strictly_blackjack::GameResult::PlayerTurn(pg) = &game_result {
-                    result_messages.push(format!(
-                        "Your hand: {}\n",
-                        pg.player_hands()[pg.current_hand_index()].display()
-                    ));
-                }
-            }
-
-            // Dealer turn
-            if let strictly_blackjack::GameResult::DealerTurn(dealer_game) = game_result {
-                result_messages.push("\n🎲 Dealer's turn...\n".to_string());
-                let (finished, _settled) = dealer_game.play_dealer_turn();
-                result_messages.push(self.format_game_result(&finished));
-                bankroll = finished.bankroll();
-            }
-
-            // Ask if player wants to continue
-            if !self.affirm_continue_blackjack(peer.clone()).await? {
-                result_messages.push("\n👋 Thanks for playing!\n".to_string());
-                break;
-            }
+        if bankroll == 0 {
+            return Err(McpError::invalid_params(
+                "initial_bankroll must be > 0",
+                None,
+            ));
         }
 
-        let final_message = result_messages.join("");
-        Ok(CallToolResult::success(vec![Content::text(final_message)]))
-    }
+        // Wire peer so `notify_tool_list_changed` can fire.
+        self.dynamic.set_peer(peer);
 
-    /// Elicit a bet amount within bankroll limits using ChoiceSet.
-    ///
-    /// Presents fixed bet denominations filtered by available bankroll.
-    #[instrument(skip(self, peer), fields(max_bet))]
-    async fn elicit_bet(&self, peer: Peer<RoleServer>, max_bet: u64) -> Result<u64, McpError> {
-        tracing::info!(max_bet, "Eliciting bet amount from agent");
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(42);
+        let game = GameSetup::new(seed).start_betting(bankroll);
 
-        // Fixed bet denominations ($1, $5, $10, $25, $50, $100, $500)
-        let bet_options = vec![1, 5, 10, 25, 50, 100, 500];
-
-        // Filter to only bets within bankroll (walled garden)
-        let valid_bets: Vec<u64> = bet_options
-            .into_iter()
-            .filter(|&bet| bet <= max_bet)
-            .collect();
-
-        if valid_bets.is_empty() {
-            return Err(McpError::internal_error("No valid bets available", None));
+        {
+            let mut guard = self.blackjack_phase.lock().await;
+            *guard = BlackjackPhase::Betting(Box::new(game));
         }
 
-        // Use ChoiceSet to trap agent in valid options
-        let server = ElicitServer::new(peer);
-        let bet = ChoiceSet::new(valid_bets)
-            .with_prompt("Choose your bet amount:")
-            .elicit(&server)
-            .await
-            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
+        register_bet_tools(
+            &self.dynamic,
+            BetConstraints {
+                min: 1,
+                max: bankroll,
+                presets: DEFAULT_PRESETS,
+            },
+            self.blackjack_phase.clone(),
+        );
+        self.dynamic.notify_tool_list_changed().await;
 
-        tracing::info!(bet, "Agent selected bet");
-        Ok(bet)
-    }
-
-    /// Elicit a blackjack action (hit/stand) based on game state using ChoiceSet.
-    ///
-    /// Uses the walled garden pattern - only presents valid actions to the agent.
-    /// Agent cannot choose invalid actions.
-    #[instrument(skip(self, peer, game))]
-    async fn elicit_blackjack_action(
-        &self,
-        peer: Peer<RoleServer>,
-        game: &strictly_blackjack::GamePlayerTurn,
-    ) -> Result<BasicAction, McpError> {
-        let hand = &game.player_hands()[game.current_hand_index()];
-        let hand_value = hand.value().best();
-
-        tracing::info!(hand_value, "Eliciting action from agent");
-
-        // Walled garden: Filter valid actions based on game state
-        // For Milestone 1 (Hit/Stand only), both are always valid unless bust
-        let valid_actions: Vec<BasicAction> = if hand.is_bust() {
-            // Hand is bust - no actions available (this shouldn't happen in practice)
-            vec![]
-        } else {
-            // Both Hit and Stand are valid
-            vec![BasicAction::Hit, BasicAction::Stand]
-        };
-
-        if valid_actions.is_empty() {
-            return Err(McpError::internal_error("No valid actions available", None));
-        }
-
-        // Use ChoiceSet to trap agent in valid options
-        let server = ElicitServer::new(peer);
-        let action = ChoiceSet::new(valid_actions)
-            .with_prompt(format!(
-                "Your hand: {} (value: {}). Choose your action:",
-                hand.display(),
-                hand_value
-            ))
-            .elicit(&server)
-            .await
-            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
-
-        tracing::info!(action = ?action, hand_value, "Agent selected action");
-        Ok(action)
-    }
-
-    /// Ask if player wants to continue playing using bool::elicit_checked (Affirm pattern).
-    #[instrument(skip(self, peer))]
-    async fn affirm_continue_blackjack(&self, peer: Peer<RoleServer>) -> Result<bool, McpError> {
-        tracing::info!("Eliciting continue decision from agent");
-
-        // Use Affirm pattern for yes/no question
-        let continue_playing = bool::elicit_checked(peer)
-            .await
-            .map_err(|e| McpError::internal_error(format!("Elicitation failed: {}", e), None))?;
-
-        tracing::info!(continue_playing, "Agent decision");
-        Ok(continue_playing)
-    }
-
-    /// Format game result for display.
-    fn format_game_result(&self, game: &strictly_blackjack::GameFinished) -> String {
-        let mut result = String::new();
-
-        result.push_str(&format!(
-            "Dealer's hand: {}\n",
-            game.dealer_hand().display()
-        ));
-
-        for (i, (hand, outcome)) in game.player_hands().iter().zip(game.outcomes()).enumerate() {
-            result.push_str(&format!("\nHand {}: {}\n", i + 1, hand.display()));
-            result.push_str(&format!("Outcome: {}\n", outcome));
-
-            let payout = outcome.calculate_payout(game.bets()[i]);
-            if payout > 0 {
-                result.push_str(&format!("Won: ${}\n", payout));
-            } else if payout < 0 {
-                result.push_str(&format!("Lost: ${}\n", payout.abs()));
-            } else {
-                result.push_str("Push\n");
-            }
-        }
-
-        result.push_str(&format!("\n💰 Bankroll: ${}\n", game.bankroll()));
-        result
-    }
-
-    // Auto-generate elicitation tools for type-safe LLM interaction
-    elicitation::elicit_tools! {
-        Position,
-        Player,
-        BasicAction,
+        Ok(CallToolResult::success(vec![Content::text(format!(
+            "🃏 Blackjack session started. Bankroll: ${bankroll}.\n\
+             Use `bet__place` to place a custom bet or `bet__preset_N` for a preset amount."
+        ))]))
     }
 }
 
-#[tool_handler(router = self.tool_router)]
 impl ServerHandler for GameServer {
     fn get_info(&self) -> ServerInfo {
         let capabilities = ServerCapabilities::builder().enable_tools().build();
-        ServerInfo::new(capabilities).with_instructions("Type-safe tic-tac-toe game server")
+        ServerInfo::new(capabilities).with_instructions(
+            "Strictly Games MCP server — type-safe casino games with formal verification.",
+        )
+    }
+
+    #[instrument(skip(self, _request, _context))]
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        let mut tools = self.tool_router.list_all();
+        tools.extend(self.dynamic.list_tools());
+        // Prefix plugin tool names with the plugin namespace so they appear as
+        // `type_spec__describe_type` and `type_spec__explore_type`.
+        for t in self.type_spec.list_tools() {
+            tools.push(rmcp::model::Tool::new(
+                format!("type_spec__{}", t.name),
+                t.description.unwrap_or_default(),
+                t.input_schema,
+            ));
+        }
+        debug!(count = tools.len(), "Listing tools");
+        std::future::ready(Ok(ListToolsResult {
+            tools,
+            ..Default::default()
+        }))
+    }
+
+    #[instrument(skip(self, context), fields(tool = %request.name))]
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + Send + '_ {
+        async move {
+            if self.tool_router.has_route(request.name.as_ref()) {
+                let ctx = ToolCallContext::new(self, request, context);
+                return self.tool_router.call(ctx).await;
+            }
+        // Route type_spec__ prefixed tools to the TypeSpecPlugin.
+        if let Some(bare) = request.name.strip_prefix("type_spec__") {
+            let bare_name: std::borrow::Cow<'static, str> = bare.to_string().into();
+            let mut inner = request;
+            inner.name = bare_name;
+            return self
+                .type_spec
+                .call_tool(inner, context)
+                .await
+                .map_err(|e| McpError::internal_error(e.message, None));
+        }
+            self.dynamic.call_tool(request, context).await
+        }
     }
 }

@@ -9,6 +9,7 @@ pub use strictly_tictactoe::{Board, Player, Position, Square, rules};
 // Application-specific wrappers
 pub mod action;
 pub mod contracts;
+pub mod factory;
 pub mod outcome;
 pub mod typestate;
 pub mod wrapper;
@@ -16,6 +17,7 @@ pub mod wrapper;
 // Re-export contract propositions
 pub use action::{Move, MoveError};
 pub use contracts::{PlayerTurn, SquareEmpty};
+pub use factory::{TttGameContext, register_await_turn_tool, register_move_tools};
 pub use outcome::Outcome;
 pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 pub use wrapper::AnyGame;
