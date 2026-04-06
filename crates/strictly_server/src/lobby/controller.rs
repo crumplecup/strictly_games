@@ -593,9 +593,10 @@ impl LobbyController {
         }
     }
 
-    /// Runs a multi-player blackjack table session.
+    /// Runs a blackjack session via the MCP HTTP server architecture.
     ///
     /// Called when `GoToBlackjackTable` is intercepted in the event loop.
+    /// Extracts the first agent seat from `players` to drive the MCP agent subprocess.
     #[instrument(skip(self, terminal, players), fields(num_seats = players.len()))]
     async fn execute_blackjack_table<B: Backend + std::io::Write>(
         &mut self,
@@ -607,14 +608,8 @@ impl LobbyController {
     where
         <B as Backend>::Error: Send + Sync + 'static,
     {
-        use crate::tui::run_multi_blackjack_session;
-
-        info!(
-            player_name = %player_name,
-            num_seats = players.len(),
-            show_typestate_graph,
-            "Executing multi-player blackjack session"
-        );
+        use crate::lobby::settings::PlayerKind;
+        use crate::tui::run_blackjack_mcp_session;
 
         let lobby_screen = |u: &Option<crate::User>| match u {
             Some(u) => ActiveScreen::MainLobby(MainLobbyScreen::with_game(
@@ -624,7 +619,63 @@ impl LobbyController {
             None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(&self.profile_service)),
         };
 
-        run_multi_blackjack_session(terminal, players, show_typestate_graph).await?;
+        // Extract the first agent seat to drive via MCP.
+        let agent_config = players.iter().find_map(|s| {
+            if let PlayerKind::Agent(cfg) = &s.kind {
+                Some(cfg.clone())
+            } else {
+                None
+            }
+        });
+
+        let config_path = agent_config
+            .as_ref()
+            .and_then(|c| c.config_path().clone())
+            .unwrap_or_else(|| self.agent_config_path.clone());
+
+        let bankroll = players
+            .iter()
+            .find(|s| matches!(s.kind, PlayerKind::Agent(_)))
+            .map(|s| s.bankroll)
+            .unwrap_or(1_000);
+
+        info!(
+            player_name = %player_name,
+            config_path = %config_path.display(),
+            port = self.server_port,
+            bankroll,
+            "Launching blackjack MCP session from table setup"
+        );
+
+        let outcome = run_blackjack_mcp_session(
+            terminal,
+            config_path,
+            player_name.clone(),
+            *self.server_port(),
+            bankroll,
+            show_typestate_graph,
+        )
+        .await?;
+
+        if let Some(user) = &self.current_user {
+            let game_outcome = match outcome {
+                BlackjackSessionOutcome::Win(_) => GameOutcome::Win,
+                BlackjackSessionOutcome::Loss(_) => GameOutcome::Loss,
+                BlackjackSessionOutcome::Push(_) | BlackjackSessionOutcome::Abandoned => {
+                    GameOutcome::Draw
+                }
+            };
+            if let Err(e) = self.profile_service.record_game_result(
+                *user.id(),
+                player_name,
+                self.settings.selected_game.id().to_string(),
+                game_outcome,
+                1,
+                "tui_session".to_string(),
+            ) {
+                tracing::warn!(error = %e, "Failed to record blackjack result");
+            }
+        }
 
         Ok(lobby_screen(&self.current_user))
     }

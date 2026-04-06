@@ -16,12 +16,9 @@ mod standalone;
 pub mod tui_communicator;
 mod typestate_widget;
 
-pub use blackjack::{
-    BlackjackSessionOutcome, run_blackjack_mcp_session, run_multi_blackjack_session,
-};
-pub use chat_widget::{ChatMessage, ChatWidget, Participant, chat_channel};
+pub use blackjack::{BlackjackSessionOutcome, run_blackjack_mcp_session};
+pub use chat_widget::{ChatMessage, Participant};
 pub use craps::{CrapsCoPlayer, CrapsSessionOutcome, run_craps_session, run_multi_craps_session};
-pub use mcp_communicator::LlmElicitCommunicator;
 
 use anyhow::Result;
 use crossterm::{

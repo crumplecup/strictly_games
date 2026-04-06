@@ -107,11 +107,6 @@ impl VerifiedWorkflow for AreaSufficient {}
 pub struct CrapsRoundActive;
 impl VerifiedWorkflow for CrapsRoundActive {}
 
-/// Established during multi-player blackjack rounds (any phase).
-#[derive(elicitation::Prop)]
-pub struct MultiRoundActive;
-impl VerifiedWorkflow for MultiRoundActive {}
-
 /// Proposition: Chat widget was constructed with wrapping enabled.
 ///
 /// Proven by construction — `ChatWidget::new` is the only constructor and
