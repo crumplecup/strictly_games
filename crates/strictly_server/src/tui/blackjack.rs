@@ -346,6 +346,13 @@ where
                         .split(*col_area)
                         .to_vec();
 
+                    // The last cell in the whole grid shares its space with the
+                    // chat pane (state on top, chat on bottom), regardless of
+                    // how many agents are present.
+                    let last_agent_idx = num_agents - 1;
+                    let last_col_idx = (last_agent_idx) / grid_rows;
+                    let last_row_idx = (last_agent_idx) % grid_rows;
+
                     for (row_idx, cell) in row_areas.iter().enumerate() {
                         let agent_idx = agents_before + row_idx;
                         if agent_idx >= num_agents { break; }
@@ -353,13 +360,14 @@ where
                         let slot = &agent_slots[agent_idx];
                         let state = &agent_states[agent_idx];
 
-                        // Show chat only when there's exactly one agent.
-                        let agent_chunks = if num_agents == 1 {
+                        // The last agent cell always shows state + chat.
+                        let is_last = col_idx == last_col_idx && row_idx == last_row_idx;
+                        let agent_chunks = if is_last {
                             Layout::default()
                                 .direction(Direction::Vertical)
                                 .constraints([
-                                    Constraint::Percentage(40),
-                                    Constraint::Percentage(60),
+                                    Constraint::Percentage(50),
+                                    Constraint::Percentage(50),
                                 ])
                                 .split(*cell)
                         } else {
@@ -378,16 +386,21 @@ where
                             .wrap(ratatui::widgets::Wrap { trim: false })
                             .render(agent_chunks[0], f.buffer_mut());
 
-                        if num_agents == 1 {
-                            let messages: Vec<ChatMessage> = agent_dialogues[agent_idx]
+                        if is_last {
+                            // Chat pane: all agents' dialogue combined,
+                            // labelled by agent name.
+                            let messages: Vec<ChatMessage> = agent_dialogues
                                 .iter()
-                                .map(|e| {
-                                    let participant = if e.role == "Agent" {
-                                        Participant::Agent(slot.name.clone())
-                                    } else {
-                                        Participant::Host
-                                    };
-                                    ChatMessage::new(participant, e.text.clone())
+                                .zip(agent_slots.iter())
+                                .flat_map(|(dialogue, s)| {
+                                    dialogue.iter().map(move |e| {
+                                        let participant = if e.role == "Agent" {
+                                            Participant::Agent(s.name.clone())
+                                        } else {
+                                            Participant::Host
+                                        };
+                                        ChatMessage::new(participant, e.text.clone())
+                                    })
                                 })
                                 .collect();
                             let (chat_widget, _proof) = ChatWidget::new(&messages);
