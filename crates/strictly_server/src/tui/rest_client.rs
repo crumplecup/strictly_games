@@ -368,3 +368,172 @@ impl BlackjackObserver {
         Ok(entries)
     }
 }
+
+// ── Human blackjack MCP client ───────────────────────────────────────────────
+
+/// A tool available in the current blackjack phase.
+#[derive(Debug, Clone)]
+pub struct BlackjackTool {
+    /// Tool name (e.g. `bet__preset_50`, `blackjack__hit`).
+    pub name: String,
+    /// Human-readable description.
+    pub description: String,
+}
+
+/// MCP client for a human player driving blackjack via keyboard.
+///
+/// Holds an initialized MCP session ID and sends JSON-RPC `tools/call`
+/// requests on behalf of the human player.
+#[derive(Debug, Clone)]
+pub struct HumanBlackjackClient {
+    base_url: String,
+    mcp_session_id: String,
+    client: reqwest::Client,
+    /// Monotonic request id counter.
+    next_id: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl HumanBlackjackClient {
+    /// Initializes a new MCP session with the server.
+    ///
+    /// Does NOT register as a game player — just establishes the session so
+    /// the human can call blackjack tools directly.
+    #[instrument(skip_all)]
+    pub async fn connect(base_url: impl Into<String>) -> Result<Self> {
+        let base_url = base_url.into();
+        let client = reqwest::Client::new();
+
+        let init_req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": { "name": "strictly-games-human", "version": "0.1.0" }
+            }
+        });
+
+        let response = client
+            .post(format!("{}/message", base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .json(&init_req)
+            .send()
+            .await?;
+
+        let mcp_session_id = response
+            .headers()
+            .get("mcp-session-id")
+            .and_then(|h| h.to_str().ok())
+            .context("No MCP session ID in server response")?
+            .to_string();
+
+        // Send `notifications/initialized`
+        client
+            .post(format!("{}/message", base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &mcp_session_id)
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            }))
+            .send()
+            .await?;
+
+        info!(mcp_session_id = %mcp_session_id, "Human MCP session established");
+
+        Ok(Self {
+            base_url,
+            mcp_session_id,
+            client,
+            next_id: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(10)),
+        })
+    }
+
+    fn next_id(&self) -> u64 {
+        self.next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Calls a tool by name with the given arguments.
+    ///
+    /// Returns the tool result text on success.
+    #[instrument(skip(self, args), fields(tool_name = %name))]
+    pub async fn call_tool(&self, name: &str, args: serde_json::Value) -> Result<String> {
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": self.next_id(),
+            "method": "tools/call",
+            "params": {
+                "name": name,
+                "arguments": args
+            }
+        });
+
+        let response = self
+            .client
+            .post(format!("{}/message", self.base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
+            .json(&request)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        Ok(response)
+    }
+
+    /// Lists tools currently registered for this MCP session.
+    ///
+    /// Filters to tools relevant to blackjack (prefix `bet__`, `blackjack__`,
+    /// `next__`).
+    #[instrument(skip(self))]
+    pub async fn list_blackjack_tools(&self) -> Result<Vec<BlackjackTool>> {
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": self.next_id(),
+            "method": "tools/list",
+            "params": {}
+        });
+
+        let response_text = self
+            .client
+            .post(format!("{}/message", self.base_url))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("mcp-session-id", &self.mcp_session_id)
+            .json(&request)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&response_text).context("Failed to parse tools/list response")?;
+
+        let tools = parsed["result"]["tools"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|t| {
+                let name = t["name"].as_str()?.to_string();
+                if name.starts_with("bet__")
+                    || name.starts_with("blackjack__")
+                    || name.starts_with("next__")
+                {
+                    let description = t["description"].as_str().unwrap_or(&name).to_string();
+                    Some(BlackjackTool { name, description })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(tools)
+    }
+}

@@ -11,8 +11,8 @@ use tracing::{debug, info, instrument};
 pub enum GameMode {
     /// TicTacToe with `--test-play`.
     TicTacToe,
-    /// Blackjack with `--test-blackjack` and an initial bankroll.
-    Blackjack { bankroll: u64 },
+    /// Blackjack with `--test-blackjack`, a bankroll, and a known session_id.
+    Blackjack { bankroll: u64, session_id: String },
 }
 
 /// Guards for spawned subprocesses. Kills processes on drop.
@@ -120,10 +120,15 @@ pub async fn spawn_agent(port: u16, agent_config: PathBuf, mode: GameMode) -> Re
         GameMode::TicTacToe => {
             cmd.arg("--test-play");
         }
-        GameMode::Blackjack { bankroll } => {
+        GameMode::Blackjack {
+            bankroll,
+            session_id,
+        } => {
             cmd.arg("--test-blackjack")
                 .arg("--bankroll")
-                .arg(bankroll.to_string());
+                .arg(bankroll.to_string())
+                .arg("--test-session")
+                .arg(session_id);
         }
     }
 
