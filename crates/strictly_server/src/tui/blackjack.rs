@@ -7,6 +7,7 @@
 
 use crate::tui::typestate_widget::{blackjack_edges, blackjack_nodes};
 use crate::tui::typestate_widget::GameEvent;
+use crate::tui::contracts::{min_typestate_width, render_resize_prompt, verify_typestate_readable};
 use anyhow::Result;
 use elicitation::Elicitation as _;
 use ratatui::{Terminal, backend::Backend};
@@ -237,23 +238,39 @@ where
             let inner = outer.inner(area);
             outer.render(area, f.buffer_mut());
 
-            // Build column constraints: human + agents + optional graph
-            let total_cols = 1 + num_agents + usize::from(show_typestate_graph);
-            let col_pct = (100u16) / (total_cols as u16);
-            let mut constraints: Vec<Constraint> =
-                std::iter::repeat_n(Constraint::Percentage(col_pct), total_cols).collect();
-            // Give any remainder to the last real column
-            if let Some(last) = constraints.last_mut() {
-                *last = Constraint::Min(0);
-            }
-
+            // ── Horizontal split: players | typestate graph ───────────────────
+            // Typestate graph always gets its minimum guaranteed width so labels
+            // are never truncated; the player area fills the remaining space.
+            let min_ts = min_typestate_width(&bj_nodes);
+            let h_constraints: Vec<Constraint> = if show_typestate_graph {
+                vec![Constraint::Min(0), Constraint::Min(min_ts)]
+            } else {
+                vec![Constraint::Min(0)]
+            };
             let h_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints(constraints)
+                .constraints(h_constraints)
                 .split(inner);
 
+            let players_area = h_chunks[0];
+
+            // ── Player area: human left, agent grid right ─────────────────────
+            // With 0 agents: human takes full width.
+            // With N agents: split horizontally into human | agents_grid.
+            // The agents_grid stacks agents into rows-×-cols to minimise the
+            // horizontal real-estate consumed (avoids squeezing the graph).
+            let (human_area, agent_grid_area) = if num_agents == 0 {
+                (players_area, None)
+            } else {
+                // Give agents roughly half the player width, human the other half.
+                let p_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                    .split(players_area);
+                (p_chunks[0], Some(p_chunks[1]))
+            };
+
             // ── Human panel ───────────────────────────────────────────────────
-            let human_area = h_chunks[0];
             let human_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -293,54 +310,102 @@ where
                 .wrap(ratatui::widgets::Wrap { trim: false })
                 .render(human_chunks[1], f.buffer_mut());
 
-            // ── Agent panels ──────────────────────────────────────────────────
-            for (idx, (slot, state)) in agent_slots.iter().zip(agent_states.iter()).enumerate() {
-                let agent_area = h_chunks[1 + idx];
-                let show_chat = num_agents == 1; // only show chat when there's one agent
+            // ── Agent grid ────────────────────────────────────────────────────
+            // Pack agents into a rows × cols grid inside `agent_grid_area`.
+            // Grid shape: prefer square-ish; columns first so horizontal real
+            // estate is controlled.  With 1 agent → 1×1; 2 → 2×1; 3-4 → 2×2.
+            if let (Some(grid_area), true) = (agent_grid_area, num_agents > 0) {
+                let grid_cols = if num_agents <= 2 { 1usize } else { 2 };
+                let grid_rows = num_agents.div_ceil(grid_cols);
 
-                let agent_chunks = if show_chat {
-                    Layout::default()
+                // Split grid_area into `grid_cols` horizontal slices.
+                let col_areas: Vec<_> = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints(
+                        std::iter::repeat_n(Constraint::Ratio(1, grid_cols as u32), grid_cols)
+                            .collect::<Vec<_>>()
+                    )
+                    .split(grid_area)
+                    .to_vec();
+
+                // Within each column, split vertically into rows.
+                for (col_idx, col_area) in col_areas.iter().enumerate() {
+                    let agents_before = col_idx * grid_rows;
+                    let rows_in_col = grid_rows.min(num_agents.saturating_sub(agents_before));
+                    if rows_in_col == 0 { continue; }
+
+                    let row_areas: Vec<_> = Layout::default()
                         .direction(Direction::Vertical)
-                        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-                        .split(agent_area)
-                } else {
-                    // When multiple agents, give the whole area to the state panel
-                    Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints([Constraint::Percentage(100)])
-                        .split(agent_area)
-                };
+                        .constraints(
+                            std::iter::repeat_n(
+                                Constraint::Ratio(1, rows_in_col as u32),
+                                rows_in_col,
+                            )
+                            .collect::<Vec<_>>()
+                        )
+                        .split(*col_area)
+                        .to_vec();
 
-                let agent_block = Block::default()
-                    .title(format!(" {} — {} ", slot.name, state.phase))
-                    .borders(Borders::ALL)
-                    .style(Style::default().fg(Color::Cyan));
-                Paragraph::new(state.description.as_str())
-                    .block(agent_block)
-                    .wrap(ratatui::widgets::Wrap { trim: false })
-                    .render(agent_chunks[0], f.buffer_mut());
+                    for (row_idx, cell) in row_areas.iter().enumerate() {
+                        let agent_idx = agents_before + row_idx;
+                        if agent_idx >= num_agents { break; }
 
-                if show_chat {
-                    let messages: Vec<ChatMessage> = agent_dialogues[idx]
-                        .iter()
-                        .map(|e| {
-                            let participant = if e.role == "Agent" {
-                                Participant::Agent(slot.name.clone())
-                            } else {
-                                Participant::Host
-                            };
-                            ChatMessage::new(participant, e.text.clone())
-                        })
-                        .collect();
-                    let (chat_widget, _proof) = ChatWidget::new(&messages);
-                    chat_widget.render(agent_chunks[1], f.buffer_mut());
+                        let slot = &agent_slots[agent_idx];
+                        let state = &agent_states[agent_idx];
+
+                        // Show chat only when there's exactly one agent.
+                        let agent_chunks = if num_agents == 1 {
+                            Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints([
+                                    Constraint::Percentage(40),
+                                    Constraint::Percentage(60),
+                                ])
+                                .split(*cell)
+                        } else {
+                            Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints([Constraint::Percentage(100)])
+                                .split(*cell)
+                        };
+
+                        let agent_block = Block::default()
+                            .title(format!(" {} — {} ", slot.name, state.phase))
+                            .borders(Borders::ALL)
+                            .style(Style::default().fg(Color::Cyan));
+                        Paragraph::new(state.description.as_str())
+                            .block(agent_block)
+                            .wrap(ratatui::widgets::Wrap { trim: false })
+                            .render(agent_chunks[0], f.buffer_mut());
+
+                        if num_agents == 1 {
+                            let messages: Vec<ChatMessage> = agent_dialogues[agent_idx]
+                                .iter()
+                                .map(|e| {
+                                    let participant = if e.role == "Agent" {
+                                        Participant::Agent(slot.name.clone())
+                                    } else {
+                                        Participant::Host
+                                    };
+                                    ChatMessage::new(participant, e.text.clone())
+                                })
+                                .collect();
+                            let (chat_widget, _proof) = ChatWidget::new(&messages);
+                            chat_widget.render(agent_chunks[1], f.buffer_mut());
+                        }
+                    }
                 }
             }
 
             // ── Typestate graph ───────────────────────────────────────────────
-            if show_typestate_graph {
-                let ts_area = h_chunks[1 + num_agents];
+            if show_typestate_graph && h_chunks.len() > 1 {
+                let ts_area = h_chunks[1];
                 let active_idx = blackjack_active(&human_state.phase);
+                let _ts_proof = verify_typestate_readable(&bj_nodes, ts_area)
+                    .unwrap_or_else(|e| {
+                        render_resize_prompt(f, &e);
+                        elicitation::contracts::Established::assert()
+                    });
                 TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &event_log)
                     .render(ts_area, f.buffer_mut());
             }
