@@ -380,29 +380,26 @@ async fn run_agent(
         info!(tool_name = %tool.name, "Available tool");
     }
 
-    // If --test-play flag is set, call play_game tool
+    // If --test-play flag is set, drive the game via the tool-per-transition protocol.
     if test_play {
-        info!("Test mode: calling play_game tool in continuous loop");
+        info!("Agent mode: driving tictactoe via tool-per-transition protocol");
         let session_id =
             test_session.unwrap_or_else(|| format!("auto_game_{}", std::process::id()));
 
-        // Continuously play games until Ctrl+C
         loop {
             info!("Starting new game session");
-            match test_play_game(peer, &config, &session_id).await {
+            match play_ttt_game(peer, &config, &session_id).await {
                 Ok(_) => {
                     info!("Game completed, waiting for next game to start");
-                    // Small delay before checking for next game
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "play_game failed, retrying");
+                    warn!(error = %e, "Game loop error, retrying");
                     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 }
             }
         }
     } else {
-        // Keep running normally
         info!("Agent running. Press Ctrl+C to exit.");
         tokio::signal::ctrl_c().await?;
         info!("Shutting down agent");
@@ -411,32 +408,182 @@ async fn run_agent(
     Ok(())
 }
 
+/// Drives a single TicTacToe game to completion via the tool-per-transition protocol.
+///
+/// The agent calls `play_game` to register, then loops:
+/// - If move tools (`ttt__*`) are available: passes move tools AND explore tools
+///   to the LLM via the native tool-use API. The model may call an explore tool
+///   first to inspect the board state, then call a move tool to commit.
+/// - If only `ttt__await_turn` is available: polls it directly until the opponent moves.
+/// - Returns when the server reports the game is over.
 #[instrument(skip(peer, config))]
-async fn test_play_game(
+async fn play_ttt_game(
     peer: &rmcp::Peer<rmcp::RoleClient>,
     config: &AgentConfig,
     session_id: &str,
 ) -> Result<()> {
+    use strictly_server::ToolSpec;
     use serde_json::json;
+    use tokio::time::{Duration, sleep};
 
-    info!(session_id, player_name = %config.name(), "test_play_game: Calling play_game tool");
+    info!(session_id, player_name = %config.name(), "Joining game via play_game");
+
+    let llm = config
+        .create_llm_config()
+        .map(strictly_server::LlmClient::new)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
 
     let result = peer
         .call_tool(
             rmcp::model::CallToolRequestParams::new("play_game").with_arguments(
-                json!({
-                    "session_id": session_id,
-                    "player_name": config.name()
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+                json!({ "session_id": session_id, "player_name": config.name() })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
             ),
         )
         .await?;
 
-    info!(result = ?result, "test_play_game: play_game completed");
-    Ok(())
+    let mut context = tool_result_text(&result);
+    info!(response = %context, "play_game response");
+
+    if context.contains("Game already over") || context.contains("cancelled") {
+        return Ok(());
+    }
+
+    // Track which explore tools the agent has already used this turn.
+    // Once a view tool's result is in `context`, calling it again adds no new info.
+    // Reset when a move is committed so the next turn starts fresh.
+    let mut explored_this_turn: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    loop {
+        sleep(Duration::from_millis(300)).await;
+
+        let tool_list = peer.list_tools(Default::default()).await?;
+
+        // Separate tools into three buckets:
+        // - move tools  (ttt__<square>)  — commit a move
+        // - explore tools (ttt__view_*)  — query live state without committing
+        // - await tool  (ttt__await_turn) — poll for opponent's move
+        let move_specs: Vec<ToolSpec> = tool_list
+            .tools
+            .iter()
+            .filter(|t| {
+                t.name.starts_with("ttt__")
+                    && !t.name.ends_with("__await_turn")
+                    && !t.name.contains("__view_")
+            })
+            .map(|t| ToolSpec {
+                name: t.name.to_string(),
+                description: t
+                    .description
+                    .as_deref()
+                    .unwrap_or("Make a move.")
+                    .to_string(),
+                input_schema: serde_json::Value::Object(t.input_schema.as_ref().clone()),
+            })
+            .collect();
+
+        let explore_specs: Vec<ToolSpec> = tool_list
+            .tools
+            .iter()
+            .filter(|t| t.name.contains("__view_") && !explored_this_turn.contains(t.name.as_ref()))
+            .map(|t| ToolSpec {
+                name: t.name.to_string(),
+                description: t
+                    .description
+                    .as_deref()
+                    .unwrap_or("Query board state.")
+                    .to_string(),
+                input_schema: serde_json::Value::Object(t.input_schema.as_ref().clone()),
+            })
+            .collect();
+
+        let await_name: Option<String> = tool_list
+            .tools
+            .iter()
+            .find(|t| t.name.ends_with("__await_turn"))
+            .map(|t| t.name.to_string());
+
+        let tool_to_call = if !move_specs.is_empty() {
+            // Present move tools AND explore tools so the LLM can introspect
+            // before committing. The model returns a tool_use block — not text.
+            let mut all_specs = move_specs.clone();
+            all_specs.extend(explore_specs);
+            match llm.choose_tool(TTT_SYSTEM_PROMPT, &context, &all_specs).await {
+                Ok(name) => {
+                    info!(chosen = %name, "LLM chose tool via tool-use API");
+                    name
+                }
+                Err(e) => {
+                    warn!(error = %e, "choose_tool failed, using first move");
+                    move_specs[0].name.clone()
+                }
+            }
+        } else if let Some(name) = await_name {
+            // Waiting for opponent — no LLM reasoning needed, just poll.
+            name
+        } else {
+            sleep(Duration::from_millis(500)).await;
+            continue;
+        };
+
+        info!(tool = %tool_to_call, "Calling tool");
+        let result = peer
+            .call_tool(
+                rmcp::model::CallToolRequestParams::new(tool_to_call.clone())
+                    .with_arguments(serde_json::Map::new()),
+            )
+            .await?;
+
+        let result_text = tool_result_text(&result);
+        info!(tool = %tool_to_call, response = %result_text, "Tool response");
+
+        if tool_to_call.contains("__view_") {
+            // Append the result to context so the LLM sees it on the next call,
+            // then remove the tool from the available set — no new info can be gained.
+            explored_this_turn.insert(tool_to_call.clone());
+            context = format!("{context}\n\n{result_text}");
+        } else {
+            // A move was committed — reset explored set and update context for next turn.
+            explored_this_turn.clear();
+            context = result_text;
+        }
+
+        if context.contains("Game over")
+            || context.contains("Draw")
+            || context.contains("cancelled")
+            || context.contains("wins")
+        {
+            info!("Game ended");
+            return Ok(());
+        }
+    }
+}
+
+const TTT_SYSTEM_PROMPT: &str = "\
+You are competing in Tic-Tac-Toe against a human opponent. \
+Try to win by occupying three squares in a row — horizontally, vertically, or diagonally. \
+Block your opponent if they are about to win. \
+You may call view_board, view_legal_moves, or view_threats to inspect the game state \
+before committing to a move. Use these to make better decisions — especially when \
+blocking or completing a winning line. \
+Each ttt__<square> tool commits your mark to that square.";
+
+/// Extract the text content from a [`CallToolResult`].
+fn tool_result_text(result: &rmcp::model::CallToolResult) -> String {
+    result
+        .content
+        .iter()
+        .filter_map(|c| {
+            if let rmcp::model::RawContent::Text(t) = &c.raw {
+                Some(t.text.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[instrument(skip(handler))]
