@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub enum Outcome {
     /// Player won the game.
     Winner(crate::Player),

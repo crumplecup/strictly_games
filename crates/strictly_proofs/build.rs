@@ -296,20 +296,25 @@ fn extract_fn_name(chunk: &str) -> Option<String> {
 }
 
 /// Scan the generated body and return a sorted list of type names that are
-/// actually referenced (capitalised identifier immediately before ` ::`).
+/// actually referenced.
 ///
-/// The `kani_first_variant_constructible` helper emits code like
-/// `let _ : Player = Player :: X ;` — both usages of `Player` appear before
-/// `::`, so a single pass finds all referenced types.
+/// Two patterns are detected:
+/// - `TYPE ::` — enum variant / associated item (`Player :: X`)
+/// - `: TYPE` — type annotation (`let _ : Board = kani :: any ()`)
+///
+/// Only capitalised identifiers are collected; built-ins like `bool` are ignored.
 fn extract_used_types(body: &str) -> Vec<String> {
     let tokens: Vec<&str> = body.split_whitespace().collect();
     let mut types = std::collections::BTreeSet::new();
     for window in tokens.windows(2) {
-        if window[1] == "::" {
-            let t = window[0];
-            if t.chars().next().map_or(false, |c| c.is_uppercase()) {
-                types.insert(t.to_string());
-            }
+        let is_upper = |s: &str| s.chars().next().map_or(false, |c| c.is_uppercase());
+        // Pattern: TYPE :: (enum variant / associated item)
+        if window[1] == "::" && is_upper(window[0]) {
+            types.insert(window[0].to_string());
+        }
+        // Pattern: : TYPE (type annotation) — token before is ":" or ">"
+        if window[0] == ":" && is_upper(window[1]) {
+            types.insert(window[1].to_string());
         }
     }
     types.into_iter().collect()

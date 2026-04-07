@@ -2,10 +2,10 @@
 // Regenerate: cargo build -p strictly_proofs
 //
 // Composition: Type::kani_proof() for all Blackjack types (deduplicated).
-use strictly_blackjack::{Outcome, Rank, Suit};
+use strictly_blackjack::{Card, Outcome, Rank, Suit};
 
 # [kani :: proof] fn verify_rank_constructible () { let _ : Rank = Rank :: Ace ; }
 # [kani :: proof] fn verify_suit_constructible () { let _ : Suit = Suit :: Hearts ; }
-# [cfg_attr (kani , :: kani :: proof)] fn verify_card_newtype_wrapper () { let established : bool = true ; assert ! (established , "Card newtype wrapper structural proof") ; }
+# [cfg_attr (kani , :: kani :: proof)] fn verify_card_newtype_wrapper () { let _ : Card = kani :: any () ; }
 # [kani :: proof] fn verify_outcome_constructible () { let _ : Outcome = Outcome :: Win ; }
 

@@ -34,19 +34,19 @@ use strictly_blackjack::{ActionError, BankrollLedger, BetDeducted, Outcome, Payo
 /// 1. `BetDeducted` — unit proposition (one canonical value)
 /// 2. `PayoutSettled` — unit proposition (one canonical value)
 /// 3. `Outcome` — exhaustive enum (5 variants, each proven)
-/// 4. `BankrollLedger` — composed from u64 × u64 with validated construction
+/// 4. `BankrollLedger` — composed from u64 × u64 with validated construction via `debit`
 /// 5. ∴ Entire financial typestate hierarchy is formally verified ∎
 #[cfg(kani)]
 #[kani::proof]
 fn verify_bankroll_legos() {
-    // Capstone: BankrollLedger::new correctly initialises both fields.
+    // Capstone: BankrollLedger::debit correctly initialises both fields.
     let bankroll: u64 = kani::any();
     let bet: u64 = kani::any();
     kani::assume(bet > 0 && bet <= bankroll);
 
-    let ledger = BankrollLedger::new(bankroll - bet, bet);
-    assert_eq!(*ledger.post_bet_balance(), bankroll - bet);
-    assert_eq!(*ledger.bet(), bet);
+    let (ledger, _tok) = BankrollLedger::debit(bankroll, bet).expect("valid debit");
+    assert_eq!(ledger.post_bet_balance(), bankroll - bet);
+    assert_eq!(ledger.bet(), bet);
 }
 
 // ── Debit invariants ──────────────────────────────────────────────────────────

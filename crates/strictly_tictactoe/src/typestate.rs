@@ -204,3 +204,36 @@ pub enum GameResult {
     /// Game finished.
     Finished(GameFinished),
 }
+
+// ─────────────────────────────────────────────────────────────
+//  Manual kani::Arbitrary for Vec-bearing types
+// ─────────────────────────────────────────────────────────────
+
+/// `Vec<Move>` has no `kani::Arbitrary` impl (heap allocation is unbounded).
+/// We bound history to at most 9 moves (max TTT game length) using a fixed
+/// array, then slice to a symbolic length.
+#[cfg(kani)]
+impl kani::Arbitrary for GameInProgress {
+    fn any() -> Self {
+        let board: Board = kani::any();
+        let to_move: Player = kani::any();
+        let len: usize = kani::any();
+        kani::assume(len <= 9);
+        let moves: [Move; 9] = kani::any();
+        let history = moves[..len].to_vec();
+        Self { board, history, to_move }
+    }
+}
+
+#[cfg(kani)]
+impl kani::Arbitrary for GameFinished {
+    fn any() -> Self {
+        let board: Board = kani::any();
+        let outcome: Outcome = kani::any();
+        let len: usize = kani::any();
+        kani::assume(len <= 9);
+        let moves: [Move; 9] = kani::any();
+        let history = moves[..len].to_vec();
+        Self { board, history, outcome }
+    }
+}

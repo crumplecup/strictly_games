@@ -4,13 +4,13 @@
 // Composition: Type::kani_proof() for all TicTacToe types (deduplicated).
 // These foundation proofs underpin domain-specific harnesses in game_invariants.rs
 // and tictactoe_contracts.rs.
-use strictly_tictactoe::{Player, Position};
+use strictly_tictactoe::{Board, GameFinished, GameInProgress, GameSetup, Move, Player, Position};
 
 # [kani :: proof] fn verify_player_constructible () { let _ : Player = Player :: X ; }
 # [kani :: proof] fn verify_position_constructible () { let _ : Position = Position :: TopLeft ; }
-# [cfg_attr (kani , :: kani :: proof)] fn verify_board_newtype_wrapper () { let established : bool = true ; assert ! (established , "Board newtype wrapper structural proof") ; }
-# [cfg_attr (kani , :: kani :: proof)] fn verify_move_newtype_wrapper () { let established : bool = true ; assert ! (established , "Move newtype wrapper structural proof") ; }
-# [cfg_attr (kani , :: kani :: proof)] fn verify_gamesetup_newtype_wrapper () { let established : bool = true ; assert ! (established , "GameSetup newtype wrapper structural proof") ; }
-# [cfg_attr (kani , :: kani :: proof)] fn verify_gameinprogress_newtype_wrapper () { let established : bool = true ; assert ! (established , "GameInProgress newtype wrapper structural proof") ; }
-# [cfg_attr (kani , :: kani :: proof)] fn verify_gamefinished_newtype_wrapper () { let established : bool = true ; assert ! (established , "GameFinished newtype wrapper structural proof") ; }
+# [cfg_attr (kani , :: kani :: proof)] fn verify_board_newtype_wrapper () { let _ : Board = kani :: any () ; }
+# [cfg_attr (kani , :: kani :: proof)] fn verify_move_newtype_wrapper () { let _ : Move = kani :: any () ; }
+# [cfg_attr (kani , :: kani :: proof)] fn verify_gamesetup_newtype_wrapper () { let _ : GameSetup = kani :: any () ; }
+# [cfg_attr (kani , :: kani :: proof)] fn verify_gameinprogress_newtype_wrapper () { let _ : GameInProgress = kani :: any () ; }
+# [cfg_attr (kani , :: kani :: proof)] fn verify_gamefinished_newtype_wrapper () { let _ : GameFinished = kani :: any () ; }
 
