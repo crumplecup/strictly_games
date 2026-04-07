@@ -65,6 +65,7 @@ verify:
 verify-compositional:
     @echo "Verifying types through compositional proof chain..."
     cargo kani -p strictly_proofs --harness verify_tictactoe_compositional
+    cargo kani -p strictly_proofs --harness verify_tictactoe_wrapper_compositional
     cargo kani -p strictly_proofs --harness verify_blackjack_legos
     cargo kani -p strictly_proofs --harness verify_bankroll_legos
     cargo kani -p strictly_proofs --harness verify_craps_legos
@@ -74,10 +75,12 @@ verify-invariants:
     @echo "Verifying game-specific invariants..."
     cargo kani -p strictly_proofs --harness player_opponent_is_involutive
     cargo kani -p strictly_proofs --harness position_to_index_is_always_valid
+    cargo kani -p strictly_proofs --harness is_full_iff_no_empty_squares
+    cargo kani -p strictly_proofs --harness is_full_false_on_new_board
 
-# Run TicTacToe wrapper-layer proofs (contracts, typestate, replay)
+# Run TicTacToe wrapper-layer proofs (contracts, typestate, replay, terminal transitions)
 verify-tictactoe-contracts:
-    @echo "Verifying TicTacToe wrapper layer (contracts + typestate)..."
+    @echo "Verifying TicTacToe wrapper layer (contracts + typestate + terminal transitions)..."
     cargo kani -p strictly_proofs \
         --harness validate_square_empty_ok_when_empty \
         --harness validate_square_empty_err_when_occupied \
@@ -92,7 +95,11 @@ verify-tictactoe-contracts:
         --harness make_move_rejects_wrong_player \
         --harness make_move_rejects_occupied_square \
         --harness replay_empty_gives_fresh_game \
-        --harness replay_one_move_applies_it
+        --harness replay_one_move_applies_it \
+        --harness replay_two_moves_alternates_and_records \
+        --harness make_move_produces_winner \
+        --harness make_move_produces_draw \
+        --harness restart_creates_fresh_game
 
 # Run financial typestate proofs (BankrollLedger double-deduction safety)
 verify-financial:
@@ -228,74 +235,28 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         ace_ace_ten_soft_collapses
         ace_detection
         ace_raw_value_is_eleven
+        area_sufficient_nonzero_height_passes
+        area_sufficient_zero_height_fails
+        at_level_clamps
         blackjack_ace_king
         blackjack_ace_ten
         blackjack_biconditional_converse
         blackjack_requires_two_cards
+        breakpoint_large_layout
+        breakpoint_medium_layout
+        breakpoint_micro_expected_failure
+        breakpoint_minimum_blackjack_layout
+        breakpoint_small_layout
+        breakpoint_tiny_graceful_degrade
+        breakpoint_ultrawide_layout
         bust_detection
+        can_split_matching_ranks
         cannot_split_different_ranks
         cannot_split_wrong_count
-        can_split_matching_ranks
         card_equality
         card_value_in_range
-        deal_reduces_remaining
-        deck_all_cards_unique
-        deck_has_52_cards
-        double_ace_value
-        empty_hand_zero_value
-        exactly_21_not_bust
-        exhausted_deck_returns_none
-        face_card_values_are_ten
-        get_set_roundtrip
-        hand_value_ace_busts_soft
-        hand_value_bounds
-        handvalue_equality
-        hand_value_no_aces
-        hand_value_single_ace_soft
-        new_board_is_empty
-        no_bust_under_21
-        no_winner_on_empty_board
-        opponent_returns_other_player
-        player_opponent_is_involutive
-        position_roundtrip
-        position_to_index_is_always_valid
-        scenario_bankroll_conservation
-        scenario_both_natural
-        scenario_dealer_bust
-        scenario_dealer_natural
-        scenario_normal_stand
-        scenario_player_bust
-        scenario_player_natural
-        set_marks_occupied
-        soft_hard_exact_relation
-        square_equality
-        three_card_21_not_blackjack
-        verify_bankroll_legos
-        verify_blackjack_legos
-        verify_card_compositional
-        verify_debit_arithmetic
-        verify_debit_overdraft_rejected
-        verify_debit_zero_bet_rejected
-        verify_loss_roundtrip
-        verify_no_double_deduction
-        verify_outcome_compositional
-        verify_push_roundtrip
-        verify_rank_compositional
-        verify_settle_blackjack
-        verify_settle_loss
-        verify_settle_push
-        verify_settle_surrender
-        verify_settle_win
-        verify_suit_compositional
-        verify_surrender_roundtrip
-        verify_tictactoe_compositional
-        verify_win_roundtrip
-        winner_detects_column
-        winner_detects_diagonal
-        winner_detects_row
-        at_level_clamps
-        comeout_classification_exhaustive
         comeout_classification_exclusive
+        comeout_classification_exhaustive
         comeout_craps_three
         comeout_craps_twelve
         comeout_craps_two
@@ -312,10 +273,36 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         dont_pass_payout_is_even_money
         dont_pass_pushes_on_twelve
         dont_pass_wins_on_craps_two
+        double_ace_value
+        empty_hand_zero_value
+        exactly_21_not_bust
+        execute_move_records_history
+        execute_move_sets_square
+        exhausted_shoe_returns_none
+        face_card_values_are_ten
+        generate_reduces_remaining
+        get_set_roundtrip
+        hand_value_ace_busts_soft
+        hand_value_bounds
+        hand_value_no_aces
+        hand_value_single_ace_soft
+        handvalue_equality
         house_edge_non_negative
+        is_full_false_on_new_board
+        is_full_iff_no_empty_squares
         lesson_advancement_monotonic
         lesson_level_bounded
+        make_move_alternates_player
+        make_move_produces_draw
+        make_move_produces_winner
+        make_move_rejects_occupied_square
+        make_move_rejects_wrong_player
         natural_values_correct
+        new_board_is_empty
+        no_bust_under_21
+        no_winner_on_empty_board
+        node_box_width_no_u16_overflow
+        opponent_returns_other_player
         pass_line_payout_is_even_money
         pass_line_win_payout_correct
         pass_line_wins_on_natural
@@ -324,17 +311,70 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         place_four_ten_payout
         place_six_eight_payout
         place_six_win_payout_correct
+        player_opponent_is_involutive
         point_made_eight
         point_phase_no_decision
         point_roundtrip
         point_values_are_valid
+        position_roundtrip
+        position_to_index_is_always_valid
+        replay_empty_gives_fresh_game
+        replay_one_move_applies_it
+        replay_two_moves_alternates_and_records
+        restart_creates_fresh_game
+        scenario_bankroll_conservation
+        scenario_both_natural
+        scenario_dealer_bust
+        scenario_dealer_natural
+        scenario_normal_stand
+        scenario_player_bust
+        scenario_player_natural
+        set_marks_occupied
         settle_loss_reduces_balance
         settle_push_returns_wager
         settle_win_returns_correct_balance
         seven_is_not_a_point
         seven_out
+        shoe_all_cards_unique
+        shoe_has_52_cards
+        soft_hard_exact_relation
+        square_equality
+        symbolic_must_pass_range_safe
+        three_card_21_not_blackjack
+        truncation_always_satisfies_label_contained
+        validate_move_err_occupied_square
+        validate_move_err_wrong_player
+        validate_move_ok_on_fresh_game_for_x
+        validate_player_turn_err_when_wrong_player
+        validate_player_turn_ok_when_correct_player
+        validate_square_empty_err_when_occupied
+        validate_square_empty_ok_when_empty
+        verify_bankroll_legos
+        verify_blackjack_legos
+        verify_card_compositional
         verify_craps_legos
+        verify_debit_arithmetic
+        verify_debit_overdraft_rejected
+        verify_debit_zero_bet_rejected
+        verify_loss_roundtrip
+        verify_no_double_deduction
+        verify_outcome_compositional
+        verify_push_roundtrip
+        verify_rank_compositional
+        verify_settle_blackjack
+        verify_settle_loss
+        verify_settle_push
+        verify_settle_surrender
+        verify_settle_win
+        verify_suit_compositional
+        verify_surrender_roundtrip
+        verify_tictactoe_compositional
+        verify_tictactoe_wrapper_compositional
+        verify_win_roundtrip
         win_payout_never_zero
+        winner_detects_column
+        winner_detects_diagonal
+        winner_detects_row
     )
     TOTAL=${#HARNESSES[@]}
     echo "🔬 Running $TOTAL Kani harnesses → $CSV"
@@ -375,25 +415,150 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
     # Build set of already-passed harnesses
     PASSED=$(awk -F',' '$3=="PASS" {print $2}' "$CSV" | sort -u)
     HARNESSES=(
-        ace_ace_nine_value ace_ace_ten_soft_collapses ace_detection ace_raw_value_is_eleven
-        blackjack_ace_king blackjack_ace_ten blackjack_biconditional_converse blackjack_requires_two_cards
-        bust_detection cannot_split_different_ranks cannot_split_wrong_count can_split_matching_ranks
-        card_equality card_value_in_range deal_reduces_remaining deck_all_cards_unique deck_has_52_cards
-        double_ace_value empty_hand_zero_value exactly_21_not_bust exhausted_deck_returns_none
-        face_card_values_are_ten get_set_roundtrip hand_value_ace_busts_soft hand_value_bounds
-        handvalue_equality hand_value_no_aces hand_value_single_ace_soft new_board_is_empty
-        no_bust_under_21 no_winner_on_empty_board opponent_returns_other_player player_opponent_is_involutive
-        position_roundtrip position_to_index_is_always_valid scenario_bankroll_conservation
-        scenario_both_natural scenario_dealer_bust scenario_dealer_natural scenario_normal_stand
-        scenario_player_bust scenario_player_natural set_marks_occupied soft_hard_exact_relation
-        square_equality three_card_21_not_blackjack verify_bankroll_legos verify_blackjack_legos
-        verify_card_compositional verify_debit_arithmetic verify_debit_overdraft_rejected
-        verify_debit_zero_bet_rejected verify_loss_roundtrip verify_no_double_deduction
-        verify_outcome_compositional verify_push_roundtrip verify_rank_compositional
-        verify_settle_blackjack verify_settle_loss verify_settle_push verify_settle_surrender
-        verify_settle_win verify_suit_compositional verify_surrender_roundtrip
-        verify_tictactoe_compositional verify_win_roundtrip winner_detects_column
-        winner_detects_diagonal winner_detects_row
+        ace_ace_nine_value
+        ace_ace_ten_soft_collapses
+        ace_detection
+        ace_raw_value_is_eleven
+        area_sufficient_nonzero_height_passes
+        area_sufficient_zero_height_fails
+        at_level_clamps
+        blackjack_ace_king
+        blackjack_ace_ten
+        blackjack_biconditional_converse
+        blackjack_requires_two_cards
+        breakpoint_large_layout
+        breakpoint_medium_layout
+        breakpoint_micro_expected_failure
+        breakpoint_minimum_blackjack_layout
+        breakpoint_small_layout
+        breakpoint_tiny_graceful_degrade
+        breakpoint_ultrawide_layout
+        bust_detection
+        can_split_matching_ranks
+        cannot_split_different_ranks
+        cannot_split_wrong_count
+        card_equality
+        card_value_in_range
+        comeout_classification_exclusive
+        comeout_classification_exhaustive
+        comeout_craps_three
+        comeout_craps_twelve
+        comeout_craps_two
+        comeout_natural_eleven
+        comeout_natural_seven
+        craps_numbers_are_not_points
+        craps_values_correct
+        debit_rejects_over_bankroll
+        debit_rejects_zero_bet
+        debit_single_bet_correct
+        dice_roll_sum_bounded
+        die_face_roundtrip
+        die_face_value_bounded
+        dont_pass_payout_is_even_money
+        dont_pass_pushes_on_twelve
+        dont_pass_wins_on_craps_two
+        double_ace_value
+        empty_hand_zero_value
+        exactly_21_not_bust
+        execute_move_records_history
+        execute_move_sets_square
+        exhausted_shoe_returns_none
+        face_card_values_are_ten
+        generate_reduces_remaining
+        get_set_roundtrip
+        hand_value_ace_busts_soft
+        hand_value_bounds
+        hand_value_no_aces
+        hand_value_single_ace_soft
+        handvalue_equality
+        house_edge_non_negative
+        is_full_false_on_new_board
+        is_full_iff_no_empty_squares
+        lesson_advancement_monotonic
+        lesson_level_bounded
+        make_move_alternates_player
+        make_move_produces_draw
+        make_move_produces_winner
+        make_move_rejects_occupied_square
+        make_move_rejects_wrong_player
+        natural_values_correct
+        new_board_is_empty
+        no_bust_under_21
+        no_winner_on_empty_board
+        node_box_width_no_u16_overflow
+        opponent_returns_other_player
+        pass_line_payout_is_even_money
+        pass_line_win_payout_correct
+        pass_line_wins_on_natural
+        place_five_nine_payout
+        place_five_win_payout_correct
+        place_four_ten_payout
+        place_six_eight_payout
+        place_six_win_payout_correct
+        player_opponent_is_involutive
+        point_made_eight
+        point_phase_no_decision
+        point_roundtrip
+        point_values_are_valid
+        position_roundtrip
+        position_to_index_is_always_valid
+        replay_empty_gives_fresh_game
+        replay_one_move_applies_it
+        replay_two_moves_alternates_and_records
+        restart_creates_fresh_game
+        scenario_bankroll_conservation
+        scenario_both_natural
+        scenario_dealer_bust
+        scenario_dealer_natural
+        scenario_normal_stand
+        scenario_player_bust
+        scenario_player_natural
+        set_marks_occupied
+        settle_loss_reduces_balance
+        settle_push_returns_wager
+        settle_win_returns_correct_balance
+        seven_is_not_a_point
+        seven_out
+        shoe_all_cards_unique
+        shoe_has_52_cards
+        soft_hard_exact_relation
+        square_equality
+        symbolic_must_pass_range_safe
+        three_card_21_not_blackjack
+        truncation_always_satisfies_label_contained
+        validate_move_err_occupied_square
+        validate_move_err_wrong_player
+        validate_move_ok_on_fresh_game_for_x
+        validate_player_turn_err_when_wrong_player
+        validate_player_turn_ok_when_correct_player
+        validate_square_empty_err_when_occupied
+        validate_square_empty_ok_when_empty
+        verify_bankroll_legos
+        verify_blackjack_legos
+        verify_card_compositional
+        verify_craps_legos
+        verify_debit_arithmetic
+        verify_debit_overdraft_rejected
+        verify_debit_zero_bet_rejected
+        verify_loss_roundtrip
+        verify_no_double_deduction
+        verify_outcome_compositional
+        verify_push_roundtrip
+        verify_rank_compositional
+        verify_settle_blackjack
+        verify_settle_loss
+        verify_settle_push
+        verify_settle_surrender
+        verify_settle_win
+        verify_suit_compositional
+        verify_surrender_roundtrip
+        verify_tictactoe_compositional
+        verify_tictactoe_wrapper_compositional
+        verify_win_roundtrip
+        win_payout_never_zero
+        winner_detects_column
+        winner_detects_diagonal
+        winner_detects_row
     )
     PASS=0; FAIL=0; SKIP=0
     TOTAL=${#HARNESSES[@]}
