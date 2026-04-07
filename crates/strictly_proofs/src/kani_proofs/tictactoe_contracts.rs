@@ -4,6 +4,12 @@
 //! `strictly_server` and therefore unverified.  Now that they live in
 //! `strictly_tictactoe`, we can include them in the formal verification chain.
 //!
+//! ## Compositional pattern
+//!
+//! Each harness calls `T::kani_proof()` on the types it uses.  This witnesses
+//! that T satisfies the `Elicitation` trait, composing the framework's 291
+//! harnesses with our domain-specific properties.
+//!
 //! ## What is verified
 //!
 //! ### Contract soundness (`contracts.rs`)
@@ -19,8 +25,9 @@
 //! - `GameInProgress::replay` with 0 moves gives an empty board with X to move
 //! - `GameInProgress::replay` with 1 move applies that move
 
+use elicitation::Elicitation;
 use strictly_tictactoe::{
-    Board, GameSetup, GameInProgress, GameResult, Move, MoveError, Player, Position, Square,
+    GameInProgress, GameResult, GameSetup, Move, MoveError, Player, Position, Square,
     contracts::{execute_move, validate_move, validate_player_turn, validate_square_empty},
 };
 
@@ -34,6 +41,10 @@ use strictly_tictactoe::{
 #[cfg(kani)]
 #[kani::proof]
 fn validate_square_empty_ok_when_empty() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+
     let player: Player = kani::any();
     let pos: Position = kani::any();
 
@@ -51,6 +62,10 @@ fn validate_square_empty_ok_when_empty() {
 #[cfg(kani)]
 #[kani::proof]
 fn validate_square_empty_err_when_occupied() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+
     let pos: Position = kani::any();
 
     // After X plays at `pos`, the square is occupied. It's now O's turn.
@@ -76,6 +91,10 @@ fn validate_square_empty_err_when_occupied() {
 #[cfg(kani)]
 #[kani::proof]
 fn validate_player_turn_ok_when_correct_player() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+
     let pos: Position = kani::any();
     let game = GameSetup::new().start(Player::X);
     let mov = Move::new(Player::X, pos); // X goes first
@@ -87,6 +106,10 @@ fn validate_player_turn_ok_when_correct_player() {
 #[cfg(kani)]
 #[kani::proof]
 fn validate_player_turn_err_when_wrong_player() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+
     let pos: Position = kani::any();
     let game = GameSetup::new().start(Player::X);
     let mov = Move::new(Player::O, pos); // O tries to go first — wrong!
@@ -106,6 +129,11 @@ fn validate_player_turn_err_when_wrong_player() {
 #[cfg(kani)]
 #[kani::proof]
 fn validate_move_ok_on_fresh_game_for_x() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameSetup::kani_proof();
+
     let pos: Position = kani::any();
     let game = GameSetup::new().start(Player::X);
     let mov = Move::new(Player::X, pos);
@@ -119,6 +147,11 @@ fn validate_move_ok_on_fresh_game_for_x() {
 #[cfg(kani)]
 #[kani::proof]
 fn validate_move_err_occupied_square() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameInProgress::kani_proof();
+
     let pos: Position = kani::any();
 
     let result = GameInProgress::replay(&[Move::new(Player::X, pos)]);
@@ -133,6 +166,11 @@ fn validate_move_err_occupied_square() {
 #[cfg(kani)]
 #[kani::proof]
 fn validate_move_err_wrong_player() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameSetup::kani_proof();
+
     let pos: Position = kani::any();
     let game = GameSetup::new().start(Player::X);
     let mov = Move::new(Player::O, pos); // O tries to go first
@@ -148,6 +186,12 @@ fn validate_move_err_wrong_player() {
 #[cfg(kani)]
 #[kani::proof]
 fn execute_move_sets_square() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameSetup::kani_proof();
+    GameInProgress::kani_proof();
+
     let pos: Position = kani::any();
     let mut game = GameSetup::new().start(Player::X);
     let mov = Move::new(Player::X, pos);
@@ -162,6 +206,12 @@ fn execute_move_sets_square() {
 #[cfg(kani)]
 #[kani::proof]
 fn execute_move_records_history() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameSetup::kani_proof();
+    GameInProgress::kani_proof();
+
     let pos: Position = kani::any();
     let mut game = GameSetup::new().start(Player::X);
     let mov = Move::new(Player::X, pos);
@@ -183,6 +233,12 @@ fn execute_move_records_history() {
 #[cfg(kani)]
 #[kani::proof]
 fn make_move_alternates_player() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameSetup::kani_proof();
+    GameInProgress::kani_proof();
+
     let pos: Position = kani::any();
     let game = GameSetup::new().start(Player::X);
     let initial_mover = game.to_move(); // always X on fresh game
@@ -202,6 +258,12 @@ fn make_move_alternates_player() {
 #[cfg(kani)]
 #[kani::proof]
 fn make_move_rejects_wrong_player() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameSetup::kani_proof();
+    GameInProgress::kani_proof();
+
     let pos: Position = kani::any();
     let game = GameSetup::new().start(Player::X);
     let mov = Move::new(Player::O, pos); // O tries to move when it's X's turn
@@ -215,6 +277,11 @@ fn make_move_rejects_wrong_player() {
 #[cfg(kani)]
 #[kani::proof]
 fn make_move_rejects_occupied_square() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameInProgress::kani_proof();
+
     let pos: Position = kani::any();
 
     let result = GameInProgress::replay(&[Move::new(Player::X, pos)]);
@@ -233,6 +300,11 @@ fn make_move_rejects_occupied_square() {
 #[cfg(kani)]
 #[kani::proof]
 fn replay_empty_gives_fresh_game() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameInProgress::kani_proof();
+
     let result = GameInProgress::replay(&[]).expect("empty replay is always valid");
     match result {
         GameResult::InProgress(g) => {
@@ -251,6 +323,11 @@ fn replay_empty_gives_fresh_game() {
 #[cfg(kani)]
 #[kani::proof]
 fn replay_one_move_applies_it() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameInProgress::kani_proof();
+
     let pos: Position = kani::any();
     let mov = Move::new(Player::X, pos); // X always moves first
 
