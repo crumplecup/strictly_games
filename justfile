@@ -64,10 +64,8 @@ verify:
 # Run compositional proof (types verified through framework)
 verify-compositional:
     @echo "Verifying types through compositional proof chain..."
-    cargo kani -p strictly_proofs --harness verify_tictactoe_compositional
-    cargo kani -p strictly_proofs --harness verify_tictactoe_wrapper_compositional
+    cargo kani -p strictly_proofs --harness verify_tictactoe_composition_capstone
     cargo kani -p strictly_proofs --harness verify_blackjack_legos
-    cargo kani -p strictly_proofs --harness verify_bankroll_legos
     cargo kani -p strictly_proofs --harness verify_craps_legos
 
 # Run game invariant proofs (game rules correctness)
@@ -100,6 +98,22 @@ verify-tictactoe-contracts:
         --harness make_move_produces_winner \
         --harness make_move_produces_draw \
         --harness restart_creates_fresh_game
+
+# Run generated kani_proof() foundation harnesses (newtype wrappers and constructibility)
+verify-generated:
+    @echo "Verifying generated kani_proof() foundation harnesses..."
+    cargo kani -p strictly_proofs \
+        --harness verify_player_constructible \
+        --harness verify_position_constructible \
+        --harness verify_board_newtype_wrapper \
+        --harness verify_move_newtype_wrapper \
+        --harness verify_gamesetup_newtype_wrapper \
+        --harness verify_gameinprogress_newtype_wrapper \
+        --harness verify_gamefinished_newtype_wrapper \
+        --harness verify_rank_constructible \
+        --harness verify_suit_constructible \
+        --harness verify_card_newtype_wrapper \
+        --harness verify_outcome_constructible
 
 # Run financial typestate proofs (BankrollLedger double-deduction safety)
 verify-financial:

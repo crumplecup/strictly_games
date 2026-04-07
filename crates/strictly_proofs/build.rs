@@ -1,62 +1,139 @@
-//! Build script: generates Verus foundation proofs by composing `verus_proof()`
-//! token streams from `#[derive(Elicit)]` game types.
+//! Build script: generates Kani and Verus foundation proofs by composing
+//! `kani_proof()` / `verus_proof()` token streams from `#[derive(Elicit)]` game types.
 //!
-//! # How composition works
+//! # How Kani composition works
 //!
-//! Every type that `#[derive(Elicit)]` emits a `verus_proof()` associated
-//! function returning a `proc_macro2::TokenStream` of Verus proof code.
+//! `#[derive(Elicit)]` emits a `kani_proof()` method on every type, returning a
+//! `proc_macro2::TokenStream` of `#[kani::proof]` harness functions.
+//!
 //! This build script:
 //!
-//! 1. Calls `verus_proof()` on the game types (Outcome, u64 field foundation)
-//! 2. Converts the token streams to strings
-//! 3. Writes self-contained Verus files to `src/verus_proofs/generated/`
+//! 1. Calls `kani_proof()` on all game types (Player, Position, Board, Move, …)
+//! 2. Deduplicates by function name (composite types re-emit leaf proofs)
+//! 3. Writes self-contained Kani files to `src/kani_proofs/generated/`
 //!
-//! The generated files serve as the foundation layer for the hand-written
-//! business logic proofs in `src/verus_proofs/*.rs`.
+//! The generated files form the foundation layer.  Hand-written harnesses in
+//! `src/kani_proofs/*.rs` prove domain-specific properties on top of them.
 //!
-//! # Why not call `BankrollLedger::verus_proof()` directly?
+//! # How Verus composition works
 //!
-//! `BankrollLedger` has two `u64` fields (`post_bet_balance`, `bet`).  The
-//! derive-generated `verus_proof()` calls `<u64 as Elicitation>::verus_proof()`
-//! **twice** — once per field — which would emit duplicate function definitions.
-//! We therefore call each unique field type's `verus_proof()` exactly once,
-//! which is semantically equivalent to the deduplicated composition of
-//! `BankrollLedger::verus_proof()`.
+//! Same pattern for `verus_proof()` → `src/verus_proofs/generated/`.
 
 use elicitation::Elicitation;
-use strictly_blackjack::Outcome;
+use strictly_blackjack::Outcome as BjOutcome;
+use strictly_tictactoe::{
+    Board, GameFinished, GameInProgress, GameResult, GameSetup, Move, Outcome as TttOutcome,
+    Player, Position, Square,
+};
 
 fn main() {
     let manifest_dir =
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR set by Cargo");
-    let gen_dir = std::path::Path::new(&manifest_dir).join("src/verus_proofs/generated");
-    std::fs::create_dir_all(&gen_dir).expect("create src/verus_proofs/generated/");
+    let base = std::path::Path::new(&manifest_dir);
 
-    generate_blackjack_foundation(&gen_dir);
+    let kani_gen = base.join("src/kani_proofs/generated");
+    let verus_gen = base.join("src/verus_proofs/generated");
+    std::fs::create_dir_all(&kani_gen).expect("create src/kani_proofs/generated/");
+    std::fs::create_dir_all(&verus_gen).expect("create src/verus_proofs/generated/");
 
-    // Regenerate when source types change.
+    generate_tictactoe_kani(&kani_gen);
+    generate_blackjack_kani(&kani_gen);
+    generate_blackjack_verus(&verus_gen);
+
+    println!("cargo:rerun-if-changed=../strictly_tictactoe/src/types.rs");
+    println!("cargo:rerun-if-changed=../strictly_tictactoe/src/typestate.rs");
+    println!("cargo:rerun-if-changed=../strictly_tictactoe/src/action.rs");
     println!("cargo:rerun-if-changed=../strictly_blackjack/src/types.rs");
     println!("cargo:rerun-if-changed=../strictly_blackjack/src/ledger.rs");
 }
 
-/// Generate `blackjack_foundation.rs` by composing `verus_proof()` token
-/// streams from the blackjack game types.
-fn generate_blackjack_foundation(gen_dir: &std::path::Path) {
-    // ── Compose from verus_proof() ───────────────────────────────────────────
-    //
-    // BankrollLedger::verus_proof() composes its field types' proofs.
-    // Fields: post_bet_balance: u64, bet: u64  →  u64::verus_proof() × 2
-    // We call it once (deduped) to avoid duplicate function definitions.
+// ─────────────────────────────────────────────────────────────────────────────
+//  Kani: TicTacToe foundation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Generate `tictactoe_foundation.rs` from composed `kani_proof()` streams.
+///
+/// Calls `kani_proof()` on each TicTacToe type and deduplicates by function
+/// name, since composite types re-emit their field types' proofs.
+fn generate_tictactoe_kani(gen_dir: &std::path::Path) {
+    // Collect in leaf-to-root order so leaf proofs appear first.
+    let streams = [
+        Player::kani_proof(),
+        Position::kani_proof(),
+        Square::kani_proof(),
+        Board::kani_proof(),
+        Move::kani_proof(),
+        TttOutcome::kani_proof(),
+        GameSetup::kani_proof(),
+        GameInProgress::kani_proof(),
+        GameFinished::kani_proof(),
+        GameResult::kani_proof(),
+    ];
+
+    let body = dedup_kani_proofs(&streams);
+    let imports = extract_used_types(&body);
+
+    let code = format!(
+        r#"// AUTO-GENERATED by strictly_proofs/build.rs — DO NOT EDIT
+// Regenerate: cargo build -p strictly_proofs
+//
+// Composition: Type::kani_proof() for all TicTacToe types (deduplicated).
+// These foundation proofs underpin domain-specific harnesses in game_invariants.rs
+// and tictactoe_contracts.rs.
+use strictly_tictactoe::{{{imports}}};
+
+{body}
+"#,
+        imports = imports.join(", "),
+    );
+
+    std::fs::write(gen_dir.join("tictactoe_foundation.rs"), code)
+        .expect("write tictactoe_foundation.rs");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Kani: Blackjack foundation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Generate `blackjack_foundation.rs` from composed `kani_proof()` streams.
+fn generate_blackjack_kani(gen_dir: &std::path::Path) {
+    use strictly_blackjack::{Card, Rank, Suit};
+
+    let streams = [
+        Rank::kani_proof(),
+        Suit::kani_proof(),
+        Card::kani_proof(),
+        BjOutcome::kani_proof(),
+    ];
+
+    let body = dedup_kani_proofs(&streams);
+    let imports = extract_used_types(&body);
+
+    let code = format!(
+        r#"// AUTO-GENERATED by strictly_proofs/build.rs — DO NOT EDIT
+// Regenerate: cargo build -p strictly_proofs
+//
+// Composition: Type::kani_proof() for all Blackjack types (deduplicated).
+use strictly_blackjack::{{{imports}}};
+
+{body}
+"#,
+        imports = imports.join(", "),
+    );
+
+    std::fs::write(gen_dir.join("blackjack_foundation.rs"), code)
+        .expect("write blackjack_foundation.rs");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Verus: Blackjack foundation (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Generate `blackjack_foundation.rs` (Verus) by composing `verus_proof()` streams.
+fn generate_blackjack_verus(gen_dir: &std::path::Path) {
     let u64_proof = <u64 as Elicitation>::verus_proof().to_string();
+    let outcome_proof = BjOutcome::verus_proof().to_string();
 
-    // Outcome::verus_proof() emits verify_outcome_roundtrip (identity proof).
-    let outcome_proof = Outcome::verus_proof().to_string();
-
-    // ── Wrapper stub ─────────────────────────────────────────────────────────
-    //
-    // u64::verus_proof() generates code referencing U64Default (elicitation's
-    // identity wrapper around u64).  We provide a minimal Verus-compatible stub
-    // so the generated proof can be verified standalone.
     let stub = r"
 pub struct U64Default { pub value: u64 }
 
@@ -74,16 +151,10 @@ impl U64Default {
     }
 }";
 
-    // ── Outcome mirror ───────────────────────────────────────────────────────
-    //
-    // Outcome::verus_proof() references the `Outcome` type by name.  Verus
-    // cannot resolve workspace deps so we define a local mirror here.
-    // Maintenance: keep in sync with strictly_blackjack::Outcome.
     let outcome_mirror = r"
 #[derive(PartialEq, Eq)]
 pub enum Outcome { Win, Blackjack, Push, Loss, Surrender }";
 
-    // ── Assemble the file ────────────────────────────────────────────────────
     let code = format!(
         r#"// AUTO-GENERATED by strictly_proofs/build.rs — DO NOT EDIT
 // Regenerate: cargo build -p strictly_proofs
@@ -136,5 +207,110 @@ verus! {{
     );
 
     std::fs::write(gen_dir.join("blackjack_foundation.rs"), code)
-        .expect("write blackjack_foundation.rs");
+        .expect("write verus blackjack_foundation.rs");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Deduplication helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Compose multiple `kani_proof()` token streams, deduplicating by function name.
+///
+/// `#[derive(Elicit)]` on composite types recursively includes field-type proofs.
+/// Without deduplication, `verify_player_constructible` would appear once per
+/// type that contains a `Player` field — causing duplicate symbol errors.
+fn dedup_kani_proofs(streams: &[proc_macro2::TokenStream]) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = String::new();
+
+    for ts in streams {
+        let s = ts.to_string();
+        for chunk in extract_proof_chunks(&s) {
+            if let Some(name) = extract_fn_name(&chunk) {
+                if seen.insert(name) {
+                    result.push_str(&chunk);
+                    result.push('\n');
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Split a serialised token stream into individual proof-function strings.
+///
+/// Each proof chunk starts with `# [` (a `#[...]` attribute) and ends at the
+/// closing `}` of the function body.  Brace depth tracks nesting.
+fn extract_proof_chunks(s: &str) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        // Find start of a `# [` attribute sequence.
+        if i + 3 <= len && &s[i..i + 3] == "# [" {
+            let start = i;
+            let mut depth: i32 = 0;
+            let mut found_brace = false;
+            let mut j = i;
+
+            while j < len {
+                match bytes[j] {
+                    b'{' => {
+                        depth += 1;
+                        found_brace = true;
+                    }
+                    b'}' => {
+                        depth -= 1;
+                        if found_brace && depth == 0 {
+                            chunks.push(s[start..=j].to_string());
+                            i = j + 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                j += 1;
+            }
+            if j >= len {
+                break;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    chunks
+}
+
+/// Extract the function name from a proof chunk string (the word after `fn `).
+fn extract_fn_name(chunk: &str) -> Option<String> {
+    let fn_pos = chunk.find("fn ")?;
+    let after_fn = &chunk[fn_pos + 3..];
+    let name_end = after_fn
+        .find(|c: char| !c.is_alphanumeric() && c != '_')
+        .unwrap_or(after_fn.len());
+    Some(after_fn[..name_end].to_string())
+}
+
+/// Scan the generated body and return a sorted list of type names that are
+/// actually referenced (capitalised identifier immediately before ` ::`).
+///
+/// The `kani_first_variant_constructible` helper emits code like
+/// `let _ : Player = Player :: X ;` — both usages of `Player` appear before
+/// `::`, so a single pass finds all referenced types.
+fn extract_used_types(body: &str) -> Vec<String> {
+    let tokens: Vec<&str> = body.split_whitespace().collect();
+    let mut types = std::collections::BTreeSet::new();
+    for window in tokens.windows(2) {
+        if window[1] == "::" {
+            let t = window[0];
+            if t.chars().next().map_or(false, |c| c.is_uppercase()) {
+                types.insert(t.to_string());
+            }
+        }
+    }
+    types.into_iter().collect()
 }

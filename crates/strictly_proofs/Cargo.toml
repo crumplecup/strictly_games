@@ -20,7 +20,8 @@ unicode-width = { workspace = true }
 creusot-std = { workspace = true }
 
 [build-dependencies]
-# Used to compose verus_proof() token streams at build time → generated Verus files
+# Used to compose kani_proof() / verus_proof() token streams at build time → generated files
+strictly_tictactoe = { workspace = true }
 strictly_blackjack = { path = "../strictly_blackjack", default-features = false }
 elicitation = { workspace = true }
 proc-macro2 = "1"

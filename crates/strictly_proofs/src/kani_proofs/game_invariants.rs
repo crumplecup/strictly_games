@@ -4,7 +4,6 @@
 //! - Trust: Rust's type system (enums, bounds checks)
 //! - Verify: Game semantics (opponent, position, winner detection, draw detection)
 
-use elicitation::Elicitation;
 use strictly_tictactoe::{Board, Player, Position, Square, rules};
 
 /// Verifies Player::opponent() is an involution.
@@ -221,9 +220,6 @@ fn square_equality() {
 #[cfg(kani)]
 #[kani::proof]
 fn is_full_iff_no_empty_squares() {
-    Board::kani_proof();
-    Square::kani_proof();
-    Position::kani_proof();
 
     let mut board = Board::new();
     for pos in Position::ALL {
@@ -243,7 +239,6 @@ fn is_full_iff_no_empty_squares() {
 #[cfg(kani)]
 #[kani::proof]
 fn is_full_false_on_new_board() {
-    Board::kani_proof();
 
     let board = Board::new();
     assert!(!rules::is_full(&board), "Fresh board must not be full");
