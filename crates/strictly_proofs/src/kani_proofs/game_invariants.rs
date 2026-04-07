@@ -2,8 +2,9 @@
 //!
 //! Uses "cloud of assumptions" pattern:
 //! - Trust: Rust's type system (enums, bounds checks)
-//! - Verify: Game semantics (opponent, position, winner detection)
+//! - Verify: Game semantics (opponent, position, winner detection, draw detection)
 
+use elicitation::Elicitation;
 use strictly_tictactoe::{Board, Player, Position, Square, rules};
 
 /// Verifies Player::opponent() is an involution.
@@ -205,4 +206,45 @@ fn square_equality() {
     if sq1 == sq2 {
         assert_eq!(sq2, sq1);
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  is_full (draw detection)
+// ─────────────────────────────────────────────────────────────
+
+/// `is_full` is semantically correct: true iff every square is occupied.
+///
+/// Property: is_full(b) ↔ ∀ pos, b.get(pos) ≠ Square::Empty
+///
+/// Constructs an arbitrary board from unconstrained squares so Kani explores
+/// all 3^9 board configurations.
+#[cfg(kani)]
+#[kani::proof]
+fn is_full_iff_no_empty_squares() {
+    Board::kani_proof();
+    Square::kani_proof();
+    Position::kani_proof();
+
+    let mut board = Board::new();
+    for pos in Position::ALL {
+        let sq: Square = kani::any();
+        board.set(pos, sq);
+    }
+
+    let full = rules::is_full(&board);
+    let has_empty = Position::ALL.iter().any(|p| board.get(*p) == Square::Empty);
+
+    assert_eq!(full, !has_empty, "is_full ↔ no empty squares");
+}
+
+/// `is_full` returns false on a fresh board.
+///
+/// Property: is_full(Board::new()) = false
+#[cfg(kani)]
+#[kani::proof]
+fn is_full_false_on_new_board() {
+    Board::kani_proof();
+
+    let board = Board::new();
+    assert!(!rules::is_full(&board), "Fresh board must not be full");
 }

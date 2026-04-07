@@ -24,10 +24,17 @@
 //! - `GameInProgress::make_move` rejects an occupied square
 //! - `GameInProgress::replay` with 0 moves gives an empty board with X to move
 //! - `GameInProgress::replay` with 1 move applies that move
+//! - `GameInProgress::replay` with 2 distinct moves records both and returns X to move
+//!
+//! ### Terminal transitions (`typestate.rs`)
+//! - `make_move` produces `Finished(Winner(X))` when X completes a row
+//! - `make_move` produces `Finished(Draw)` when the board fills with no winner
+//! - `GameFinished::restart()` produces a fresh empty `GameSetup`
 
 use elicitation::Elicitation;
 use strictly_tictactoe::{
-    GameInProgress, GameResult, GameSetup, Move, MoveError, Player, Position, Square,
+    GameFinished, GameInProgress, GameResult, GameSetup, Move, MoveError, Outcome, Player,
+    Position, Square,
     contracts::{execute_move, validate_move, validate_player_turn, validate_square_empty},
 };
 
@@ -344,6 +351,172 @@ fn replay_one_move_applies_it() {
             // (Need at least 5 moves for a winner; 9 for a draw.)
             let _ = g;
             assert!(false, "One move cannot finish a fresh game");
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Terminal transitions: InProgress → Finished
+// ─────────────────────────────────────────────────────────────
+
+/// `make_move` transitions to `Finished(Winner(X))` when the last move completes a line.
+///
+/// X plays TopLeft → TopCenter → TopRight (with O blocking at MiddleLeft and Center).
+/// The 5th move (X-TopRight) completes the top row → Winner(X).
+#[cfg(kani)]
+#[kani::proof]
+fn make_move_produces_winner() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameInProgress::kani_proof();
+    GameFinished::kani_proof();
+    Outcome::kani_proof();
+
+    let moves = [
+        Move::new(Player::X, Position::TopLeft),
+        Move::new(Player::O, Position::MiddleLeft),
+        Move::new(Player::X, Position::TopCenter),
+        Move::new(Player::O, Position::Center),
+        Move::new(Player::X, Position::TopRight), // completes top row
+    ];
+
+    let result = GameInProgress::replay(&moves).expect("valid winning sequence");
+    match result {
+        GameResult::Finished(g) => {
+            assert_eq!(
+                g.outcome(),
+                &Outcome::Winner(Player::X),
+                "X must win by completing the top row"
+            );
+        }
+        GameResult::InProgress(_) => {
+            assert!(false, "Top-row completion must finish the game");
+        }
+    }
+}
+
+/// `make_move` transitions to `Finished(Draw)` when the board fills with no winner.
+///
+/// Draw board after 9 moves: X O X / O X O / X X O (no 3-in-a-line).
+/// Move order (alternating): TL, TC, TR, ML, MR, MC, BL, BR, BC.
+#[cfg(kani)]
+#[kani::proof]
+fn make_move_produces_draw() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameInProgress::kani_proof();
+    GameFinished::kani_proof();
+    Outcome::kani_proof();
+
+    // Final board: TL=X TC=O TR=X / ML=O MR=X MC=O / BL=X BR=O BC=X
+    // Rows: X,O,X — O,X,O — X,O,X  → no 3-in-a-line for either player.
+    let moves = [
+        Move::new(Player::X, Position::TopLeft),
+        Move::new(Player::O, Position::TopCenter),
+        Move::new(Player::X, Position::TopRight),
+        Move::new(Player::O, Position::MiddleLeft),
+        Move::new(Player::X, Position::MiddleRight),
+        Move::new(Player::O, Position::MiddleCenter),
+        Move::new(Player::X, Position::BottomLeft),
+        Move::new(Player::O, Position::BottomRight),
+        Move::new(Player::X, Position::BottomCenter),
+    ];
+
+    let result = GameInProgress::replay(&moves).expect("valid draw sequence");
+    match result {
+        GameResult::Finished(g) => {
+            assert_eq!(
+                g.outcome(),
+                &Outcome::Draw,
+                "Full board with no winner must be a draw"
+            );
+        }
+        GameResult::InProgress(_) => {
+            assert!(false, "9-move sequence must finish the game");
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  GameFinished::restart
+// ─────────────────────────────────────────────────────────────
+
+/// `GameFinished::restart()` creates a fresh empty `GameSetup`.
+///
+/// Property: for all positions pos, restart().board().is_empty(pos) = true
+#[cfg(kani)]
+#[kani::proof]
+fn restart_creates_fresh_game() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameFinished::kani_proof();
+    GameSetup::kani_proof();
+
+    // Reach a finished game via the canonical winning sequence.
+    let moves = [
+        Move::new(Player::X, Position::TopLeft),
+        Move::new(Player::O, Position::MiddleLeft),
+        Move::new(Player::X, Position::TopCenter),
+        Move::new(Player::O, Position::Center),
+        Move::new(Player::X, Position::TopRight),
+    ];
+
+    let result = GameInProgress::replay(&moves).expect("valid winning sequence");
+    let GameResult::Finished(finished) = result else {
+        return; // unreachable given the fixed winning sequence above
+    };
+
+    let setup = finished.restart();
+    let pos: Position = kani::any();
+    assert!(
+        setup.board().is_empty(pos),
+        "Restarted game must have an empty board at every position"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Multi-move replay
+// ─────────────────────────────────────────────────────────────
+
+/// `replay` correctly applies a two-move sequence.
+///
+/// Properties (for any two distinct positions pos1, pos2):
+/// - pos1 is `Occupied(X)`, pos2 is `Occupied(O)`
+/// - `to_move` is X again (turn has cycled back after 2 moves)
+/// - `history` has exactly 2 entries
+#[cfg(kani)]
+#[kani::proof]
+fn replay_two_moves_alternates_and_records() {
+    Move::kani_proof();
+    Player::kani_proof();
+    Position::kani_proof();
+    GameInProgress::kani_proof();
+
+    let pos1: Position = kani::any();
+    let pos2: Position = kani::any();
+    kani::assume(pos1 != pos2); // moves must target different squares
+
+    let result = GameInProgress::replay(&[
+        Move::new(Player::X, pos1),
+        Move::new(Player::O, pos2),
+    ])
+    .expect("two moves on distinct squares are always valid");
+
+    match result {
+        GameResult::InProgress(g) => {
+            assert_eq!(g.board().get(pos1), Square::Occupied(Player::X));
+            assert_eq!(g.board().get(pos2), Square::Occupied(Player::O));
+            assert_eq!(g.to_move(), Player::X, "After 2 moves, X's turn again");
+            assert_eq!(g.history().len(), 2, "History must have exactly 2 entries");
+        }
+        GameResult::Finished(_) => {
+            // Two moves on distinct squares cannot finish a game:
+            // a winner needs ≥3-in-a-line (impossible with ≤2 marks per player),
+            // and a draw needs all 9 squares filled.
+            assert!(false, "Two moves on distinct squares cannot finish a game");
         }
     }
 }

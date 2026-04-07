@@ -5,8 +5,8 @@
 
 // Re-export all pure game types from strictly_tictactoe
 pub use strictly_tictactoe::{
-    Board, GameFinished, GameInProgress, GameResult, GameSetup, LegalMove, Move, MoveError,
-    Outcome, Player, PlayerTurn, Position, Square, SquareEmpty, execute_move, rules, validate_move,
+    Board, GameFinished, GameInProgress, GameResult, GameSetup, Move, MoveError, Outcome, Player,
+    PlayerTurn, Position, Square, SquareEmpty,
 };
 
 // Server-specific modules

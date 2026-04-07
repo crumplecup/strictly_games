@@ -57,10 +57,6 @@ pub enum MoveError {
     #[display("Square {:?} is already occupied", _0)]
     SquareOccupied(Position),
 
-    /// The game is already over.
-    #[display("Game is already over")]
-    GameOver,
-
     /// It's not this player's turn.
     #[display("It's not {:?}'s turn", _0)]
     WrongPlayer(Player),
