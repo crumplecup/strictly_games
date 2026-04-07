@@ -398,8 +398,9 @@ fn make_move_produces_winner() {
 
 /// `make_move` transitions to `Finished(Draw)` when the board fills with no winner.
 ///
-/// Draw board after 9 moves: X O X / O X O / X X O (no 3-in-a-line).
-/// Move order (alternating): TL, TC, TR, ML, MR, MC, BL, BR, BC.
+/// Draw board after 9 moves: X O X / O X O / X X O — wait, let me recalculate.
+/// Move order (alternating X/O): TL, TC, TR, ML, MR, C, BL, BR, BC.
+/// Final: TL=X TC=O TR=X / ML=O MR=X C=O / BL=X BR=O BC=X → no 3-in-a-line.
 #[cfg(kani)]
 #[kani::proof]
 fn make_move_produces_draw() {
@@ -410,7 +411,7 @@ fn make_move_produces_draw() {
     GameFinished::kani_proof();
     Outcome::kani_proof();
 
-    // Final board: TL=X TC=O TR=X / ML=O MR=X MC=O / BL=X BR=O BC=X
+    // Final board: TL=X TC=O TR=X / ML=O MR=X C=O / BL=X BR=O BC=X
     // Rows: X,O,X — O,X,O — X,O,X  → no 3-in-a-line for either player.
     let moves = [
         Move::new(Player::X, Position::TopLeft),
@@ -418,7 +419,7 @@ fn make_move_produces_draw() {
         Move::new(Player::X, Position::TopRight),
         Move::new(Player::O, Position::MiddleLeft),
         Move::new(Player::X, Position::MiddleRight),
-        Move::new(Player::O, Position::MiddleCenter),
+        Move::new(Player::O, Position::Center),
         Move::new(Player::X, Position::BottomLeft),
         Move::new(Player::O, Position::BottomRight),
         Move::new(Player::X, Position::BottomCenter),

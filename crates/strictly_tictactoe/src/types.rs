@@ -36,6 +36,7 @@ pub enum Square {
 
 /// 3x3 tic-tac-toe board.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Elicit)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct Board {
     /// Squares in row-major order (0-8).
     squares: [Square; 9],
