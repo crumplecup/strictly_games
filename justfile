@@ -75,6 +75,25 @@ verify-invariants:
     cargo kani -p strictly_proofs --harness player_opponent_is_involutive
     cargo kani -p strictly_proofs --harness position_to_index_is_always_valid
 
+# Run TicTacToe wrapper-layer proofs (contracts, typestate, replay)
+verify-tictactoe-contracts:
+    @echo "Verifying TicTacToe wrapper layer (contracts + typestate)..."
+    cargo kani -p strictly_proofs \
+        --harness validate_square_empty_ok_when_empty \
+        --harness validate_square_empty_err_when_occupied \
+        --harness validate_player_turn_ok_when_correct_player \
+        --harness validate_player_turn_err_when_wrong_player \
+        --harness validate_move_ok_on_fresh_game_for_x \
+        --harness validate_move_err_occupied_square \
+        --harness validate_move_err_wrong_player \
+        --harness execute_move_sets_square \
+        --harness execute_move_records_history \
+        --harness make_move_alternates_player \
+        --harness make_move_rejects_wrong_player \
+        --harness make_move_rejects_occupied_square \
+        --harness replay_empty_gives_fresh_game \
+        --harness replay_one_move_applies_it
+
 # Run financial typestate proofs (BankrollLedger double-deduction safety)
 verify-financial:
     @echo "Verifying financial typestate proofs (BankrollLedger)..."

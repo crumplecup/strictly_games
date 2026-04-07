@@ -6,8 +6,8 @@
 //! - Formally verified composition (Kani-checked)
 //! - Type-enforced validation (can't execute without proof)
 
-use super::action::{Move, MoveError};
-use super::typestate::GameInProgress;
+use crate::action::{Move, MoveError};
+use crate::typestate::GameInProgress;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::{And, Established, both};
 use tracing::instrument;
@@ -92,6 +92,6 @@ pub fn execute_move(mov: &Move, game: &mut GameInProgress, _proof: Established<L
     // Proof guarantees: square empty AND player's turn
     // No need to revalidate - the type system enforces it
     game.board
-        .set(mov.position, super::Square::Occupied(mov.player));
+        .set(mov.position, crate::Square::Occupied(mov.player));
     game.history.push(*mov);
 }

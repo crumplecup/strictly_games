@@ -1,25 +1,19 @@
 //! Tic-tac-toe game implementation.
 //!
-//! This module provides application-specific wrappers around the pure game logic
-//! from strictly_tictactoe.
+//! Pure game logic lives in `strictly_tictactoe`.
+//! This module provides the server-side factory and wrapper.
 
-// Re-export core types from strictly_tictactoe
-pub use strictly_tictactoe::{Board, Player, Position, Square, rules};
+// Re-export all pure game types from strictly_tictactoe
+pub use strictly_tictactoe::{
+    Board, GameFinished, GameInProgress, GameResult, GameSetup, LegalMove, Move, MoveError,
+    Outcome, Player, PlayerTurn, Position, Square, SquareEmpty, execute_move, rules, validate_move,
+};
 
-// Application-specific wrappers
-pub mod action;
-pub mod contracts;
+// Server-specific modules
 pub mod factory;
-pub mod outcome;
-pub mod typestate;
 pub mod wrapper;
 
-// Re-export contract propositions
-pub use action::{Move, MoveError};
-pub use contracts::{PlayerTurn, SquareEmpty};
 pub use factory::{TttGameContext, register_await_turn_tool, register_move_tools};
-pub use outcome::Outcome;
-pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 pub use wrapper::AnyGame;
 
 /// Alias for clarity in session management.

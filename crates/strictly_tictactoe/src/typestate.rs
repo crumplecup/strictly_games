@@ -4,12 +4,12 @@
 //! This encodes invariants at compile time - a `Finished` game
 //! ALWAYS has an outcome, not `Option<Outcome>`.
 
-use super::action::{Move, MoveError};
-use super::contracts::{execute_move, validate_move};
-use super::outcome::Outcome;
+use crate::action::{Move, MoveError};
+use crate::contracts::{execute_move, validate_move};
+use crate::outcome::Outcome;
 use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
-use strictly_tictactoe::{Board, Player, Position};
+use crate::{Board, Player, Position};
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ use tracing::instrument;
 /// The board is always empty.
 /// No history, no outcome.
 #[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct GameSetup {
     board: Board,
 }
@@ -91,7 +92,7 @@ impl GameInProgress {
         execute_move(&action, &mut game, proof);
 
         // Check for winner using rules module
-        if let Some(winner) = super::rules::check_winner(&game.board) {
+        if let Some(winner) = crate::rules::check_winner(&game.board) {
             return Ok(GameResult::Finished(GameFinished {
                 board: game.board,
                 history: game.history,
@@ -100,7 +101,7 @@ impl GameInProgress {
         }
 
         // Check for draw using rules module
-        if super::rules::is_full(&game.board) {
+        if crate::rules::is_full(&game.board) {
             return Ok(GameResult::Finished(GameFinished {
                 board: game.board,
                 history: game.history,

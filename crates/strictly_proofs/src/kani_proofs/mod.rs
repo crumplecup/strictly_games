@@ -12,4 +12,5 @@ pub mod craps_financial;
 pub mod craps_invariants;
 pub mod craps_scenarios;
 pub mod game_invariants;
+pub mod tictactoe_contracts;
 pub mod tui_breakpoints;

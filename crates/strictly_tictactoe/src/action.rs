@@ -5,7 +5,7 @@
 
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
-use strictly_tictactoe::{Player, Position};
+use crate::{Player, Position};
 use tracing::instrument;
 
 /// A move in tic-tac-toe: a player placing their mark at a position.
@@ -18,6 +18,7 @@ use tracing::instrument;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub struct Move {
     /// The player making the move.
     pub player: Player,

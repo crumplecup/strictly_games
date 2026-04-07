@@ -9,14 +9,14 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum Outcome {
     /// Player won the game.
-    Winner(super::Player),
+    Winner(crate::Player),
     /// Game ended in a draw.
     Draw,
 }
 
 impl Outcome {
     /// Returns the winner if there is one.
-    pub fn winner(&self) -> Option<super::Player> {
+    pub fn winner(&self) -> Option<crate::Player> {
         match self {
             Outcome::Winner(player) => Some(*player),
             Outcome::Draw => None,
