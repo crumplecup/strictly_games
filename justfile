@@ -264,9 +264,9 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         breakpoint_tiny_graceful_degrade
         breakpoint_ultrawide_layout
         bust_detection
-        can_split_matching_ranks
         cannot_split_different_ranks
         cannot_split_wrong_count
+        can_split_matching_ranks
         card_equality
         card_value_in_range
         comeout_classification_exclusive
@@ -298,9 +298,9 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         get_set_roundtrip
         hand_value_ace_busts_soft
         hand_value_bounds
+        handvalue_equality
         hand_value_no_aces
         hand_value_single_ace_soft
-        handvalue_equality
         house_edge_non_negative
         is_full_false_on_new_board
         is_full_iff_no_empty_squares
@@ -314,8 +314,8 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         natural_values_correct
         new_board_is_empty
         no_bust_under_21
-        no_winner_on_empty_board
         node_box_width_no_u16_overflow
+        no_winner_on_empty_board
         opponent_returns_other_player
         pass_line_payout_is_even_money
         pass_line_win_payout_correct
@@ -365,30 +365,36 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         validate_square_empty_ok_when_empty
         verify_bankroll_legos
         verify_blackjack_legos
-        verify_card_compositional
+        verify_board_newtype_wrapper
+        verify_card_newtype_wrapper
         verify_craps_legos
         verify_debit_arithmetic
         verify_debit_overdraft_rejected
         verify_debit_zero_bet_rejected
+        verify_gamefinished_newtype_wrapper
+        verify_gameinprogress_newtype_wrapper
+        verify_gamesetup_newtype_wrapper
         verify_loss_roundtrip
+        verify_move_newtype_wrapper
         verify_no_double_deduction
-        verify_outcome_compositional
+        verify_outcome_constructible
+        verify_player_constructible
+        verify_position_constructible
         verify_push_roundtrip
-        verify_rank_compositional
+        verify_rank_constructible
         verify_settle_blackjack
         verify_settle_loss
         verify_settle_push
         verify_settle_surrender
         verify_settle_win
-        verify_suit_compositional
+        verify_suit_constructible
         verify_surrender_roundtrip
-        verify_tictactoe_compositional
-        verify_tictactoe_wrapper_compositional
+        verify_tictactoe_composition_capstone
         verify_win_roundtrip
-        win_payout_never_zero
         winner_detects_column
         winner_detects_diagonal
         winner_detects_row
+        win_payout_never_zero
     )
     TOTAL=${#HARNESSES[@]}
     echo "🔬 Running $TOTAL Kani harnesses → $CSV"
@@ -448,9 +454,9 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
         breakpoint_tiny_graceful_degrade
         breakpoint_ultrawide_layout
         bust_detection
-        can_split_matching_ranks
         cannot_split_different_ranks
         cannot_split_wrong_count
+        can_split_matching_ranks
         card_equality
         card_value_in_range
         comeout_classification_exclusive
@@ -482,9 +488,9 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
         get_set_roundtrip
         hand_value_ace_busts_soft
         hand_value_bounds
+        handvalue_equality
         hand_value_no_aces
         hand_value_single_ace_soft
-        handvalue_equality
         house_edge_non_negative
         is_full_false_on_new_board
         is_full_iff_no_empty_squares
@@ -498,8 +504,8 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
         natural_values_correct
         new_board_is_empty
         no_bust_under_21
-        no_winner_on_empty_board
         node_box_width_no_u16_overflow
+        no_winner_on_empty_board
         opponent_returns_other_player
         pass_line_payout_is_even_money
         pass_line_win_payout_correct
@@ -549,30 +555,36 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
         validate_square_empty_ok_when_empty
         verify_bankroll_legos
         verify_blackjack_legos
-        verify_card_compositional
+        verify_board_newtype_wrapper
+        verify_card_newtype_wrapper
         verify_craps_legos
         verify_debit_arithmetic
         verify_debit_overdraft_rejected
         verify_debit_zero_bet_rejected
+        verify_gamefinished_newtype_wrapper
+        verify_gameinprogress_newtype_wrapper
+        verify_gamesetup_newtype_wrapper
         verify_loss_roundtrip
+        verify_move_newtype_wrapper
         verify_no_double_deduction
-        verify_outcome_compositional
+        verify_outcome_constructible
+        verify_player_constructible
+        verify_position_constructible
         verify_push_roundtrip
-        verify_rank_compositional
+        verify_rank_constructible
         verify_settle_blackjack
         verify_settle_loss
         verify_settle_push
         verify_settle_surrender
         verify_settle_win
-        verify_suit_compositional
+        verify_suit_constructible
         verify_surrender_roundtrip
-        verify_tictactoe_compositional
-        verify_tictactoe_wrapper_compositional
+        verify_tictactoe_composition_capstone
         verify_win_roundtrip
-        win_payout_never_zero
         winner_detects_column
         winner_detects_diagonal
         winner_detects_row
+        win_payout_never_zero
     )
     PASS=0; FAIL=0; SKIP=0
     TOTAL=${#HARNESSES[@]}
