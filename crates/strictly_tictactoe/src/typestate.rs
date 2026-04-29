@@ -7,9 +7,9 @@
 use crate::action::{Move, MoveError};
 use crate::contracts::{execute_move, validate_move};
 use crate::outcome::Outcome;
-use elicitation::{Elicit, Prompt, Select};
-use serde::{Deserialize, Serialize};
 use crate::{Board, Player, Position};
+use elicitation::Elicit;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -20,8 +20,8 @@ use tracing::instrument;
 ///
 /// The board is always empty.
 /// No history, no outcome.
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub struct GameSetup {
     board: Board,
 }
@@ -66,7 +66,8 @@ impl Default for GameSetup {
 /// Invariants enforced by type:
 /// - to_move alternates
 /// - No outcome yet (outcome is in GameFinished)
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameInProgress {
     pub(super) board: Board,
     pub(super) history: Vec<Move>,
@@ -160,7 +161,8 @@ impl GameInProgress {
 ///
 /// The outcome is ALWAYS present (not Option).
 /// This struct encodes the invariant at the type level.
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameFinished {
     board: Board,
     history: Vec<Move>,
@@ -197,7 +199,7 @@ impl GameFinished {
 // ─────────────────────────────────────────────────────────────
 
 /// Result of making a move.
-#[derive(Debug, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub enum GameResult {
     /// Game continues.
     InProgress(GameInProgress),
@@ -221,7 +223,11 @@ impl kani::Arbitrary for GameInProgress {
         kani::assume(len <= 9);
         let moves: [Move; 9] = kani::any();
         let history = moves[..len].to_vec();
-        Self { board, history, to_move }
+        Self {
+            board,
+            history,
+            to_move,
+        }
     }
 }
 
@@ -234,6 +240,10 @@ impl kani::Arbitrary for GameFinished {
         kani::assume(len <= 9);
         let moves: [Move; 9] = kani::any();
         let history = moves[..len].to_vec();
-        Self { board, history, outcome }
+        Self {
+            board,
+            history,
+            outcome,
+        }
     }
 }

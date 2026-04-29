@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Pure tic-tac-toe game logic with formal verification support"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(creusot)', 'cfg(verus)'] }
 
 [dependencies]
 elicitation = { workspace = true }

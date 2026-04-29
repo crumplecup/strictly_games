@@ -3,9 +3,9 @@
 //! Moves are domain events, not side effects. They represent
 //! the player's intent and can be validated independently of execution.
 
+use crate::{Player, Position};
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
-use crate::{Player, Position};
 use tracing::instrument;
 
 /// A move in tic-tac-toe: a player placing their mark at a position.
@@ -18,7 +18,7 @@ use tracing::instrument;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub struct Move {
     /// The player making the move.
     pub player: Player,

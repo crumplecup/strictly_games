@@ -1,7 +1,7 @@
 //! Position enum with Select paradigm for tic-tac-toe moves.
 
 use super::types::Board;
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
 /// A position on the tic-tac-toe board (0-8).
@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
     strum::EnumIter,
     schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum Position {
     /// Top-left (position 0)
     TopLeft,

@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
 /// Playing personality for an AI craps co-player.

@@ -4,7 +4,7 @@
 //! The [`BetType`] enum covers all standard bets, and [`ActiveBet`]
 //! tracks a live bet on the table with its amount and state.
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
 use crate::Point;
@@ -16,7 +16,7 @@ use crate::Point;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum BetType {
     // ── Lesson 1: Line bets (1.36–1.41%) ──
     /// Pass Line — wins on natural (7/11), loses on craps (2/3/12).
@@ -148,6 +148,7 @@ impl std::fmt::Display for BetType {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct ActiveBet {
     /// What kind of bet.
     bet_type: BetType,

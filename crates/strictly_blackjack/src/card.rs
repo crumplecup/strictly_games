@@ -1,8 +1,8 @@
 //! Card types for blackjack.
 
+use elicitation::Elicit;
 #[cfg(feature = "shuffle")]
 use elicitation::Generator;
-use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 
 /// Rank of a playing card.
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
     schemars::JsonSchema,
 )]
 #[cfg_attr(feature = "shuffle", derive(elicitation_derive::Rand))]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum Rank {
     /// Ace (value 1 or 11).
     #[default]
@@ -139,7 +139,7 @@ impl std::fmt::Display for Rank {
     schemars::JsonSchema,
 )]
 #[cfg_attr(feature = "shuffle", derive(elicitation_derive::Rand))]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum Suit {
     /// Hearts (♥).
     #[default]
@@ -189,7 +189,7 @@ impl std::fmt::Display for Suit {
     Elicit,
     schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub struct Card {
     rank: Rank,
     suit: Suit,

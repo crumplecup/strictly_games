@@ -5,7 +5,7 @@
 
 use elicitation::Generator;
 use elicitation::VerifiedWorkflow;
-use elicitation::contracts::{And, Established, both};
+use elicitation::contracts::{And, Established, ProvableFrom, both};
 use tracing::instrument;
 
 use crate::{ActionError, BasicAction, GamePlayerTurn, PlayerAction};
@@ -101,5 +101,45 @@ pub fn execute_action(
             }
         }
         BasicAction::Stand => Ok(()),
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Top-Level Invariant
+// ─────────────────────────────────────────────────────────────
+
+/// Proposition: the game is being played according to blackjack rules.
+///
+/// Wired to [`BlackjackRulesEvidence`]: formal-method harnesses call
+/// `Established::prove(&BlackjackConsistent::kani_proof_credential())`.
+#[derive(elicitation::Prop)]
+#[prop(credential = BlackjackRulesEvidence)]
+pub struct BlackjackConsistent;
+
+impl VerifiedWorkflow for BlackjackConsistent {}
+
+/// Evidence bundle for establishing [`BlackjackConsistent`].
+///
+/// Assembling this forces proof that:
+/// - the action targets a valid hand index and is the player's turn, and
+/// - the targeted hand has not already busted.
+///
+/// These are the two preconditions blackjack rules enforce per player action.
+pub struct BlackjackRulesEvidence {
+    /// Proof that the action targets a valid hand and it is the player's turn.
+    pub valid_action: Established<ValidAction>,
+    /// Proof that the targeted hand is not bust.
+    pub not_bust: Established<NotBust>,
+}
+
+impl ProvableFrom<BlackjackRulesEvidence> for BlackjackConsistent {}
+
+#[cfg(kani)]
+impl kani::Arbitrary for BlackjackRulesEvidence {
+    fn any() -> Self {
+        Self {
+            valid_action: Established::assert(),
+            not_bust: Established::assert(),
+        }
     }
 }

@@ -32,7 +32,8 @@ pub const MAX_ROLLS_PER_ROUND: usize = 100;
 // ─────────────────────────────────────────────────────────────
 
 /// Game in setup phase — table is being configured.
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameSetup {
     /// Number of seats at the table.
     num_seats: usize,
@@ -80,7 +81,8 @@ impl Default for GameSetup {
 // ─────────────────────────────────────────────────────────────
 
 /// Betting phase — players place bets before the come-out roll.
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameBetting {
     /// Current bankrolls for each seat.
     bankrolls: Vec<u64>,
@@ -125,7 +127,8 @@ impl GameBetting {
 ///
 /// A 7 or 11 is a natural (pass wins), 2/3/12 is craps (pass loses),
 /// anything else establishes the point.
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameComeOut {
     /// Current bankrolls.
     bankrolls: Vec<u64>,
@@ -204,7 +207,8 @@ pub enum ComeOutResult {
 ///
 /// The point is immutable once set (enforced by private field).
 /// Rolls continue until the point is hit or a seven-out occurs.
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GamePointPhase {
     /// Current bankrolls.
     bankrolls: Vec<u64>,
@@ -299,7 +303,8 @@ pub enum PointRollResult {
 ///
 /// Contains the complete state needed to compute payouts and transition
 /// to the next round.
-#[derive(Debug, Clone, Elicit, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Elicit, Serialize, Deserialize, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameResolved {
     /// Bankrolls before settlement.
     bankrolls: Vec<u64>,

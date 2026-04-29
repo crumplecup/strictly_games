@@ -27,5 +27,8 @@ fn verify_blackjack_legos() {
     let suit: Suit = kani::any();
     let card = Card::new(rank, suit);
     let v = card.value();
-    assert!(v >= 1 && v <= 11, "Any Card(Rank, Suit) has value in 1..=11 ∎");
+    assert!(
+        v >= 1 && v <= 11,
+        "Any Card(Rank, Suit) has value in 1..=11 ∎"
+    );
 }

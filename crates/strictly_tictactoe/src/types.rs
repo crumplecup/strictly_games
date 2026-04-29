@@ -1,12 +1,12 @@
 //! Core domain types for tic-tac-toe.
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Player in the game.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Elicit)]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum Player {
     /// Player X (goes first).
     X,
@@ -26,7 +26,7 @@ impl Player {
 
 /// A square on the tic-tac-toe board.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, Elicit)]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum Square {
     /// Empty square.
     Empty,
@@ -98,5 +98,29 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Manual `KaniCompose` for `Board` — workaround for the missing `[T; N]: KaniCompose`
+/// blanket impl.  Uses `std::array::from_fn` so each square is constructed symbolically.
+/// TODO: remove once elicitation gains `impl<T: KaniCompose, const N: usize> KaniCompose for [T; N]`.
+#[cfg(kani)]
+impl elicitation::KaniCompose for Board {
+    fn kani_depth0() -> Self {
+        Self {
+            squares: std::array::from_fn(|_| <Square as elicitation::KaniCompose>::kani_depth0()),
+        }
+    }
+
+    fn kani_depth1() -> Self {
+        Self {
+            squares: std::array::from_fn(|_| <Square as elicitation::KaniCompose>::kani_depth1()),
+        }
+    }
+
+    fn kani_depth2() -> Self {
+        Self {
+            squares: std::array::from_fn(|_| <Square as elicitation::KaniCompose>::kani_depth2()),
+        }
     }
 }

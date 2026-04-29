@@ -22,9 +22,9 @@
 //! println!("Rolled {} + {} = {}", roll.die1(), roll.die2(), roll.sum());
 //! ```
 
+use elicitation::Elicit;
 #[cfg(feature = "roll")]
 use elicitation::Generator;
-use elicitation::{Elicit, Prompt, Select};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -51,7 +51,7 @@ use tracing::instrument;
     schemars::JsonSchema,
 )]
 #[cfg_attr(feature = "roll", derive(elicitation_derive::Rand))]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum DieFace {
     /// Face showing 1.
     #[default]
@@ -129,7 +129,7 @@ impl std::fmt::Display for DieFace {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub struct DiceRoll {
     /// First die.
     die1: DieFace,

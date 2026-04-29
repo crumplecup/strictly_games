@@ -5,7 +5,7 @@
 //! The [`Filter`](elicitation::Filter) trait gates which options surface:
 //! agents see the full pool, humans see commit-only.
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

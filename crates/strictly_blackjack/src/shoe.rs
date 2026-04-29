@@ -256,3 +256,38 @@ impl<'de> Deserialize<'de> for Shoe {
         })
     }
 }
+
+impl PartialEq for Shoe {
+    fn eq(&self, other: &Self) -> bool {
+        self.cards == other.cards
+            && self.dealt.load(Ordering::Relaxed) == other.dealt.load(Ordering::Relaxed)
+    }
+}
+
+/// Manual `KaniCompose` for `Shoe` — `AtomicUsize` prevents derive.
+///
+/// TODO: remove once a blanket `KaniCompose` impl covers `AtomicUsize` or
+/// once `Shoe` migrates to a `Cell<usize>` that implements the trait.
+#[cfg(kani)]
+impl elicitation::KaniCompose for Shoe {
+    fn kani_depth0() -> Self {
+        Self {
+            cards: Vec::<Card>::kani_depth0(),
+            dealt: AtomicUsize::new(0),
+        }
+    }
+
+    fn kani_depth1() -> Self {
+        Self {
+            cards: Vec::<Card>::kani_depth1(),
+            dealt: AtomicUsize::new(0),
+        }
+    }
+
+    fn kani_depth2() -> Self {
+        Self {
+            cards: Vec::<Card>::kani_depth2(),
+            dealt: AtomicUsize::new(0),
+        }
+    }
+}

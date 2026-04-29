@@ -50,6 +50,7 @@ use crate::error::ActionError;
 /// Carrying this token through game state means any code that reaches
 /// settlement *must* have gone through a validated debit first.
 #[derive(Debug, Clone, Serialize, Deserialize, Elicit, elicitation::Prop, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct BetDeducted;
 impl VerifiedWorkflow for BetDeducted {}
 
@@ -59,6 +60,7 @@ impl VerifiedWorkflow for BetDeducted {}
 /// Consuming `Established<BetDeducted>` guarantees settlement happened
 /// exactly once and that the gross-return arithmetic was applied.
 #[derive(Debug, Clone, Serialize, Deserialize, Elicit, elicitation::Prop, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct PayoutSettled;
 impl VerifiedWorkflow for PayoutSettled {}
 
@@ -72,7 +74,8 @@ impl VerifiedWorkflow for PayoutSettled {}
 /// The fields are private: the only way to create a valid ledger is through
 /// `debit`, and the only way to produce a final balance is through `settle`.
 /// Manual bankroll arithmetic is not possible from outside this module.
-#[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct BankrollLedger {
     /// Bankroll after the bet was removed.  Settlement adds gross return here.
     post_bet_balance: u64,

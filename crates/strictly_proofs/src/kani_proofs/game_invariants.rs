@@ -220,7 +220,6 @@ fn square_equality() {
 #[cfg(kani)]
 #[kani::proof]
 fn is_full_iff_no_empty_squares() {
-
     let mut board = Board::new();
     for pos in Position::ALL {
         let sq: Square = kani::any();
@@ -239,7 +238,6 @@ fn is_full_iff_no_empty_squares() {
 #[cfg(kani)]
 #[kani::proof]
 fn is_full_false_on_new_board() {
-
     let board = Board::new();
     assert!(!rules::is_full(&board), "Fresh board must not be full");
 }

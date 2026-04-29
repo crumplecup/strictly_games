@@ -191,6 +191,7 @@ fn check_labels(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
             }
             Ok(())
         }
+        TuiNode::StatusBar { .. } => Ok(()),
     }
 }
 
@@ -231,6 +232,7 @@ fn check_wrapping(node: &TuiNode) -> Result<(), LayoutError> {
             }
             Ok(())
         }
+        TuiNode::StatusBar { .. } => Ok(()),
     }
 }
 
@@ -296,6 +298,7 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
             }
             Ok(())
         }
+        TuiNode::StatusBar { .. } => Ok(()),
     }
 }
 

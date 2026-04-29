@@ -99,6 +99,19 @@ verify-tictactoe-contracts:
         --harness make_move_produces_draw \
         --harness restart_creates_fresh_game
 
+# Verify function contracts (Tier 1 leaf proofs + Tier 2 compositional capstone).
+# Requires -Z function-contracts (contracts are still an unstable Kani feature).
+verify-tictactoe-function-contracts:
+    @echo "Verifying TicTacToe function contracts (proof_for_contract leaf proofs)..."
+    cargo kani -p strictly_proofs -Z function-contracts \
+        --harness contract_validate_square_empty \
+        --harness contract_validate_player_turn \
+        --harness contract_validate_move \
+        --harness contract_execute_move
+    @echo "Verifying compositional make_move proof (stub_verified capstone)..."
+    cargo kani -p strictly_proofs -Z function-contracts \
+        --harness make_move_alternates_player_compositional
+
 # Run generated kani_proof() foundation harnesses (newtype wrappers and constructibility)
 verify-generated:
     @echo "Verifying generated kani_proof() foundation harnesses..."

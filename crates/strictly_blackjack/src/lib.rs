@@ -25,9 +25,11 @@ pub mod ledger;
 pub mod multi_player;
 pub mod rules;
 mod shoe;
+mod traits;
 mod types;
 mod typestate;
 mod view;
+pub mod vsm;
 pub mod workflow;
 
 // Core types
@@ -50,4 +52,11 @@ pub use view::BlackjackPlayerView;
 pub use workflow::{
     BetPlaced, PlaceBetOutput, PlayActionOutput, PlayActionResult, PlayerTurnComplete,
     execute_dealer_turn, execute_place_bet, execute_play_action,
+};
+// VSM re-exports
+pub use contracts::{BlackjackConsistent, BlackjackRulesEvidence};
+pub use traits::BlackjackRuleEnforcer;
+pub use vsm::{
+    BlackjackMachine, BlackjackState, bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart,
+    bj_start_betting,
 };

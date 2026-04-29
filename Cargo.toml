@@ -9,6 +9,9 @@ members = [
   "crates/strictly_server",
 ]
 
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(creusot)', 'cfg(verus)'] }
+
 [workspace.package]
 edition = "2024"
 authors = ["Erik Rose <erik.w.rose@gmail.com>"]

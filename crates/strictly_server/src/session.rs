@@ -413,13 +413,23 @@ impl std::fmt::Debug for SharedTablePhase {
                 .field("num_seats", num_seats)
                 .field("seats_joined", &seats.len())
                 .finish(),
-            Self::PlayerTurns { seats_done, seat_session_ids, seat_registries, .. } => f
+            Self::PlayerTurns {
+                seats_done,
+                seat_session_ids,
+                seat_registries,
+                ..
+            } => f
                 .debug_struct("PlayerTurns")
                 .field("seats_done", &seats_done.len())
                 .field("seats_total", &seat_registries.len())
                 .field("session_ids", seat_session_ids)
                 .finish(),
-            Self::Finished { ready_count, num_seats, seat_session_ids, .. } => f
+            Self::Finished {
+                ready_count,
+                num_seats,
+                seat_session_ids,
+                ..
+            } => f
                 .debug_struct("Finished")
                 .field("ready_count", ready_count)
                 .field("num_seats", num_seats)

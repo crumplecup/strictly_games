@@ -1,8 +1,6 @@
 //! MCP server setup and configuration.
 
-use crate::games::blackjack::{
-    BetConstraints, DEFAULT_PRESETS, register_bet_tools,
-};
+use crate::games::blackjack::{BetConstraints, DEFAULT_PRESETS, register_bet_tools};
 use crate::games::tictactoe::{TttGameContext, register_await_turn_tool, register_move_tools};
 use crate::session::{DialogueEntry, PlayerType, SessionManager};
 use elicitation::{DynamicToolRegistry, ElicitPlugin as _, TypeSpecPlugin};
@@ -557,8 +555,7 @@ impl GameServer {
         // Record session_id on this connection (used by call_tool dialogue logging).
         if let Some(ref sid) = req.session_id {
             let _ = self.session_id.set(sid.clone());
-            self.sessions
-                .register_seat_index(sid.clone(), seat_index);
+            self.sessions.register_seat_index(sid.clone(), seat_index);
         }
 
         // Register bet tools for this seat.
@@ -574,11 +571,7 @@ impl GameServer {
         );
         self.dynamic.notify_tool_list_changed().await;
 
-        let player_name = req
-            .player_name
-            .as_deref()
-            .unwrap_or("Player")
-            .to_string();
+        let player_name = req.player_name.as_deref().unwrap_or("Player").to_string();
         let prologue = format!(
             "🃏 Blackjack — Seat {seat}\n\
              Player: {player_name}\n\
@@ -594,10 +587,8 @@ impl GameServer {
         );
 
         if let Some(session_id) = &req.session_id {
-            self.sessions.push_dialogue(
-                session_id,
-                DialogueEntry::server(prologue.clone()),
-            );
+            self.sessions
+                .push_dialogue(session_id, DialogueEntry::server(prologue.clone()));
         }
 
         Ok(CallToolResult::success(vec![Content::text(prologue)]))
@@ -662,10 +653,8 @@ impl ServerHandler for GameServer {
             // Dynamic tool — log agent call and server response as dialogue.
             let tool_name = request.name.clone();
             if let Some(session_id) = self.session_id.get() {
-                self.sessions.push_dialogue(
-                    session_id,
-                    DialogueEntry::agent(format!("→ `{tool_name}`")),
-                );
+                self.sessions
+                    .push_dialogue(session_id, DialogueEntry::agent(format!("→ `{tool_name}`")));
             }
 
             let result = self.dynamic.call_tool(request, context).await?;
@@ -678,10 +667,8 @@ impl ServerHandler for GameServer {
                     .collect::<Vec<_>>()
                     .join("\n");
                 if !response_text.is_empty() {
-                    self.sessions.push_dialogue(
-                        session_id,
-                        DialogueEntry::server(response_text),
-                    );
+                    self.sessions
+                        .push_dialogue(session_id, DialogueEntry::server(response_text));
                 }
             }
 

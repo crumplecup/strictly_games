@@ -5,7 +5,7 @@
 //! [`Select`] enum. The [`Filter`](elicitation::Filter) trait gates which
 //! options surface per participant type.
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

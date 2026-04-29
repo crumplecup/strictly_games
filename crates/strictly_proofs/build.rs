@@ -226,11 +226,11 @@ fn dedup_kani_proofs(streams: &[proc_macro2::TokenStream]) -> String {
     for ts in streams {
         let s = ts.to_string();
         for chunk in extract_proof_chunks(&s) {
-            if let Some(name) = extract_fn_name(&chunk) {
-                if seen.insert(name) {
-                    result.push_str(&chunk);
-                    result.push('\n');
-                }
+            if let Some(name) = extract_fn_name(&chunk)
+                && seen.insert(name)
+            {
+                result.push_str(&chunk);
+                result.push('\n');
             }
         }
     }
@@ -307,7 +307,7 @@ fn extract_used_types(body: &str) -> Vec<String> {
     let tokens: Vec<&str> = body.split_whitespace().collect();
     let mut types = std::collections::BTreeSet::new();
     for window in tokens.windows(2) {
-        let is_upper = |s: &str| s.chars().next().map_or(false, |c| c.is_uppercase());
+        let is_upper = |s: &str| s.chars().next().is_some_and(|c| c.is_uppercase());
         // Pattern: TYPE :: (enum variant / associated item)
         if window[1] == "::" && is_upper(window[0]) {
             types.insert(window[0].to_string());

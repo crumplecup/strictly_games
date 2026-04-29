@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Formal verification harnesses for strictly_games (Kani, Verus, Creusot)"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(creusot)', 'cfg(kani)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(creusot)', 'cfg(kani)', 'cfg(verus)'] }
 
 [dependencies]
 strictly_tictactoe = { workspace = true }

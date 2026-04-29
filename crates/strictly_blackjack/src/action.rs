@@ -1,6 +1,6 @@
 //! Player action types for blackjack.
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -8,6 +8,7 @@ use tracing::instrument;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub enum BasicAction {
     /// Take another card.
     Hit,
@@ -35,6 +36,7 @@ impl std::fmt::Display for BasicAction {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct PlayerAction {
     action: BasicAction,
     hand_index: usize,

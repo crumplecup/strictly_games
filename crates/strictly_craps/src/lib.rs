@@ -15,6 +15,7 @@
 #![forbid(unsafe_code)]
 
 mod bet;
+mod contracts;
 mod dice;
 mod error;
 mod explore;
@@ -24,8 +25,10 @@ mod payout;
 mod personality;
 mod point;
 mod table;
+mod traits;
 mod typestate;
 mod view;
+pub mod vsm;
 pub mod workflow;
 
 // Core types
@@ -47,4 +50,12 @@ pub use view::CrapsTableView;
 pub use workflow::{
     BetsPlaced, ComeOutOutput, PointEstablished, PointRollOutput, execute_comeout_roll,
     execute_place_bets, execute_point_roll,
+};
+
+// VSM layer
+pub use contracts::{CrapsConsistent, CrapsRulesEvidence};
+pub use traits::CrapsRuleEnforcer;
+pub use vsm::{
+    CrapsMachine, CrapsState, craps_comeout_roll, craps_next_round, craps_place_bets,
+    craps_point_roll, craps_start_betting,
 };

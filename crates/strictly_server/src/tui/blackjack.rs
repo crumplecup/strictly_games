@@ -5,9 +5,9 @@
 //! while the agent plays its own hand concurrently via its subprocess.
 //! The TUI shows both hands and the agent's chat log.
 
-use crate::tui::typestate_widget::{blackjack_edges, blackjack_nodes};
-use crate::tui::typestate_widget::GameEvent;
 use crate::tui::contracts::{min_typestate_width, render_resize_prompt, verify_typestate_readable};
+use crate::tui::typestate_widget::GameEvent;
+use crate::tui::typestate_widget::{blackjack_edges, blackjack_nodes};
 use anyhow::Result;
 use elicitation::Elicitation as _;
 use ratatui::{Terminal, backend::Backend};
@@ -53,8 +53,8 @@ pub async fn run_blackjack_mcp_session<B: Backend>(
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
-    use crate::session::SharedTableSeatView;
     use crate::session::DialogueEntry;
+    use crate::session::SharedTableSeatView;
     use crate::tui::chat_widget::ChatWidget;
     use crate::tui::rest_client::{BlackjackObserver, BlackjackTool, HumanBlackjackClient};
     use crate::tui::standalone::{GameMode, ProcessGuards, spawn_agent, spawn_server};
@@ -216,7 +216,10 @@ where
             .enumerate()
         {
             if state.phase != *prev {
-                let name = agent_slots.get(i).map(|s| s.name.as_str()).unwrap_or("Agent");
+                let name = agent_slots
+                    .get(i)
+                    .map(|s| s.name.as_str())
+                    .unwrap_or("Agent");
                 let story = phase_transition_story(name, prev, &state.phase, &state.description);
                 event_log.push(story);
                 *prev = state.phase.clone();
@@ -323,7 +326,7 @@ where
                     .direction(Direction::Horizontal)
                     .constraints(
                         std::iter::repeat_n(Constraint::Ratio(1, grid_cols as u32), grid_cols)
-                            .collect::<Vec<_>>()
+                            .collect::<Vec<_>>(),
                     )
                     .split(grid_area)
                     .to_vec();
@@ -332,7 +335,9 @@ where
                 for (col_idx, col_area) in col_areas.iter().enumerate() {
                     let agents_before = col_idx * grid_rows;
                     let rows_in_col = grid_rows.min(num_agents.saturating_sub(agents_before));
-                    if rows_in_col == 0 { continue; }
+                    if rows_in_col == 0 {
+                        continue;
+                    }
 
                     let row_areas: Vec<_> = Layout::default()
                         .direction(Direction::Vertical)
@@ -341,14 +346,16 @@ where
                                 Constraint::Ratio(1, rows_in_col as u32),
                                 rows_in_col,
                             )
-                            .collect::<Vec<_>>()
+                            .collect::<Vec<_>>(),
                         )
                         .split(*col_area)
                         .to_vec();
 
                     for (row_idx, cell) in row_areas.iter().enumerate() {
                         let agent_idx = agents_before + row_idx;
-                        if agent_idx >= num_agents { break; }
+                        if agent_idx >= num_agents {
+                            break;
+                        }
 
                         let slot = &agent_slots[agent_idx];
                         let state = &agent_states[agent_idx];
@@ -369,11 +376,10 @@ where
             if show_typestate_graph && h_chunks.len() > 1 {
                 let ts_area = h_chunks[1];
                 let active_idx = blackjack_active(&human_state.phase);
-                let _ts_proof = verify_typestate_readable(&bj_nodes, ts_area)
-                    .unwrap_or_else(|e| {
-                        render_resize_prompt(f, &e);
-                        elicitation::contracts::Established::assert()
-                    });
+                let _ts_proof = verify_typestate_readable(&bj_nodes, ts_area).unwrap_or_else(|e| {
+                    render_resize_prompt(f, &e);
+                    elicitation::contracts::Established::assert()
+                });
 
                 // Build the combined agent chat messages once.
                 let chat_messages: Vec<ChatMessage> = agent_dialogues
@@ -463,12 +469,7 @@ where
 // ─────────────────────────────────────────────────────────────
 
 /// Build a [`GameEvent`] that narrates a phase transition for `player`.
-fn phase_transition_story(
-    player: &str,
-    from: &str,
-    to: &str,
-    description: &str,
-) -> GameEvent {
+fn phase_transition_story(player: &str, from: &str, to: &str, description: &str) -> GameEvent {
     match to {
         "betting" if from == "idle" || from == "finished" => {
             GameEvent::story(format!("🃏  {player} — ready to bet"))

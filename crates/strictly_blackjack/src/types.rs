@@ -1,6 +1,6 @@
 //! Core domain types for blackjack outcomes.
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
 /// Outcome of a blackjack hand.
@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
     Elicit,
     schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub enum Outcome {
     /// Player won (hand closer to 21 than dealer).
     Win,

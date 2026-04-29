@@ -4,7 +4,7 @@
 //! 4, 5, 6, 8, 9, or 10. The enum guarantees only valid point values
 //! exist — 2, 3, 7, 11, 12 are structurally excluded.
 
-use elicitation::{Elicit, Prompt, Select};
+use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
 
 /// A valid craps point number.
@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
     strum::EnumIter,
     schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum Point {
     /// Point of 4 (3 ways to roll, true odds 2:1).
     Four = 4,

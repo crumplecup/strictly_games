@@ -22,7 +22,7 @@ pub const MAX_PLAYER_HANDS: usize = 4;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(kani::Arbitrary))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub struct HandValue {
     hard: u8,
     soft: Option<u8>,
@@ -250,5 +250,33 @@ impl<'de> Deserialize<'de> for Hand {
             )));
         }
         Ok(Hand::new(&cards))
+    }
+}
+
+/// Manual `KaniCompose` for `Hand` — workaround for the missing `[T; N]: KaniCompose`
+/// blanket impl in elicitation.
+///
+/// TODO: remove once elicitation gains `impl<T: KaniCompose, const N: usize> KaniCompose for [T; N]`.
+#[cfg(kani)]
+impl elicitation::KaniCompose for Hand {
+    fn kani_depth0() -> Self {
+        Self {
+            cards: std::array::from_fn(|_| <Card as elicitation::KaniCompose>::kani_depth0()),
+            len: 0,
+        }
+    }
+
+    fn kani_depth1() -> Self {
+        Self {
+            cards: std::array::from_fn(|_| <Card as elicitation::KaniCompose>::kani_depth1()),
+            len: 1,
+        }
+    }
+
+    fn kani_depth2() -> Self {
+        Self {
+            cards: std::array::from_fn(|_| <Card as elicitation::KaniCompose>::kani_depth2()),
+            len: 2,
+        }
     }
 }

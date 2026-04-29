@@ -15,25 +15,29 @@
 #![warn(missing_docs)]
 
 pub mod action;
-pub mod contracts;
 mod complete;
+pub mod contracts;
 mod explore;
 pub mod outcome;
 pub mod position;
 pub mod rules;
-pub mod typestate;
+pub mod traits;
 pub mod types;
+pub mod typestate;
 mod view;
+pub mod vsm;
 
 // Re-export core types
 pub use action::{Move, MoveError};
 pub use contracts::{
-    LegalMove, PlayerTurn, SquareEmpty, execute_move, validate_move, validate_player_turn,
-    validate_square_empty,
+    LegalMove, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeRulesEvidence, execute_move,
+    validate_move, validate_player_turn, validate_square_empty,
 };
 pub use explore::TicTacToeAction;
 pub use outcome::Outcome;
 pub use position::Position;
-pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
+pub use traits::TicTacToeRuleEnforcer;
 pub use types::{Board, Player, Square};
+pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 pub use view::TicTacToeView;
+pub use vsm::{TicTacToeMachine, TicTacToeState};

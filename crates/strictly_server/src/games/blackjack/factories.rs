@@ -228,7 +228,9 @@ impl ContextualFactory for BlackjackActionFactory {
                         let guard = table.lock().await;
                         let text = match &guard.phase {
                             SharedTablePhase::PlayerTurns { round, .. } => {
-                                let view = BlackjackPlayerView::from_multi_round(round, seat_index, bankroll);
+                                let view = BlackjackPlayerView::from_multi_round(
+                                    round, seat_index, bankroll,
+                                );
                                 view.describe_category(category)
                                     .unwrap_or_else(|| format!("No data for '{category}'"))
                             }
@@ -301,9 +303,9 @@ impl ContextualFactory for NextHandFactory {
                 handler: Arc::new(move |_args| {
                     let table = table.clone();
                     let dynamic = dynamic.clone();
-                    Box::pin(async move {
-                        deal_again_vote(seat_index, bankroll, table, dynamic).await
-                    })
+                    Box::pin(
+                        async move { deal_again_vote(seat_index, bankroll, table, dynamic).await },
+                    )
                 }),
             });
         }
@@ -438,16 +440,16 @@ async fn place_bet_and_transition(
     {
         let mut guard = table.lock().await;
         let SharedTablePhase::Betting { seats, num_seats } = &mut guard.phase else {
-            return Err(ErrorData::invalid_params(
-                "Not in betting phase",
-                None,
-            ));
+            return Err(ErrorData::invalid_params("Not in betting phase", None));
         };
 
         // Record this seat's bet.
         if seat_index >= seats.len() {
             return Err(ErrorData::invalid_params(
-                format!("seat_index {seat_index} out of range (only {} seats joined)", seats.len()),
+                format!(
+                    "seat_index {seat_index} out of range (only {} seats joined)",
+                    seats.len()
+                ),
                 None,
             ));
         }
@@ -491,9 +493,8 @@ async fn place_bet_and_transition(
             .map(|s| s.bankroll.saturating_sub(s.bet.unwrap_or(0)))
             .collect();
 
-        let round = MultiRound::deal_with_shoe(seat_bets, shoe).map_err(|e| {
-            ErrorData::internal_error(format!("deal failed: {e}"), None)
-        })?;
+        let round = MultiRound::deal_with_shoe(seat_bets, shoe)
+            .map_err(|e| ErrorData::internal_error(format!("deal failed: {e}"), None))?;
 
         // Check for dealer natural — if so, skip to finished immediately.
         if round.dealer_natural() {
@@ -562,9 +563,7 @@ async fn place_bet_and_transition(
     }
 
     let msg = if is_last_bet {
-        format!(
-            "Bet of {amount} chips placed.\n{seat0_desc}\nBankroll: ${seat0_bankroll}"
-        )
+        format!("Bet of {amount} chips placed.\n{seat0_desc}\nBankroll: ${seat0_bankroll}")
     } else {
         format!("Bet of {amount} chips placed.")
     };
@@ -592,10 +591,7 @@ async fn take_action_and_transition(
             seat_bankrolls,
         } = &mut guard.phase
         else {
-            return Err(ErrorData::invalid_params(
-                "Not in player-turn phase",
-                None,
-            ));
+            return Err(ErrorData::invalid_params("Not in player-turn phase", None));
         };
 
         if seats_done.contains(&seat_index) {
@@ -633,7 +629,13 @@ async fn take_action_and_transition(
                 can_surrender: false,
             };
             clear_prefix(&dynamic, "blackjack");
-            register_action_tools(&dynamic, player_ctx, seat_bankrolls[seat_index], table.clone(), seat_index);
+            register_action_tools(
+                &dynamic,
+                player_ctx,
+                seat_bankrolls[seat_index],
+                table.clone(),
+                seat_index,
+            );
             registries_to_notify = vec![dynamic.clone()];
             result_text = hand_desc;
         } else {
@@ -655,7 +657,8 @@ async fn take_action_and_transition(
                     round.play_dealer();
                 }
 
-                let dealer_desc = if let SharedTablePhase::PlayerTurns { round, .. } = &guard.phase {
+                let dealer_desc = if let SharedTablePhase::PlayerTurns { round, .. } = &guard.phase
+                {
                     format!(
                         "Dealer's hand: {} ({})\n",
                         round.dealer_hand.display(),
@@ -668,7 +671,10 @@ async fn take_action_and_transition(
                 // Swap phase out to take owned round for settle.
                 let old_phase = std::mem::replace(
                     &mut guard.phase,
-                    SharedTablePhase::Betting { seats: vec![], num_seats: 0 },
+                    SharedTablePhase::Betting {
+                        seats: vec![],
+                        num_seats: 0,
+                    },
                 );
 
                 let (round, seat_registries, seat_session_ids) = match old_phase {
@@ -766,7 +772,11 @@ async fn deal_again_vote(
             clear_prefix(reg, "next");
             register_bet_tools(
                 reg,
-                BetConstraints { min: 1, max: br, presets: DEFAULT_PRESETS },
+                BetConstraints {
+                    min: 1,
+                    max: br,
+                    presets: DEFAULT_PRESETS,
+                },
                 table.clone(),
                 idx,
             );
@@ -790,9 +800,7 @@ async fn deal_again_vote(
             num_seats: num,
         };
 
-        result_text = format!(
-            "💰 New hand! Bankroll: ${bankroll}. Place your bet."
-        );
+        result_text = format!("💰 New hand! Bankroll: ${bankroll}. Place your bet.");
     }
 
     for reg in &registries_to_notify {
@@ -814,7 +822,9 @@ fn describe_results(results: &[strictly_blackjack::SeatResult], dealer_display: 
             }
             strictly_blackjack::Outcome::Loss => format!("Lost: ${}\n", r.bet),
             strictly_blackjack::Outcome::Push => "Push\n".to_string(),
-            strictly_blackjack::Outcome::Surrender => "Surrendered (half bet returned)\n".to_string(),
+            strictly_blackjack::Outcome::Surrender => {
+                "Surrendered (half bet returned)\n".to_string()
+            }
         };
         s.push_str(&format!(
             "{}: {} — {}\n{}\n💰 Bankroll: ${}\n\n",
