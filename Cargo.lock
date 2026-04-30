@@ -8365,10 +8365,12 @@ dependencies = [
  "creusot-std",
  "elicit_ratatui",
  "elicitation",
+ "prettyplease",
  "proc-macro2",
  "strictly_blackjack",
  "strictly_craps",
  "strictly_tictactoe",
+ "syn 2.0.114",
  "unicode-width",
 ]
 
@@ -8376,6 +8378,7 @@ dependencies = [
 name = "strictly_server"
 version = "0.1.0"
 dependencies = [
+ "accesskit 0.24.0",
  "anyhow",
  "async-openai",
  "async-trait",
@@ -8389,6 +8392,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "dotenvy",
+ "elicit_accesskit",
  "elicit_ratatui",
  "elicit_ui",
  "elicitation",

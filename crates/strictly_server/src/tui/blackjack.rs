@@ -5,7 +5,6 @@
 //! while the agent plays its own hand concurrently via its subprocess.
 //! The TUI shows both hands and the agent's chat log.
 
-use crate::tui::contracts::{min_typestate_width, render_resize_prompt, verify_typestate_readable};
 use crate::tui::typestate_widget::GameEvent;
 use crate::tui::typestate_widget::{blackjack_edges, blackjack_nodes};
 use anyhow::Result;
@@ -55,17 +54,10 @@ where
 {
     use crate::session::DialogueEntry;
     use crate::session::SharedTableSeatView;
-    use crate::tui::chat_widget::ChatWidget;
     use crate::tui::rest_client::{BlackjackObserver, BlackjackTool, HumanBlackjackClient};
     use crate::tui::standalone::{GameMode, ProcessGuards, spawn_agent, spawn_server};
-    use crate::tui::typestate_widget::{TypestateGraphWidget, blackjack_active};
-    use crate::tui::{ChatMessage, Participant};
     use crate::{PlayerKind, PlayerSlot};
     use crossterm::event::{Event, KeyCode};
-    use ratatui::layout::{Constraint, Direction, Layout};
-    use ratatui::prelude::Widget;
-    use ratatui::style::{Color, Style};
-    use ratatui::widgets::{Block, Borders, Paragraph};
 
     const HUMAN_SESSION: &str = "human_bj";
 
@@ -226,194 +218,100 @@ where
             }
         }
 
-        // ── Render ────────────────────────────────────────────────────────────
-        let num_agents = agent_slots.len();
-        terminal.draw(|f| {
-            let area = f.area();
+        // ── Render via AccessKit IR pipeline ─────────────────────────────────
+        {
+            use crate::tui::contracts::{BjUiConsistent, verified_draw};
+            use crate::tui::game_ir::{EventLog, GraphParams, bj_to_verified_tree};
+            use crate::tui::typestate_widget::blackjack_active;
+            use elicit_ratatui::RatatuiBackend;
+            use elicit_ui::{UiTreeRenderer as _, Viewport};
+            use elicitation::contracts::Established;
+            use strictly_blackjack::BlackjackDisplayMode;
 
-            let outer = Block::default()
-                .title(format!(
-                    " 🎰 Blackjack — {} | Bankroll: ${} ",
-                    player_name, human_state.bankroll
-                ))
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Yellow));
-            let inner = outer.inner(area);
-            outer.render(area, f.buffer_mut());
-
-            // ── Horizontal split: players | typestate graph ───────────────────
-            // Typestate graph always gets its minimum guaranteed width so labels
-            // are never truncated; the player area fills the remaining space.
-            let min_ts = min_typestate_width(&bj_nodes);
-            let h_constraints: Vec<Constraint> = if show_typestate_graph {
-                vec![Constraint::Min(0), Constraint::Min(min_ts)]
-            } else {
-                vec![Constraint::Min(0)]
-            };
-            let h_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints(h_constraints)
-                .split(inner);
-
-            let players_area = h_chunks[0];
-
-            // ── Player area: human left, agent grid right ─────────────────────
-            // With 0 agents: human takes full width.
-            // With N agents: split horizontally into human | agents_grid.
-            // The agents_grid stacks agents into rows-×-cols to minimise the
-            // horizontal real-estate consumed (avoids squeezing the graph).
-            let (human_area, agent_grid_area) = if num_agents == 0 {
-                (players_area, None)
-            } else {
-                // Give agents roughly half the player width, human the other half.
-                let p_chunks = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                    .split(players_area);
-                (p_chunks[0], Some(p_chunks[1]))
+            // Build the human state view.
+            let bj_view = crate::games::blackjack::BlackjackStateView {
+                phase: human_state.phase.clone(),
+                bankroll: human_state.bankroll,
+                description: human_state.description.clone(),
+                is_terminal: human_state.is_terminal,
             };
 
-            // ── Human panel ───────────────────────────────────────────────────
-            let human_chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-                .split(human_area);
-
-            let human_block = Block::default()
-                .title(format!(" {} — {} ", player_name, human_state.phase))
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::Green));
-            Paragraph::new(human_state.description.as_str())
-                .block(human_block)
-                .wrap(ratatui::widgets::Wrap { trim: false })
-                .render(human_chunks[0], f.buffer_mut());
-
-            let hints = if available_tools.is_empty() {
-                "Waiting for your turn...  [q] Quit".to_string()
-            } else {
-                let mut lines = vec!["Your choices:".to_string()];
-                for (i, t) in available_tools.iter().enumerate() {
-                    let key = if i < 9 {
-                        format!("[{}]", i + 1)
-                    } else {
-                        format!("[{}]", (b'a' + (i as u8 - 9)) as char)
-                    };
-                    lines.push(format!("  {} {}", key, t.description));
-                }
-                lines.push(String::new());
-                lines.push("[q] Quit".to_string());
-                lines.join("\n")
-            };
-            let ctrl_block = Block::default()
-                .title(" Controls ")
-                .borders(Borders::ALL)
-                .style(Style::default().fg(Color::White));
-            Paragraph::new(hints.as_str())
-                .block(ctrl_block)
-                .wrap(ratatui::widgets::Wrap { trim: false })
-                .render(human_chunks[1], f.buffer_mut());
-
-            // ── Agent grid ────────────────────────────────────────────────────
-            // Pack agents into a rows × cols grid inside `agent_grid_area`.
-            // Grid shape: prefer square-ish; columns first so horizontal real
-            // estate is controlled.  With 1 agent → 1×1; 2 → 2×1; 3-4 → 2×2.
-            if let (Some(grid_area), true) = (agent_grid_area, num_agents > 0) {
-                let grid_cols = if num_agents <= 2 { 1usize } else { 2 };
-                let grid_rows = num_agents.div_ceil(grid_cols);
-
-                // Split grid_area into `grid_cols` horizontal slices.
-                let col_areas: Vec<_> = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints(
-                        std::iter::repeat_n(Constraint::Ratio(1, grid_cols as u32), grid_cols)
-                            .collect::<Vec<_>>(),
+            // Agent views: (name, phase, description).
+            let agent_triples: Vec<(&str, &str, &str)> = agent_slots
+                .iter()
+                .zip(agent_states.iter())
+                .map(|(slot, state)| {
+                    (
+                        slot.name.as_str(),
+                        state.phase.as_str(),
+                        state.description.as_str(),
                     )
-                    .split(grid_area)
-                    .to_vec();
+                })
+                .collect();
 
-                // Within each column, split vertically into rows.
-                for (col_idx, col_area) in col_areas.iter().enumerate() {
-                    let agents_before = col_idx * grid_rows;
-                    let rows_in_col = grid_rows.min(num_agents.saturating_sub(agents_before));
-                    if rows_in_col == 0 {
-                        continue;
-                    }
+            // Tool descriptions for the controls column.
+            let tool_descs: Vec<String> = available_tools
+                .iter()
+                .map(|t| t.description.clone())
+                .collect();
 
-                    let row_areas: Vec<_> = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints(
-                            std::iter::repeat_n(
-                                Constraint::Ratio(1, rows_in_col as u32),
-                                rows_in_col,
-                            )
-                            .collect::<Vec<_>>(),
-                        )
-                        .split(*col_area)
-                        .to_vec();
+            // Merged agent dialogue.
+            let merged_dialogue: Vec<crate::session::DialogueEntry> = agent_dialogues
+                .iter()
+                .zip(agent_slots.iter())
+                .flat_map(|(d, slot)| {
+                    d.iter().map(move |e| crate::session::DialogueEntry {
+                        role: format!("{} ({})", e.role, slot.name),
+                        text: e.text.clone(),
+                    })
+                })
+                .collect();
 
-                    for (row_idx, cell) in row_areas.iter().enumerate() {
-                        let agent_idx = agents_before + row_idx;
-                        if agent_idx >= num_agents {
-                            break;
-                        }
+            let active_node = blackjack_active(&human_state.phase);
 
-                        let slot = &agent_slots[agent_idx];
-                        let state = &agent_states[agent_idx];
-
-                        let agent_block = Block::default()
-                            .title(format!(" {} — {} ", slot.name, state.phase))
-                            .borders(Borders::ALL)
-                            .style(Style::default().fg(Color::Cyan));
-                        Paragraph::new(state.description.as_str())
-                            .block(agent_block)
-                            .wrap(ratatui::widgets::Wrap { trim: false })
-                            .render(*cell, f.buffer_mut());
-                    }
-                }
-            }
-
-            // ── Typestate graph + chat ────────────────────────────────────────
-            if show_typestate_graph && h_chunks.len() > 1 {
-                let ts_area = h_chunks[1];
-                let active_idx = blackjack_active(&human_state.phase);
-                let _ts_proof = verify_typestate_readable(&bj_nodes, ts_area).unwrap_or_else(|e| {
+            terminal.draw(|f| {
+                let area = f.area();
+                let viewport = Viewport::new(area.width as u32, area.height as u32);
+                let bj_graph_nodes = if show_typestate_graph {
+                    &bj_nodes[..]
+                } else {
+                    &[]
+                };
+                let bj_graph_edges = if show_typestate_graph {
+                    &bj_edges[..]
+                } else {
+                    &[]
+                };
+                let log = EventLog {
+                    events: &event_log,
+                    dialogue: &merged_dialogue,
+                };
+                let graph = GraphParams {
+                    nodes: bj_graph_nodes,
+                    edges: bj_graph_edges,
+                    active: active_node,
+                };
+                let tree = bj_to_verified_tree(
+                    &bj_view,
+                    &BlackjackDisplayMode::Table,
+                    &agent_triples,
+                    &log,
+                    &tool_descs,
+                    &graph,
+                    viewport,
+                );
+                let backend = RatatuiBackend::new();
+                let (tui_node, _stats, render_proof) = backend
+                    .render(&tree)
+                    .unwrap_or_else(|e| panic!("RatatuiBackend::render failed: {e}"));
+                let _: Established<BjUiConsistent> = Established::prove(&render_proof);
+                verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
+                    use crate::tui::contracts::render_resize_prompt;
                     render_resize_prompt(f, &e);
                     elicitation::contracts::Established::assert()
                 });
-
-                // Build the combined agent chat messages once.
-                let chat_messages: Vec<ChatMessage> = agent_dialogues
-                    .iter()
-                    .zip(agent_slots.iter())
-                    .flat_map(|(dialogue, s)| {
-                        dialogue.iter().map(move |e| {
-                            let participant = if e.role == "Agent" {
-                                Participant::Agent(s.name.clone())
-                            } else {
-                                Participant::Host
-                            };
-                            ChatMessage::new(participant, e.text.clone())
-                        })
-                    })
-                    .collect();
-
-                if chat_messages.is_empty() {
-                    // No agents yet — give the whole column to the graph.
-                    TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &event_log)
-                        .render(ts_area, f.buffer_mut());
-                } else {
-                    // Split the right column: typestate graph on top, chat below.
-                    let ts_chunks = Layout::default()
-                        .direction(Direction::Vertical)
-                        .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
-                        .split(ts_area);
-                    TypestateGraphWidget::new(&bj_nodes, &bj_edges, active_idx, &event_log)
-                        .render(ts_chunks[0], f.buffer_mut());
-                    let (chat_widget, _chat_proof) = ChatWidget::new(&chat_messages);
-                    chat_widget.render(ts_chunks[1], f.buffer_mut());
-                }
-            }
-        })?;
+            })?;
+        }
 
         // ── Handle input ──────────────────────────────────────────────────────
         if crossterm::event::poll(std::time::Duration::ZERO)?

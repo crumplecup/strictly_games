@@ -32,6 +32,7 @@
 //! ```
 
 use crate::contracts::{CrapsConsistent, CrapsRulesEvidence};
+use crate::display::CrapsDisplayMode;
 use crate::typestate::{ComeOutResult, GameSetup, PointRollResult};
 use crate::workflow::BetsPlaced;
 use crate::{ActiveBet, DiceRoll, GameBetting, GameComeOut, GamePointPhase, GameResolved};
@@ -58,15 +59,40 @@ use tracing::instrument;
 )]
 pub enum CrapsState {
     /// Table is in setup phase, awaiting bankroll initialisation.
-    Setup(GameSetup),
+    Setup {
+        /// Inner setup state.
+        inner: GameSetup,
+        /// Active display mode.
+        display_mode: CrapsDisplayMode,
+    },
     /// Players are placing bets before the come-out roll.
-    Betting(GameBetting),
+    Betting {
+        /// Inner betting state.
+        inner: GameBetting,
+        /// Active display mode.
+        display_mode: CrapsDisplayMode,
+    },
     /// Come-out roll phase — shooter's first roll of the round.
-    ComeOut(GameComeOut),
+    ComeOut {
+        /// Inner come-out state.
+        inner: GameComeOut,
+        /// Active display mode.
+        display_mode: CrapsDisplayMode,
+    },
     /// Point has been established; shooter keeps rolling.
-    PointPhase(GamePointPhase),
+    PointPhase {
+        /// Inner point-phase state.
+        inner: GamePointPhase,
+        /// Active display mode.
+        display_mode: CrapsDisplayMode,
+    },
     /// Round has resolved (natural, craps, point made, or seven-out).
-    Resolved(GameResolved),
+    Resolved {
+        /// Inner resolved state.
+        inner: GameResolved,
+        /// Active display mode.
+        display_mode: CrapsDisplayMode,
+    },
 }
 
 // ── CrapsMachine ──────────────────────────────────────────────────────────────
@@ -84,7 +110,10 @@ pub struct CrapsMachine;
 
 impl Default for CrapsState {
     fn default() -> Self {
-        Self::Setup(GameSetup::default())
+        Self::Setup {
+            inner: GameSetup::default(),
+            display_mode: CrapsDisplayMode::default(),
+        }
     }
 }
 
@@ -101,10 +130,20 @@ pub fn craps_start_betting(
     proof: Established<CrapsConsistent>,
     bankrolls: Vec<u64>,
 ) -> (CrapsState, Established<CrapsConsistent>) {
-    let CrapsState::Setup(setup) = state else {
+    let CrapsState::Setup {
+        inner: setup,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
-    (CrapsState::Betting(setup.start_betting(bankrolls)), proof)
+    (
+        CrapsState::Betting {
+            inner: setup.start_betting(bankrolls),
+            display_mode,
+        },
+        proof,
+    )
 }
 
 /// Transition: validate and place bets, moving to the come-out roll phase.
@@ -122,14 +161,21 @@ pub fn craps_place_bets(
     seat_bets: Vec<Vec<ActiveBet>>,
     bets_proof: Established<BetsPlaced>,
 ) -> (CrapsState, Established<CrapsConsistent>) {
-    let CrapsState::Betting(betting) = state else {
+    let CrapsState::Betting {
+        inner: betting,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     let new_proof = Established::prove(&CrapsRulesEvidence {
         bets_placed: bets_proof,
     });
     (
-        CrapsState::ComeOut(betting.start_comeout(seat_bets)),
+        CrapsState::ComeOut {
+            inner: betting.start_comeout(seat_bets),
+            display_mode,
+        },
         new_proof,
     )
 }
@@ -147,12 +193,28 @@ pub fn craps_comeout_roll(
     proof: Established<CrapsConsistent>,
     dice: DiceRoll,
 ) -> (CrapsState, Established<CrapsConsistent>) {
-    let CrapsState::ComeOut(comeout) = state else {
+    let CrapsState::ComeOut {
+        inner: comeout,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     match comeout.roll(dice) {
-        ComeOutResult::PointSet(pp) => (CrapsState::PointPhase(pp), proof),
-        ComeOutResult::Resolved(r) => (CrapsState::Resolved(r), proof),
+        ComeOutResult::PointSet(pp) => (
+            CrapsState::PointPhase {
+                inner: pp,
+                display_mode,
+            },
+            proof,
+        ),
+        ComeOutResult::Resolved(r) => (
+            CrapsState::Resolved {
+                inner: r,
+                display_mode,
+            },
+            proof,
+        ),
     }
 }
 
@@ -169,12 +231,28 @@ pub fn craps_point_roll(
     proof: Established<CrapsConsistent>,
     dice: DiceRoll,
 ) -> (CrapsState, Established<CrapsConsistent>) {
-    let CrapsState::PointPhase(pp) = state else {
+    let CrapsState::PointPhase {
+        inner: pp,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     match pp.roll(dice) {
-        PointRollResult::Continue(pp2) => (CrapsState::PointPhase(pp2), proof),
-        PointRollResult::Resolved(r) => (CrapsState::Resolved(r), proof),
+        PointRollResult::Continue(pp2) => (
+            CrapsState::PointPhase {
+                inner: pp2,
+                display_mode,
+            },
+            proof,
+        ),
+        PointRollResult::Resolved(r) => (
+            CrapsState::Resolved {
+                inner: r,
+                display_mode,
+            },
+            proof,
+        ),
     }
 }
 
@@ -190,11 +268,18 @@ pub fn craps_next_round(
     proof: Established<CrapsConsistent>,
     updated_bankrolls: Vec<u64>,
 ) -> (CrapsState, Established<CrapsConsistent>) {
-    let CrapsState::Resolved(resolved) = state else {
+    let CrapsState::Resolved {
+        inner: resolved,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     (
-        CrapsState::Betting(resolved.next_round(updated_bankrolls)),
+        CrapsState::Betting {
+            inner: resolved.next_round(updated_bankrolls),
+            display_mode,
+        },
         proof,
     )
 }

@@ -17,6 +17,7 @@
 pub mod action;
 mod complete;
 pub mod contracts;
+pub mod display;
 mod explore;
 pub mod outcome;
 pub mod position;
@@ -33,6 +34,7 @@ pub use contracts::{
     LegalMove, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeRulesEvidence, execute_move,
     validate_move, validate_player_turn, validate_square_empty,
 };
+pub use display::TttDisplayMode;
 pub use explore::TicTacToeAction;
 pub use outcome::Outcome;
 pub use position::Position;

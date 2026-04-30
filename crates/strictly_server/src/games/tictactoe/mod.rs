@@ -10,6 +10,7 @@ pub use strictly_tictactoe::{
 };
 
 // Server-specific modules
+pub mod display;
 pub mod factory;
 pub mod wrapper;
 

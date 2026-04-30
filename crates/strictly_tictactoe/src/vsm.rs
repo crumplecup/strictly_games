@@ -12,6 +12,7 @@
 //! ```
 
 use crate::contracts::{PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeRulesEvidence};
+use crate::display::TttDisplayMode;
 use crate::typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 use crate::{Move, Player};
 use elicitation::contracts::Established;
@@ -37,11 +38,26 @@ use tracing::instrument;
 )]
 pub enum TicTacToeState {
     /// Game is in setup phase, awaiting the first player assignment.
-    Setup(GameSetup),
+    Setup {
+        /// Inner setup state.
+        inner: GameSetup,
+        /// Active display mode.
+        display_mode: TttDisplayMode,
+    },
     /// Game is in progress, accepting moves.
-    InProgress(GameInProgress),
+    InProgress {
+        /// Inner in-progress state.
+        inner: GameInProgress,
+        /// Active display mode.
+        display_mode: TttDisplayMode,
+    },
     /// Game has ended with a winner or a draw.
-    Finished(GameFinished),
+    Finished {
+        /// Inner finished state.
+        inner: GameFinished,
+        /// Active display mode.
+        display_mode: TttDisplayMode,
+    },
 }
 
 // ── TicTacToeMachine ──────────────────────────────────────────────────────────
@@ -53,7 +69,10 @@ pub struct TicTacToeMachine;
 
 impl Default for TicTacToeState {
     fn default() -> Self {
-        Self::Setup(GameSetup::default())
+        Self::Setup {
+            inner: GameSetup::default(),
+            display_mode: TttDisplayMode::default(),
+        }
     }
 }
 
@@ -70,10 +89,20 @@ pub fn ttt_start_game(
     proof: Established<TicTacToeConsistent>,
     first_player: Player,
 ) -> (TicTacToeState, Established<TicTacToeConsistent>) {
-    let TicTacToeState::Setup(setup) = state else {
+    let TicTacToeState::Setup {
+        inner: setup,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
-    (TicTacToeState::InProgress(setup.start(first_player)), proof)
+    (
+        TicTacToeState::InProgress {
+            inner: setup.start(first_player),
+            display_mode,
+        },
+        proof,
+    )
 }
 
 /// Transition: apply a validated move to an in-progress game.
@@ -93,7 +122,11 @@ pub fn ttt_make_move(
     square_proof: Established<SquareEmpty>,
     turn_proof: Established<PlayerTurn>,
 ) -> (TicTacToeState, Established<TicTacToeConsistent>) {
-    let TicTacToeState::InProgress(game) = state else {
+    let TicTacToeState::InProgress {
+        inner: game,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     let new_proof = Established::prove(&TicTacToeRulesEvidence {
@@ -101,8 +134,20 @@ pub fn ttt_make_move(
         player_turn: turn_proof,
     });
     match game.make_move(mov) {
-        Ok(GameResult::InProgress(g)) => (TicTacToeState::InProgress(g), new_proof),
-        Ok(GameResult::Finished(g)) => (TicTacToeState::Finished(g), new_proof),
+        Ok(GameResult::InProgress(g)) => (
+            TicTacToeState::InProgress {
+                inner: g,
+                display_mode,
+            },
+            new_proof,
+        ),
+        Ok(GameResult::Finished(g)) => (
+            TicTacToeState::Finished {
+                inner: g,
+                display_mode,
+            },
+            new_proof,
+        ),
         Err(_) => unreachable!("square_proof and turn_proof guarantee move validity"),
     }
 }
@@ -116,8 +161,18 @@ pub fn ttt_restart(
     state: TicTacToeState,
     proof: Established<TicTacToeConsistent>,
 ) -> (TicTacToeState, Established<TicTacToeConsistent>) {
-    let TicTacToeState::Finished(finished) = state else {
+    let TicTacToeState::Finished {
+        inner: finished,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
-    (TicTacToeState::Setup(finished.restart()), proof)
+    (
+        TicTacToeState::Setup {
+            inner: finished.restart(),
+            display_mode,
+        },
+        proof,
+    )
 }

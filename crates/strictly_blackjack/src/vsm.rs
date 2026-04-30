@@ -23,6 +23,7 @@
 //! ```
 
 use crate::contracts::{BlackjackConsistent, BlackjackRulesEvidence, NotBust, ValidAction};
+use crate::display::BlackjackDisplayMode;
 use crate::typestate::{GameFinished, GamePlayerTurn, GameResult, GameSetup};
 use crate::{BasicAction, GameBetting, GameDealerTurn};
 use elicitation::contracts::Established;
@@ -48,15 +49,40 @@ use tracing::instrument;
 )]
 pub enum BlackjackState {
     /// Game is in setup phase, awaiting the first player.
-    Setup(GameSetup),
+    Setup {
+        /// Inner setup state.
+        inner: GameSetup,
+        /// Active display mode.
+        display_mode: BlackjackDisplayMode,
+    },
     /// Game is in betting phase — player places wager.
-    Betting(GameBetting),
+    Betting {
+        /// Inner betting state.
+        inner: GameBetting,
+        /// Active display mode.
+        display_mode: BlackjackDisplayMode,
+    },
     /// Game is in player turn phase — player takes actions.
-    PlayerTurn(GamePlayerTurn),
+    PlayerTurn {
+        /// Inner player-turn state.
+        inner: GamePlayerTurn,
+        /// Active display mode.
+        display_mode: BlackjackDisplayMode,
+    },
     /// Game is in dealer turn phase — dealer plays by fixed rules.
-    DealerTurn(GameDealerTurn),
+    DealerTurn {
+        /// Inner dealer-turn state.
+        inner: GameDealerTurn,
+        /// Active display mode.
+        display_mode: BlackjackDisplayMode,
+    },
     /// Game is finished — outcomes determined, ready for restart.
-    Finished(GameFinished),
+    Finished {
+        /// Inner finished state.
+        inner: GameFinished,
+        /// Active display mode.
+        display_mode: BlackjackDisplayMode,
+    },
 }
 
 // ── BlackjackMachine ──────────────────────────────────────────────────────────
@@ -74,7 +100,10 @@ pub struct BlackjackMachine;
 
 impl Default for BlackjackState {
     fn default() -> Self {
-        Self::Setup(GameSetup::default())
+        Self::Setup {
+            inner: GameSetup::default(),
+            display_mode: BlackjackDisplayMode::default(),
+        }
     }
 }
 
@@ -90,11 +119,18 @@ pub fn bj_start_betting(
     proof: Established<BlackjackConsistent>,
     initial_bankroll: u64,
 ) -> (BlackjackState, Established<BlackjackConsistent>) {
-    let BlackjackState::Setup(setup) = state else {
+    let BlackjackState::Setup {
+        inner: setup,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     (
-        BlackjackState::Betting(setup.start_betting(initial_bankroll)),
+        BlackjackState::Betting {
+            inner: setup.start_betting(initial_bankroll),
+            display_mode,
+        },
         proof,
     )
 }
@@ -113,15 +149,43 @@ pub fn bj_place_bet(
     proof: Established<BlackjackConsistent>,
     bet: u64,
 ) -> (BlackjackState, Established<BlackjackConsistent>) {
-    let BlackjackState::Betting(betting) = state else {
+    let BlackjackState::Betting {
+        inner: betting,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     let fallback = betting.clone();
     match betting.place_bet(bet) {
-        Ok(GameResult::PlayerTurn(pt)) => (BlackjackState::PlayerTurn(pt), proof),
-        Ok(GameResult::DealerTurn(dt)) => (BlackjackState::DealerTurn(dt), proof),
-        Ok(GameResult::Finished(finished, _settled)) => (BlackjackState::Finished(finished), proof),
-        Err(_) => (BlackjackState::Betting(fallback), proof),
+        Ok(GameResult::PlayerTurn(pt)) => (
+            BlackjackState::PlayerTurn {
+                inner: pt,
+                display_mode,
+            },
+            proof,
+        ),
+        Ok(GameResult::DealerTurn(dt)) => (
+            BlackjackState::DealerTurn {
+                inner: dt,
+                display_mode,
+            },
+            proof,
+        ),
+        Ok(GameResult::Finished(finished, _settled)) => (
+            BlackjackState::Finished {
+                inner: finished,
+                display_mode,
+            },
+            proof,
+        ),
+        Err(_) => (
+            BlackjackState::Betting {
+                inner: fallback,
+                display_mode,
+            },
+            proof,
+        ),
     }
 }
 
@@ -145,7 +209,11 @@ pub fn bj_player_action(
     valid_proof: Established<ValidAction>,
     bust_proof: Established<NotBust>,
 ) -> (BlackjackState, Established<BlackjackConsistent>) {
-    let BlackjackState::PlayerTurn(pt) = state else {
+    let BlackjackState::PlayerTurn {
+        inner: pt,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     let new_proof = Established::prove(&BlackjackRulesEvidence {
@@ -153,11 +221,27 @@ pub fn bj_player_action(
         not_bust: bust_proof,
     });
     match pt.action_on_current(action) {
-        Ok(GameResult::PlayerTurn(pt2)) => (BlackjackState::PlayerTurn(pt2), new_proof),
-        Ok(GameResult::DealerTurn(dt)) => (BlackjackState::DealerTurn(dt), new_proof),
-        Ok(GameResult::Finished(finished, _settled)) => {
-            (BlackjackState::Finished(finished), new_proof)
-        }
+        Ok(GameResult::PlayerTurn(pt2)) => (
+            BlackjackState::PlayerTurn {
+                inner: pt2,
+                display_mode,
+            },
+            new_proof,
+        ),
+        Ok(GameResult::DealerTurn(dt)) => (
+            BlackjackState::DealerTurn {
+                inner: dt,
+                display_mode,
+            },
+            new_proof,
+        ),
+        Ok(GameResult::Finished(finished, _settled)) => (
+            BlackjackState::Finished {
+                inner: finished,
+                display_mode,
+            },
+            new_proof,
+        ),
         Err(_) => unreachable!("valid_proof and bust_proof guarantee action validity"),
     }
 }
@@ -172,11 +256,21 @@ pub fn bj_dealer_turn(
     state: BlackjackState,
     proof: Established<BlackjackConsistent>,
 ) -> (BlackjackState, Established<BlackjackConsistent>) {
-    let BlackjackState::DealerTurn(dt) = state else {
+    let BlackjackState::DealerTurn {
+        inner: dt,
+        display_mode,
+    } = state
+    else {
         return (state, proof);
     };
     let (finished, _settled) = dt.play_dealer_turn();
-    (BlackjackState::Finished(finished), proof)
+    (
+        BlackjackState::Finished {
+            inner: finished,
+            display_mode,
+        },
+        proof,
+    )
 }
 
 /// Transition: restart a finished game, returning to setup.
@@ -188,8 +282,14 @@ pub fn bj_restart(
     state: BlackjackState,
     proof: Established<BlackjackConsistent>,
 ) -> (BlackjackState, Established<BlackjackConsistent>) {
-    let BlackjackState::Finished(_) = state else {
+    let BlackjackState::Finished { .. } = state else {
         return (state, proof);
     };
-    (BlackjackState::Setup(GameSetup::default()), proof)
+    (
+        BlackjackState::Setup {
+            inner: GameSetup::default(),
+            display_mode: BlackjackDisplayMode::default(),
+        },
+        proof,
+    )
 }

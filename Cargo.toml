@@ -35,6 +35,8 @@ elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui/", features = [
   "runtime",
 ] }
 elicit_ui = { path = "../elicitation/crates/elicit_ui/" }
+elicit_accesskit = { path = "../elicitation/crates/elicit_accesskit/" }
+accesskit = { version = "0.24", features = ["serde", "schemars"] }
 
 # Verification
 creusot-std = { path = "/home/erik/repos/creusot/creusot-std", version = "0.10.0" }
@@ -97,6 +99,9 @@ toml = "1"
 # Utilities
 async-trait = "0.1"
 strum = { version = "0.28", features = ["derive"] }
+syn = { version = "2", features = ["full"] }
+prettyplease = "0.2"
+proc-macro2 = "1"
 
 # TUI
 ratatui = "0.30"

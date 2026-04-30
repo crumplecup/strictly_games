@@ -8,19 +8,15 @@
 //! `execute_place_bets` → `execute_comeout_roll` → `execute_point_roll`.
 //! The compiler enforces correct phase ordering via `Established<P>` contracts.
 
-use crate::tui::contracts::{CrapsRoundActive, NoOverflow};
 use crate::tui::observable_communicator::ObservableCommunicator;
 use crate::tui::tui_communicator::TuiCommunicator;
-use crate::tui::typestate_widget::{
-    GameEvent, PhaseContext, TypestateGraphWidget, craps_active, craps_edges, craps_nodes,
-};
+use crate::tui::typestate_widget::{GameEvent, craps_active, craps_edges, craps_nodes};
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
 use elicitation::Generator as _;
-use elicitation::contracts::{And, Established, Prop, both};
-use ratatui::{Terminal, backend::Backend, prelude::Widget};
+use ratatui::{Terminal, backend::Backend};
 use strictly_craps::{
     ActiveBet, BetOutcome, BetType, ComeOutOutput, CrapsAction, CrapsTable, CrapsTableView,
     DiceRoll, GameSetup, Point, PointRollOutput, execute_comeout_roll, execute_place_bets,
@@ -29,8 +25,7 @@ use strictly_craps::{
 use tokio::sync::watch;
 use tracing::{info, instrument, warn};
 
-/// Height of the dedicated prompt pane at the bottom.
-pub const PROMPT_PANE_HEIGHT: u16 = 10;
+use crate::session::DialogueEntry;
 
 /// Outcome of a complete craps session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,11 +69,10 @@ enum DisplayPhase<'a> {
 /// Shared rendering context threaded through all render calls.
 struct RenderCtx<'a, B: Backend> {
     terminal: &'a mut Terminal<B>,
-    player_name: &'a str,
     show_typestate_graph: bool,
     nodes: &'a [crate::tui::typestate_widget::NodeDef],
     edges: &'a [crate::tui::typestate_widget::EdgeDef],
-    prompt_rx: watch::Receiver<Option<String>>,
+    dialogue: &'a [DialogueEntry],
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -102,7 +96,7 @@ where
 {
     info!("Starting craps session");
 
-    let (prompt_tx, prompt_rx) = watch::channel(None::<String>);
+    let (prompt_tx, _) = watch::channel(None::<String>);
     let comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx);
     let nodes = craps_nodes();
     let edges = craps_edges();
@@ -137,11 +131,10 @@ where
 
         let mut ctx = RenderCtx {
             terminal,
-            player_name: &player_name,
             show_typestate_graph,
             nodes: &nodes,
             edges: &edges,
-            prompt_rx: prompt_rx.clone(),
+            dialogue: &[],
         };
 
         let outcome = run_single_round(&mut ctx, &mut table, &comm, &mut event_log, &dice).await?;
@@ -214,7 +207,7 @@ where
     }
 
     // ── Betting phase ─────────────────────────────────────────
-    let _ = render_craps(
+    render_craps(
         ctx,
         DisplayPhase::Betting {
             bankroll,
@@ -224,7 +217,6 @@ where
         },
         craps_active(&current_phase),
         event_log,
-        Established::<CrapsRoundActive>::assert(),
     )?;
 
     let bet_amount = loop {
@@ -275,7 +267,7 @@ where
     let roll = rng.generate();
     let sum = roll.sum();
 
-    let _ = render_craps(
+    render_craps(
         ctx,
         DisplayPhase::ComeOut {
             bankroll: *table.seats()[0].bankroll(),
@@ -284,7 +276,6 @@ where
         },
         craps_active(&current_phase),
         event_log,
-        Established::<CrapsRoundActive>::assert(),
     )?;
 
     event_log.push(GameEvent::story(format!(
@@ -345,7 +336,7 @@ where
             event_log.push(GameEvent::phase_change("ComeOut", "Resolved"));
             event_log.push(GameEvent::proof("RoundSettled"));
 
-            let _ = render_craps(
+            render_craps(
                 ctx,
                 DisplayPhase::Resolved {
                     bankroll: *table.seats()[0].bankroll(),
@@ -355,7 +346,6 @@ where
                 },
                 craps_active(&current_phase),
                 event_log,
-                Established::<CrapsRoundActive>::assert(),
             )?;
 
             table.seat_mut(0).expect("seat 0").record_round();
@@ -391,7 +381,7 @@ where
             let mut current_proof = point_proof;
             let mut roll_count: u32 = 0;
             loop {
-                let _ = render_craps(
+                render_craps(
                     ctx,
                     DisplayPhase::PointPhase {
                         bankroll: *table.seats()[0].bankroll(),
@@ -401,12 +391,11 @@ where
                     },
                     craps_active(&current_phase),
                     event_log,
-                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 // Wait for keypress to roll
                 event_log.push(GameEvent::story("  Press any key to roll...".to_string()));
-                let _ = render_craps(
+                render_craps(
                     ctx,
                     DisplayPhase::PointPhase {
                         bankroll: *table.seats()[0].bankroll(),
@@ -416,7 +405,6 @@ where
                     },
                     craps_active(&current_phase),
                     event_log,
-                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 if matches!(wait_for_keypress_raw().await?, RoundOutcome::Quit) {
@@ -432,7 +420,7 @@ where
                     point_roll.die2(),
                 )));
 
-                let _ = render_craps(
+                render_craps(
                     ctx,
                     DisplayPhase::PointPhase {
                         bankroll: *table.seats()[0].bankroll(),
@@ -442,7 +430,6 @@ where
                     },
                     craps_active(&current_phase),
                     event_log,
-                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 match execute_point_roll(point_phase, point_roll, current_proof) {
@@ -502,7 +489,7 @@ where
                         event_log.push(GameEvent::phase_change("PointPhase", "Resolved"));
                         event_log.push(GameEvent::proof("RoundSettled"));
 
-                        let _ = render_craps(
+                        render_craps(
                             ctx,
                             DisplayPhase::Resolved {
                                 bankroll: *table.seats()[0].bankroll(),
@@ -512,7 +499,6 @@ where
                             },
                             craps_active(&current_phase),
                             event_log,
-                            Established::<CrapsRoundActive>::assert(),
                         )?;
 
                         table.seat_mut(0).expect("seat 0").record_round();
@@ -542,489 +528,153 @@ where
 // ─────────────────────────────────────────────────────────────
 
 #[instrument(skip_all)]
-fn render_craps<B: Backend, P: Prop>(
+fn render_craps<B: Backend>(
     ctx: &mut RenderCtx<'_, B>,
     phase: DisplayPhase<'_>,
     active: Option<usize>,
     event_log: &[GameEvent],
-    game_proof: Established<P>,
-) -> Result<Established<And<P, NoOverflow>>>
+) -> Result<()>
 where
     <B as Backend>::Error: Send + Sync + 'static,
 {
-    use crate::tui::contracts::{NoOverflow, render_resize_prompt, verified_draw};
-    use crate::tui::palette::GamePalette;
-    use elicit_ratatui::{
-        BlockJson, BordersJson, ConstraintJson, DirectionJson, ParagraphText, StyleJson, TuiNode,
-        WidgetJson,
-    };
-    use ratatui::layout::{Constraint, Direction, Layout};
+    use crate::tui::contracts::{CrapsUiConsistent, render_resize_prompt, verified_draw};
+    use crate::tui::game_ir::{EventLog, GraphParams, craps_to_verified_tree};
+    use elicit_ratatui::RatatuiBackend;
+    use elicit_ui::{UiTreeRenderer as _, Viewport};
+    use elicitation::contracts::Established;
+    use strictly_craps::CrapsDisplayMode;
 
-    let pal = GamePalette::new();
-    let border_style = StyleJson {
-        fg: Some(pal.border.json.clone()),
-        bg: None,
-        modifiers: vec![],
-    };
-    let muted_style = StyleJson {
-        fg: Some(pal.muted.json.clone()),
-        bg: None,
-        modifiers: vec![],
-    };
-
-    let pending_prompt = ctx.prompt_rx.borrow().clone();
-    let phase_ctx = build_phase_context(&phase).with_pending_prompt(pending_prompt);
-
-    let game_title = format!(" 🎲 Craps — {} 🎲 ", ctx.player_name);
-    let game_text = build_game_text(&phase, &pal);
-    let story_text = build_craps_story_text(event_log, &pal);
-
-    let content_constraints: Vec<ConstraintJson> = if ctx.show_typestate_graph {
-        vec![
-            ConstraintJson::Percentage { value: 40 },
-            ConstraintJson::Percentage { value: 35 },
-            ConstraintJson::Percentage { value: 25 },
-        ]
+    let view = craps_state_view_from_phase(&phase);
+    let craps_graph_nodes = if ctx.show_typestate_graph {
+        ctx.nodes
     } else {
-        vec![
-            ConstraintJson::Percentage { value: 45 },
-            ConstraintJson::Percentage { value: 55 },
-        ]
+        &[]
+    };
+    let craps_graph_edges = if ctx.show_typestate_graph {
+        ctx.edges
+    } else {
+        &[]
+    };
+    let log = EventLog {
+        events: event_log,
+        dialogue: ctx.dialogue,
+    };
+    let graph = GraphParams {
+        nodes: craps_graph_nodes,
+        edges: craps_graph_edges,
+        active,
     };
 
-    let game_node = TuiNode::Widget {
-        widget: Box::new(WidgetJson::Paragraph {
-            text: ParagraphText::Rich(game_text),
-            style: None,
-            wrap: true,
-            scroll: None,
-            alignment: None,
-            block: Some(BlockJson {
-                borders: BordersJson::All,
-                border_type: None,
-                title: Some(game_title),
-                style: None,
-                border_style: Some(border_style.clone()),
-                padding: None,
-            }),
-        }),
-    };
-
-    let story_node = TuiNode::Widget {
-        widget: Box::new(WidgetJson::Paragraph {
-            text: ParagraphText::Rich(story_text),
-            style: None,
-            wrap: true,
-            scroll: None,
-            alignment: None,
-            block: Some(BlockJson {
-                borders: BordersJson::All,
-                border_type: None,
-                title: Some(" Story ".to_string()),
-                style: None,
-                border_style: Some(border_style.clone()),
-                padding: None,
-            }),
-        }),
-    };
-
-    let mut content_children = vec![game_node, story_node];
-    if ctx.show_typestate_graph {
-        content_children.push(TuiNode::Widget {
-            widget: Box::new(WidgetJson::Clear),
+    ctx.terminal.draw(|f| {
+        let area = f.area();
+        let viewport = Viewport::new(area.width as u32, area.height as u32);
+        let tree = craps_to_verified_tree(&view, &CrapsDisplayMode::Table, &log, &graph, viewport);
+        let backend = RatatuiBackend::new();
+        let (tui_node, _stats, render_proof) = backend
+            .render(&tree)
+            .unwrap_or_else(|e| panic!("RatatuiBackend::render failed: {e}"));
+        let _: Established<CrapsUiConsistent> = Established::prove(&render_proof);
+        verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
+            render_resize_prompt(f, &e);
+            Established::assert()
         });
-    }
-
-    let root = TuiNode::Layout {
-        direction: DirectionJson::Vertical,
-        constraints: vec![
-            ConstraintJson::Min { value: 0 },
-            ConstraintJson::Length {
-                value: PROMPT_PANE_HEIGHT,
-            },
-        ],
-        children: vec![
-            TuiNode::Layout {
-                direction: DirectionJson::Horizontal,
-                constraints: content_constraints,
-                children: content_children,
-                margin: None,
-            },
-            TuiNode::Widget {
-                widget: Box::new(WidgetJson::Paragraph {
-                    text: ParagraphText::Plain(String::new()),
-                    style: None,
-                    wrap: false,
-                    scroll: None,
-                    alignment: None,
-                    block: Some(BlockJson {
-                        borders: BordersJson::All,
-                        border_type: None,
-                        title: Some(" Input ".to_string()),
-                        style: None,
-                        border_style: Some(muted_style),
-                        padding: None,
-                    }),
-                }),
-            },
-        ],
-        margin: None,
-    };
-
-    ctx.terminal.draw(|frame| {
-        let _proof: Established<NoOverflow> = verified_draw(frame, frame.area(), &root)
-            .unwrap_or_else(|e| {
-                render_resize_prompt(frame, &e);
-                Established::assert()
-            });
-
-        if ctx.show_typestate_graph {
-            let outer = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(PROMPT_PANE_HEIGHT)])
-                .split(frame.area());
-            let cols = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(35),
-                    Constraint::Percentage(25),
-                ])
-                .split(outer[0]);
-            TypestateGraphWidget::new(ctx.nodes, ctx.edges, active, event_log)
-                .with_context(&phase_ctx)
-                .render(cols[2], frame.buffer_mut());
-        }
     })?;
-    Ok(both(game_proof, Established::assert()))
+    Ok(())
 }
 
-fn build_phase_context(phase: &DisplayPhase<'_>) -> PhaseContext {
-    match phase {
-        DisplayPhase::Betting {
-            bankroll,
-            lesson_title,
-            lesson_level,
-            ..
-        } => PhaseContext::info(format!(
-            "Lesson {lesson_level}: {lesson_title} — bankroll: ${bankroll}"
-        )),
-
-        DisplayPhase::ComeOut { roll, .. } => {
-            if let Some(r) = roll {
-                PhaseContext::info(format!("Come-out roll: {} = {}", r, r.sum()))
-            } else {
-                PhaseContext::info("Awaiting come-out roll...".to_string())
-            }
-        }
-
-        DisplayPhase::PointPhase { point, roll, .. } => {
-            if let Some(r) = roll {
-                PhaseContext::info(format!(
-                    "Point: {point} — rolled {} = {} (need {point} or 7)",
-                    r,
-                    r.sum()
-                ))
-            } else {
-                PhaseContext::info(format!("Point is {point} — press any key to roll"))
-            }
-        }
-
-        DisplayPhase::Resolved {
-            pass_line_won,
-            bankroll,
-            ..
-        } => {
-            let msg = if *pass_line_won {
-                format!("Pass Line wins! Bankroll: ${bankroll}")
-            } else {
-                format!("Pass Line loses. Bankroll: ${bankroll}")
-            };
-            PhaseContext::info(msg)
-        }
-    }
-}
-
-fn build_game_text(
-    phase: &DisplayPhase<'_>,
-    pal: &crate::tui::palette::GamePalette,
-) -> elicit_ratatui::TextJson {
-    use elicit_ratatui::{LineJson, ModifierJson, SpanJson, StyleJson, TextJson};
-
-    let warning_style = StyleJson {
-        fg: Some(pal.warning.json.clone()),
-        bg: None,
-        modifiers: vec![ModifierJson::Bold],
-    };
-    let muted_style = StyleJson {
-        fg: Some(pal.muted.json.clone()),
-        bg: None,
-        modifiers: vec![],
-    };
-    let body_style = StyleJson {
-        fg: Some(pal.body.json.clone()),
-        bg: None,
-        modifiers: vec![],
-    };
-    let highlight_style = StyleJson {
-        fg: Some(pal.highlight.json.clone()),
-        bg: None,
-        modifiers: vec![ModifierJson::Bold],
-    };
-    let success_style = StyleJson {
-        fg: Some(pal.success.json.clone()),
-        bg: None,
-        modifiers: vec![ModifierJson::Bold],
-    };
-    let error_style = StyleJson {
-        fg: Some(pal.error.json.clone()),
-        bg: None,
-        modifiers: vec![ModifierJson::Bold],
-    };
-
-    let plain = |s: String| LineJson {
-        spans: vec![SpanJson {
-            content: s,
-            style: Some(body_style.clone()),
-        }],
-        style: None,
-        alignment: None,
-    };
-    let empty = || LineJson {
-        spans: vec![SpanJson {
-            content: String::new(),
-            style: None,
-        }],
-        style: None,
-        alignment: None,
-    };
-    let styled_line = |s: String, st: StyleJson| LineJson {
-        spans: vec![SpanJson {
-            content: s,
-            style: Some(st),
-        }],
-        style: None,
-        alignment: None,
-    };
-
-    let mut lines: Vec<LineJson> = Vec::new();
-
+/// Build a [`CrapsStateView`] snapshot from the current display phase.
+fn craps_state_view_from_phase(phase: &DisplayPhase<'_>) -> crate::games::craps::CrapsStateView {
+    use crate::games::craps::CrapsStateView;
     match phase {
         DisplayPhase::Betting {
             bankroll,
             lesson_title,
             lesson_level,
             lesson_tip,
-        } => {
-            lines.push(styled_line(
-                format!("🎲  Lesson {lesson_level}: {lesson_title}"),
-                warning_style,
-            ));
-            lines.push(empty());
-            lines.push(plain(format!("  Bankroll: ${bankroll}")));
-            lines.push(empty());
-            if let Some(first_line) = lesson_tip.lines().nth(1) {
-                lines.push(styled_line(
-                    format!("  💡 {first_line}"),
-                    muted_style.clone(),
-                ));
-                lines.push(empty());
-            }
-            lines.push(styled_line(
-                "  Place your Pass Line bet ↓".to_string(),
-                muted_style,
-            ));
-        }
+        } => CrapsStateView {
+            phase: format!("Betting — Lesson {lesson_level}"),
+            bankroll: *bankroll,
+            description: format!("{lesson_title}\n{lesson_tip}"),
+            active_bets: vec![],
+            dice_roll: None,
+            point: None,
+            is_terminal: false,
+        },
 
         DisplayPhase::ComeOut {
             bankroll,
             bets,
             roll,
-        } => {
-            lines.push(styled_line(
-                "🎲  Come-Out Roll".to_string(),
-                highlight_style,
-            ));
-            lines.push(empty());
-            for bet in *bets {
-                lines.push(plain(format!("  📌 {bet}")));
-            }
-            lines.push(empty());
-            if let Some(r) = roll {
-                let sum = r.sum();
-                let result = if r.is_natural() {
-                    format!("Natural {sum}! 🎉")
-                } else if r.is_craps() {
-                    format!("Craps {sum}! 💀")
-                } else {
-                    format!("Point is {sum} 📍")
-                };
-                let st = if r.is_natural() {
-                    success_style
-                } else if r.is_craps() {
-                    error_style
-                } else {
-                    warning_style
-                };
-                lines.push(styled_line(
-                    format!("  🎲 {} + {} = {sum}  —  {result}", r.die1(), r.die2()),
-                    st,
-                ));
-            }
-            lines.push(empty());
-            lines.push(plain(format!("  Bankroll: ${bankroll}")));
-        }
+        } => CrapsStateView {
+            phase: "ComeOut".to_string(),
+            bankroll: *bankroll,
+            description: match roll {
+                Some(r) => {
+                    let sum = r.sum();
+                    if r.is_natural() {
+                        format!("Natural {sum}! — 7 or 11 on come-out wins Pass Line")
+                    } else if r.is_craps() {
+                        format!("Craps {sum}! — 2, 3, or 12 on come-out loses Pass Line")
+                    } else {
+                        format!("Point is {sum} — puck ON")
+                    }
+                }
+                None => "Awaiting come-out roll…".to_string(),
+            },
+            active_bets: bets.iter().map(|b| b.to_string()).collect(),
+            dice_roll: roll.map(|r| format!("{} + {} = {}", r.die1(), r.die2(), r.sum())),
+            point: None,
+            is_terminal: false,
+        },
 
         DisplayPhase::PointPhase {
             bankroll,
             bets,
             point,
             roll,
-        } => {
-            lines.push(styled_line(
-                format!("📍  Point Phase — Point: {point}"),
-                warning_style,
-            ));
-            lines.push(empty());
-            for bet in *bets {
-                lines.push(plain(format!("  📌 {bet}")));
-            }
-            lines.push(empty());
-            if let Some(r) = roll {
-                let sum = r.sum();
-                let result = if sum == point.value() {
-                    "Point made! 🎯".to_string()
-                } else if sum == 7 {
-                    "Seven-out! 💀".to_string()
-                } else {
-                    format!("No decision (need {point} or 7)")
-                };
-                let st = if sum == point.value() {
-                    success_style
-                } else if sum == 7 {
-                    error_style
-                } else {
-                    body_style.clone()
-                };
-                lines.push(styled_line(
-                    format!("  🎲 {} + {} = {sum}  —  {result}", r.die1(), r.die2()),
-                    st,
-                ));
-            } else {
-                lines.push(styled_line(
-                    "  Press any key to roll the dice...".to_string(),
-                    muted_style,
-                ));
-            }
-            lines.push(empty());
-            lines.push(plain(format!("  Bankroll: ${bankroll}")));
-        }
+        } => CrapsStateView {
+            phase: format!("PointPhase — Point: {point}"),
+            bankroll: *bankroll,
+            description: match roll {
+                Some(r) => {
+                    let sum = r.sum();
+                    if sum == point.value() {
+                        format!("Point {point} made! 🎯")
+                    } else if sum == 7 {
+                        format!("Seven-out! 💀 (need {point} or 7)")
+                    } else {
+                        format!("No decision — need {point} or 7")
+                    }
+                }
+                None => format!("Point is {point} — press any key to roll"),
+            },
+            active_bets: bets.iter().map(|b| b.to_string()).collect(),
+            dice_roll: roll.map(|r| format!("{} + {} = {}", r.die1(), r.die2(), r.sum())),
+            point: Some(point.to_string()),
+            is_terminal: false,
+        },
 
         DisplayPhase::Resolved {
             bankroll,
             results,
             pass_line_won,
             point,
-        } => {
-            let (banner, banner_st) = if *pass_line_won {
-                ("🎉  You Win!", success_style)
+        } => CrapsStateView {
+            phase: "Resolved".to_string(),
+            bankroll: *bankroll,
+            description: if *pass_line_won {
+                "Pass Line wins! 🎉  Press any key for next round, Q to quit".to_string()
             } else {
-                ("💸  You Lose", error_style)
-            };
-            lines.push(styled_line(banner.to_string(), banner_st));
-            lines.push(empty());
-            if let Some(pt) = point {
-                lines.push(plain(format!("  Point was: {pt}")));
-            } else {
-                lines.push(plain("  Resolved on come-out".to_string()));
-            }
-            lines.push(empty());
-            for (bet, outcome) in *results {
-                let (label, st) = match outcome {
-                    BetOutcome::Win(profit) => (
-                        format!("  ✅ {bet} → Win +${profit}"),
-                        StyleJson {
-                            fg: Some(pal.success.json.clone()),
-                            bg: None,
-                            modifiers: vec![],
-                        },
-                    ),
-                    BetOutcome::Lose => (
-                        format!("  ❌ {bet} → Lose -${}", bet.amount()),
-                        StyleJson {
-                            fg: Some(pal.error.json.clone()),
-                            bg: None,
-                            modifiers: vec![],
-                        },
-                    ),
-                    BetOutcome::Push => (
-                        format!("  🤝 {bet} → Push (returned)"),
-                        StyleJson {
-                            fg: Some(pal.warning.json.clone()),
-                            bg: None,
-                            modifiers: vec![],
-                        },
-                    ),
-                    BetOutcome::NoAction => (
-                        format!("  ⏸️  {bet} → No action"),
-                        StyleJson {
-                            fg: Some(pal.muted.json.clone()),
-                            bg: None,
-                            modifiers: vec![],
-                        },
-                    ),
-                };
-                lines.push(styled_line(label, st));
-            }
-            lines.push(empty());
-            lines.push(plain(format!("  Final bankroll: ${bankroll}")));
-            lines.push(empty());
-            lines.push(styled_line(
-                "  Press any key for next round, Q to quit".to_string(),
-                StyleJson {
-                    fg: Some(pal.muted.json.clone()),
-                    bg: None,
-                    modifiers: vec![],
-                },
-            ));
-        }
-    }
-
-    TextJson {
-        lines,
-        style: None,
-        alignment: None,
-    }
-}
-
-/// Builds a story pane [`TextJson`] from the craps event log.
-fn build_craps_story_text(
-    event_log: &[GameEvent],
-    pal: &crate::tui::palette::GamePalette,
-) -> elicit_ratatui::TextJson {
-    use crate::tui::ratatui_color_to_json;
-    use elicit_ratatui::{LineJson, SpanJson, StyleJson, TextJson};
-
-    let lines: Vec<LineJson> = event_log
-        .iter()
-        .map(|ev| LineJson {
-            spans: vec![SpanJson {
-                content: ev.text.clone(),
-                style: Some(StyleJson {
-                    fg: Some(ratatui_color_to_json(ev.color, pal)),
-                    bg: None,
-                    modifiers: vec![],
-                }),
-            }],
-            style: None,
-            alignment: None,
-        })
-        .collect();
-
-    TextJson {
-        lines,
-        style: None,
-        alignment: None,
+                "Pass Line loses. 💸  Press any key for next round, Q to quit".to_string()
+            },
+            active_bets: results
+                .iter()
+                .map(|(b, o)| format!("{b} → {o:?}"))
+                .collect(),
+            dice_roll: None,
+            point: point.map(|p| p.to_string()),
+            is_terminal: false,
+        },
     }
 }
 
@@ -1275,8 +925,8 @@ where
 {
     info!("Starting multi-player craps session");
 
-    let (chat_tx, _chat_rx) = chat_channel();
-    let (prompt_tx, prompt_rx) = watch::channel(None::<String>);
+    let (chat_tx, mut chat_rx) = chat_channel();
+    let (prompt_tx, _) = watch::channel(None::<String>);
     let nodes = craps_nodes();
     let edges = craps_edges();
     let dice = DiceRoll::random_generator(
@@ -1286,6 +936,7 @@ where
             .as_nanos() as u64,
     );
     let mut event_log: Vec<GameEvent> = Vec::new();
+    let mut dialogue: Vec<DialogueEntry> = Vec::new();
 
     // ── Build seat communicators ──────────────────────────────
     let mut seat_comms: Vec<CrapsSeatComm> = Vec::new();
@@ -1368,13 +1019,20 @@ where
             return Ok(CrapsSessionOutcome::Busted);
         }
 
+        // Drain any pending chat messages into the dialogue log.
+        while let Ok(msg) = chat_rx.try_recv() {
+            dialogue.push(DialogueEntry {
+                role: msg.participant.display_name().to_string(),
+                text: msg.text,
+            });
+        }
+
         let mut ctx = RenderCtx {
             terminal,
-            player_name: &player_name,
             show_typestate_graph,
             nodes: &nodes,
             edges: &edges,
-            prompt_rx: prompt_rx.clone(),
+            dialogue: &dialogue,
         };
 
         // ── Collect bets from all seats ──────────────────────
@@ -1385,7 +1043,7 @@ where
             "🂠  New round — your bankroll: ${bankroll}"
         )));
 
-        let _ = render_craps(
+        render_craps(
             &mut ctx,
             DisplayPhase::Betting {
                 bankroll,
@@ -1395,7 +1053,6 @@ where
             },
             craps_active(&current_phase),
             &event_log,
-            Established::<CrapsRoundActive>::assert(),
         )?;
 
         // Human bet
@@ -1499,7 +1156,7 @@ where
         let roll = dice.generate();
         let sum = roll.sum();
 
-        let _ = render_craps(
+        render_craps(
             &mut ctx,
             DisplayPhase::ComeOut {
                 bankroll: *table.seats()[0].bankroll(),
@@ -1508,7 +1165,6 @@ where
             },
             craps_active(&current_phase),
             &event_log,
-            Established::<CrapsRoundActive>::assert(),
         )?;
 
         event_log.push(GameEvent::story(format!(
@@ -1583,7 +1239,7 @@ where
                 event_log.push(GameEvent::phase_change("ComeOut", "Resolved"));
                 event_log.push(GameEvent::proof("RoundSettled"));
 
-                let _ = render_craps(
+                render_craps(
                     &mut ctx,
                     DisplayPhase::Resolved {
                         bankroll: *table.seats()[0].bankroll(),
@@ -1593,7 +1249,6 @@ where
                     },
                     craps_active(&current_phase),
                     &event_log,
-                    Established::<CrapsRoundActive>::assert(),
                 )?;
 
                 for i in 0..seat_comms.len() {
@@ -1639,7 +1294,7 @@ where
                 let mut current_proof = point_proof;
                 let mut roll_count: u32 = 0;
                 loop {
-                    let _ = render_craps(
+                    render_craps(
                         &mut ctx,
                         DisplayPhase::PointPhase {
                             bankroll: *table.seats()[0].bankroll(),
@@ -1649,11 +1304,10 @@ where
                         },
                         craps_active(&current_phase),
                         &event_log,
-                        Established::<CrapsRoundActive>::assert(),
                     )?;
 
                     event_log.push(GameEvent::story("  Press any key to roll...".to_string()));
-                    let _ = render_craps(
+                    render_craps(
                         &mut ctx,
                         DisplayPhase::PointPhase {
                             bankroll: *table.seats()[0].bankroll(),
@@ -1663,7 +1317,6 @@ where
                         },
                         craps_active(&current_phase),
                         &event_log,
-                        Established::<CrapsRoundActive>::assert(),
                     )?;
 
                     if matches!(wait_for_keypress_raw().await?, RoundOutcome::Quit) {
@@ -1684,7 +1337,7 @@ where
                         point_roll.die2(),
                     )));
 
-                    let _ = render_craps(
+                    render_craps(
                         &mut ctx,
                         DisplayPhase::PointPhase {
                             bankroll: *table.seats()[0].bankroll(),
@@ -1694,7 +1347,6 @@ where
                         },
                         craps_active(&current_phase),
                         &event_log,
-                        Established::<CrapsRoundActive>::assert(),
                     )?;
 
                     match execute_point_roll(point_phase, point_roll, current_proof) {
@@ -1771,7 +1423,7 @@ where
                             event_log.push(GameEvent::phase_change("PointPhase", "Resolved"));
                             event_log.push(GameEvent::proof("RoundSettled"));
 
-                            let _ = render_craps(
+                            render_craps(
                                 &mut ctx,
                                 DisplayPhase::Resolved {
                                     bankroll: *table.seats()[0].bankroll(),
@@ -1781,7 +1433,6 @@ where
                                 },
                                 craps_active(&current_phase),
                                 &event_log,
-                                Established::<CrapsRoundActive>::assert(),
                             )?;
 
                             for i in 0..seat_comms.len() {

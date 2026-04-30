@@ -24,7 +24,9 @@ creusot-std = { workspace = true }
 strictly_tictactoe = { workspace = true }
 strictly_blackjack = { path = "../strictly_blackjack", default-features = false }
 elicitation = { workspace = true }
-proc-macro2 = "1"
+proc-macro2 = { workspace = true }
+syn = { workspace = true }
+prettyplease = { workspace = true }
 
 [features]
 # Marker feature for verification

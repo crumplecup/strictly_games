@@ -4,6 +4,7 @@
 //! This module provides the async `BlackjackWorkflow<C>` orchestrator that
 //! bridges the game logic with `ElicitCommunicator` for human and AI sessions.
 
+pub mod display;
 pub mod factories;
 pub mod session;
 pub mod workflow;

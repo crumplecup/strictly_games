@@ -17,6 +17,7 @@
 mod bet;
 mod contracts;
 mod dice;
+pub mod display;
 mod error;
 mod explore;
 mod ledger;
@@ -34,6 +35,7 @@ pub mod workflow;
 // Core types
 pub use bet::{ActiveBet, BetType, BettingAction};
 pub use dice::{DiceRoll, DieFace};
+pub use display::CrapsDisplayMode;
 pub use error::{CrapsError, CrapsErrorKind};
 pub use explore::CrapsAction;
 pub use ledger::{BetDeducted, CrapsLedger, RoundSettled};
