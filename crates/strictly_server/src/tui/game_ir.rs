@@ -44,6 +44,7 @@ use strictly_tictactoe::TttDisplayMode;
 /// Groups the three typestate-graph parameters passed to `*_to_verified_tree`.
 ///
 /// When `nodes` is empty the graph column is omitted entirely.
+#[derive(Debug)]
 pub struct GraphParams<'a> {
     /// State-node definitions produced by the VSM graph walk.
     pub nodes: &'a [NodeDef],
@@ -54,6 +55,7 @@ pub struct GraphParams<'a> {
 }
 
 /// Groups the event-log and dialogue parameters passed to `*_to_verified_tree`.
+#[derive(Debug)]
 pub struct EventLog<'a> {
     /// Ordered game story entries (actions, outcomes).
     pub events: &'a [GameEvent],

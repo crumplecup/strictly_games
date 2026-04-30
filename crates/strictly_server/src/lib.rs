@@ -20,7 +20,9 @@ mod agent_config;
 mod agent_handler;
 mod agent_library;
 mod db;
+mod egui_frontend;
 mod games;
+mod leptos_frontend;
 mod llm_client;
 mod lobby;
 mod profile_service;
@@ -66,6 +68,15 @@ pub use session::{
 
 // Public API exports - TUI
 pub use tui::{run as tui_run, run_blackjack_mcp_session, run_game_session};
+
+// Public API exports - Egui frontend
+pub use egui_frontend::run_egui;
+
+// Public API exports - Leptos frontend
+pub use leptos_frontend::{
+    LeptosAppState, leptos_game_router, render_bj_html, render_craps_html, render_ttt_html,
+    run_leptos,
+};
 
 // Public API exports - Verification
 pub use verify::{run_all as run_verification_all, run_creusot, run_kani, run_verus};

@@ -67,6 +67,8 @@ async-trait = { workspace = true }
 strum = { workspace = true }
 elicitation_rand = { workspace = true }
 elicit_ratatui = { workspace = true }
+elicit_egui = { workspace = true }
+elicit_leptos = { workspace = true }
 elicit_ui = { workspace = true }
 elicit_accesskit = { workspace = true }
 accesskit = { workspace = true }
@@ -75,6 +77,14 @@ accesskit = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
 unicode-width = { workspace = true }
+
+# Egui frontend (native windowed)
+egui = { workspace = true }
+egui-winit = { workspace = true }
+egui-wgpu = { workspace = true }
+wgpu = { workspace = true }
+winit = { workspace = true }
+futures = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

@@ -18,6 +18,7 @@ mod typestate_widget;
 
 pub use blackjack::{BlackjackSessionOutcome, run_blackjack_mcp_session};
 pub use craps::{CrapsCoPlayer, CrapsSessionOutcome, run_craps_session, run_multi_craps_session};
+pub use typestate_widget::{EdgeDef, GameEvent, NodeDef};
 
 use anyhow::Result;
 use crossterm::{
@@ -34,10 +35,7 @@ use crate::{AnyGame, FirstPlayer, TicTacToePlayer};
 
 use crate::games::tictactoe::Position;
 use rest_client::RestGameClient;
-use typestate_widget::{
-    EdgeDef, GameEvent, NodeDef, tictactoe_active, tictactoe_edges, tictactoe_nodes,
-    tictactoe_phase_name,
-};
+use typestate_widget::{tictactoe_active, tictactoe_edges, tictactoe_nodes, tictactoe_phase_name};
 
 /// Run the TUI client
 #[instrument(skip_all, fields(server_url = ?server_url, port, agent_config = %agent_config.display()))]

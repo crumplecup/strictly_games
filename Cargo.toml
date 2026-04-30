@@ -34,9 +34,24 @@ elicitation_rand = { path = "../elicitation/crates/elicitation_rand/" }
 elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui/", features = [
   "runtime",
 ] }
+elicit_egui = { path = "../elicitation/crates/elicit_egui/" }
+elicit_leptos = { path = "../elicitation/crates/elicit_leptos/" }
 elicit_ui = { path = "../elicitation/crates/elicit_ui/" }
 elicit_accesskit = { path = "../elicitation/crates/elicit_accesskit/" }
 accesskit = { version = "0.24", features = ["serde", "schemars"] }
+
+# GUI (egui frontend)
+egui = { version = "0.34", features = ["serde"] }
+egui-winit = { version = "0.34" }
+egui-wgpu = { version = "0.34", features = ["winit"] }
+wgpu = { version = "29", default-features = false, features = [
+  "metal",
+  "vulkan",
+  "dx12",
+  "webgpu",
+] }
+winit = { version = "0.30", features = ["serde"] }
+futures = "0.3"
 
 # Verification
 creusot-std = { path = "/home/erik/repos/creusot/creusot-std", version = "0.10.0" }
