@@ -1,6 +1,19 @@
-//! Strictly Server - Game orchestration and networking
+//! Strictly Server - Game orchestration and multi-frontend rendering
 //!
-//! This library provides:
+//! All three games (Tic-tac-toe, Blackjack, Craps) share a single
+//! WCAG-verified [AccessKit](https://accesskit.dev) IR pipeline and are
+//! delivered through three parallel frontends:
+//!
+//! | Frontend | Entry point | Transport |
+//! |----------|-------------|-----------|
+//! | ratatui TUI | [`tui_run`] | Terminal |
+//! | egui native window | [`run_egui`] | wgpu / winit |
+//! | leptos HTTP | [`run_leptos`] | axum / HTML |
+//!
+//! Every render path follows the same proof chain:
+//! `*_to_verified_tree() → WcagVerified → RenderComplete → *UiConsistent`
+//!
+//! This library also provides:
 //! - **MCP server** for LLM agent integration
 //! - **REST API** for game operations
 //! - **Database** persistence for users and stats
