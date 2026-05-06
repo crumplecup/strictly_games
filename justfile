@@ -699,7 +699,7 @@ verify-verus-tracked csv="verus_verification_results.csv" timeout="600":
     # Generate verus_proof() composed foundation files before verifying
     cargo build -p strictly_proofs --quiet 2>/dev/null || true
 
-    for file in crates/strictly_proofs/src/verus_proofs/*.rs crates/strictly_proofs/src/verus_proofs/generated/*.rs; do
+    for file in crates/strictly_proofs/src/verus_proofs/*.rs crates/strictly_proofs/src/verus_proofs/generated/*.rs crates/strictly_proofs/src/verus_proofs/gallery/*.rs; do
         [[ -f "$file" ]] || continue
         module=$(basename "$file" .rs)
         [[ "$module" == "mod" ]] && continue
@@ -751,7 +751,7 @@ verify-verus-resume csv="verus_verification_results.csv" timeout="600":
     # Ensure verus_proof() composed foundation files are up to date
     cargo build -p strictly_proofs --quiet 2>/dev/null || true
 
-    for file in crates/strictly_proofs/src/verus_proofs/*.rs crates/strictly_proofs/src/verus_proofs/generated/*.rs; do
+    for file in crates/strictly_proofs/src/verus_proofs/*.rs crates/strictly_proofs/src/verus_proofs/generated/*.rs crates/strictly_proofs/src/verus_proofs/gallery/*.rs; do
         [[ -f "$file" ]] || continue
         module=$(basename "$file" .rs)
         [[ "$module" == "mod" ]] && continue
@@ -947,6 +947,64 @@ verify-creusot-prove csv="creusot_module_results.csv" goals="creusot_goal_result
     echo "Modules: $PASS passed, $FAIL failed"
     echo "Module CSV: $MODULE_CSV"
     echo "Goals  CSV: $GOALS_CSV"
+    [ "$FAIL" -eq 0 ] || exit 1
+
+# ─────────────────────────────────────────────────────────────
+# VSM Creusot companion proofs  (strictly_proofs generated/ + gallery/)
+# ─────────────────────────────────────────────────────────────
+
+# Compile Creusot COMA files from strictly_proofs (run before prove steps)
+# Generates verif/strictly_proofs_rlib/creusot_proofs/...
+verify-vsm-creusot-compile:
+    PATH="${HOME}/.local/share/creusot/bin:${PATH}" \
+    cargo creusot prove -- -p strictly_proofs
+
+# Prove VSM game companions (generated/) via why3find
+verify-vsm-creusot-prove:
+    PATH="${HOME}/.local/share/creusot/bin:${PATH}" \
+    DUNE_DIR_LOCATIONS="why3find:lib:${HOME}/.local/share/creusot/share/why3find" \
+    WHY3CONFIG="${HOME}/.config/creusot/why3.conf" \
+    "${HOME}/.local/share/creusot/bin/why3find" prove verif/strictly_proofs_rlib/creusot_proofs/generated/
+
+# Prove Creusot gallery (SGC1–5) via why3find
+verify-gallery-creusot:
+    PATH="${HOME}/.local/share/creusot/bin:${PATH}" \
+    DUNE_DIR_LOCATIONS="why3find:lib:${HOME}/.local/share/creusot/share/why3find" \
+    WHY3CONFIG="${HOME}/.config/creusot/why3.conf" \
+    "${HOME}/.local/share/creusot/bin/why3find" prove verif/strictly_proofs_rlib/creusot_proofs/gallery/
+
+# Compile then prove gallery in one step
+verify-gallery-creusot-all:
+    just verify-vsm-creusot-compile
+    just verify-gallery-creusot
+
+# Run Verus gallery levels SGV1–SGV3
+verify-gallery-verus:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    RAW_VERUS=$(grep -v '^#' .env 2>/dev/null | grep '^VERUS_PATH=' | sed 's/^VERUS_PATH=//' | tr -d '"' || true)
+    VERUS_BIN="${RAW_VERUS/\~/$HOME}"
+    if [ -z "$VERUS_BIN" ] || [ ! -f "$VERUS_BIN" ]; then
+        echo "❌ Verus not found at: '${VERUS_BIN}'. Set VERUS_PATH in .env"; exit 1
+    fi
+    PASS=0; FAIL=0
+    for file in crates/strictly_proofs/src/verus_proofs/gallery/level*.rs; do
+        [[ -f "$file" ]] || continue
+        module=$(basename "$file" .rs)
+        echo -n "  🔬 $module ... "
+        START=$(date +%s%3N)
+        OUTPUT=$(timeout 120 "$VERUS_BIN" --crate-type=lib "$file" 2>&1) || true
+        END=$(date +%s%3N)
+        ELAPSED=$(( (END - START) / 1000 ))
+        ERRORS=$(echo "$OUTPUT" | grep -oP '\d+(?= error)' | tail -1 || echo "0")
+        if [[ "${ERRORS:-0}" == "0" ]] && echo "$OUTPUT" | grep -q "verified"; then
+            echo "✅  (${ELAPSED}s)"; PASS=$((PASS + 1))
+        else
+            echo "❌  (${ELAPSED}s)"; FAIL=$((FAIL + 1))
+            echo "$OUTPUT" | tail -10
+        fi
+    done
+    echo ""; echo "Gallery Verus: $PASS passed, $FAIL failed"
     [ "$FAIL" -eq 0 ] || exit 1
 
 # Show Creusot module-level summary from CSV

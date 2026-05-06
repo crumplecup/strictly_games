@@ -1,0 +1,58 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 106 0 106 68 *)
+
+let%span slevel6 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 107 15 107 46
+let%span slevel6'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 107 4 107 46
+let%span slevel6'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 104 11 104 72
+let%span slevel6'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 105 10 105 69
+let%span slevel6'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 73 11 73 60
+let%span slevel6'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 74 10 74 57
+let%span slevel6'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 57 8 63 9
+
+use creusot.int.UInt64
+use int.ComputerDivision
+use creusot.prelude.Any
+use int.Int
+
+type t_Outcome = Win | Blackjack | Push | Loss | Surrender
+
+function sgc6_gross_return_spec [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 55 0 55 64] (outcome: t_Outcome) (bet: UInt64.t) : int
+ = [%#slevel6'5] match outcome with
+    | Push -> UInt64.t'int bet
+    | Loss -> 0
+    | Win -> UInt64.t'int bet * 2
+    | Surrender -> ComputerDivision.div (UInt64.t'int bet) 2
+    | Blackjack -> UInt64.t'int bet * 2 + ComputerDivision.div (UInt64.t'int bet) 2
+    end
+
+constant const_MAX: UInt64.t = (18446744073709551615: UInt64.t)
+
+let rec sgc6_gross_return (outcome: t_Outcome) (bet: UInt64.t) (return (x: UInt64.t)) =
+  {[@stop_split] [@expl:sgc6_gross_return requires] [%#slevel6'3] sgc6_gross_return_spec outcome bet
+  <= UInt64.t'int const_MAX}
+  any
+  [ return (result: UInt64.t) -> {[@stop_split] [@expl:sgc6_gross_return ensures] [%#slevel6'4] UInt64.t'int result
+    = sgc6_gross_return_spec outcome bet}
+    (! return {result}) ]
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec sgc6_settle
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level6.rs" 106 0 106 68]
+  (post_bet: UInt64.t) (outcome: t_Outcome) (bet: UInt64.t) (return (x: UInt64.t)) =
+  {[@stop_split] [@expl:sgc6_settle requires] [%#slevel6'1] UInt64.t'int post_bet + sgc6_gross_return_spec outcome bet
+  <= UInt64.t'int const_MAX}
+  (! bb0
+  [ bb0 = s0
+    [ s0 = sgc6_gross_return [%#slevel6] {outcome} {bet} (fun (_x: UInt64.t) -> [ &_13 <- _x ] s1)
+    | s1 = UInt64.add [%#slevel6'0] {post_bet} {_13} (fun (_x: UInt64.t) -> [ &_ret <- _x ] s2)
+    | s2 = return {_ret} ] ]
+  [ & _ret: UInt64.t = Any.any_l ()
+  | & post_bet: UInt64.t = post_bet
+  | & outcome: t_Outcome = outcome
+  | & bet: UInt64.t = bet
+  | & _13: UInt64.t = Any.any_l () ])
+  [ return (result: UInt64.t) -> {[@stop_split] [@expl:sgc6_settle ensures] [%#slevel6'2] UInt64.t'int result
+    = UInt64.t'int post_bet + sgc6_gross_return_spec outcome bet}
+    (! return {result}) ]

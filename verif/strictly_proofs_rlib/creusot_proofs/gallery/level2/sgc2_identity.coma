@@ -1,0 +1,41 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 50 0 50 61 *)
+
+let%span slevel2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 48 11 48 33
+let%span slevel2'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 49 10 49 33
+let%span slevel2'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 33 8 33 33
+let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
+
+use creusot.prelude.Any
+use seq.Seq
+use creusot.int.UInt8
+use creusot.int.UInt64
+use int.Int
+
+type t_Vec_u8_Global
+
+type t_MiniInProgress = { history: t_Vec_u8_Global }
+
+constant const_MAX: UInt64.t = (18446744073709551615: UInt64.t)
+
+function view_Vec_u8_Global (self: t_Vec_u8_Global) : Seq.seq UInt8.t
+
+axiom view_Vec_u8_Global_spec: forall self: t_Vec_u8_Global. [%#svec] Seq.length (view_Vec_u8_Global self)
+    <= UInt64.t'int const_MAX
+
+predicate sgc2_invariant [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 31 0 31 53] (inner: t_MiniInProgress) =
+  [%#slevel2'1] Seq.length (view_Vec_u8_Global inner.history) <= 9
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec sgc2_identity
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 50 0 50 61]
+  (inner: t_MiniInProgress) (return (x: t_MiniInProgress)) =
+  {[@stop_split] [@expl:sgc2_identity requires] [%#slevel2] sgc2_invariant inner}
+  (! bb0
+  [ bb0 = s0 [ s0 = [ &_ret <- inner ] s1 | s1 = return {_ret} ] ]
+  [ & _ret: t_MiniInProgress = Any.any_l () | & inner: t_MiniInProgress = inner ])
+  [ return (result: t_MiniInProgress) ->
+  {[@stop_split] [@expl:sgc2_identity ensures] [%#slevel2'0] sgc2_invariant result}
+    (! return {result}) ]

@@ -1,0 +1,200 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 58 0 64 55 *)
+
+let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
+let%span stictactoe_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 72 20 75 6
+let%span stictactoe_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 59 4 59 9
+let%span stictactoe_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 60 4 60 9
+let%span stictactoe_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 62 4 62 16
+let%span stictactoe_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 63 4 63 14
+let%span stictactoe_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 56 11 56 39
+let%span stictactoe_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 64 5 64 55
+let%span stictactoe_vsm'6 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 57 10 57 41
+let%span stictactoe_vsm'7 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 20 8 22 40
+
+use creusot.prelude.Any
+use seq.Seq
+use creusot.int.UInt64
+use int.Int
+
+type t_GameSetup
+
+type t_Position =
+  | TopLeft
+  | TopCenter
+  | TopRight
+  | MiddleLeft
+  | Center
+  | MiddleRight
+  | BottomLeft
+  | BottomCenter
+  | BottomRight
+
+type t_TttDisplayMode = Board | BoardWithCursor t_Position | BoardHistory
+
+type t_Board
+
+type t_Vec_Move_Global
+
+type t_Player = X | O
+
+type t_GameInProgress = { board: t_Board; history: t_Vec_Move_Global; to_move: t_Player }
+
+type t_Outcome = Winner t_Player | Draw
+
+type t_GameFinished = { board'0: t_Board; history'0: t_Vec_Move_Global; outcome'0: t_Outcome }
+
+type t_TicTacToeState =
+  | Setup t_GameSetup t_TttDisplayMode
+  | InProgress t_GameInProgress t_TttDisplayMode
+  | Finished t_GameFinished t_TttDisplayMode
+
+type t_Established_TicTacToeConsistent
+
+type tup2_TicTacToeState_Established_TicTacToeConsistent = {
+  f0: t_TicTacToeState;
+  f1: t_Established_TicTacToeConsistent }
+
+let rec elim_InProgress (_x: t_TicTacToeState) (return (inner: t_GameInProgress) (display_mode: t_TttDisplayMode)) = any
+  [ _k (inner: t_GameInProgress) (display_mode: t_TttDisplayMode) -> {InProgress inner display_mode = _x}
+    (! return {inner} {display_mode})
+  | _chk -> (! {[@expl:elim InProgress] match _x with
+      | InProgress _ _ -> true
+      | _ -> false
+      end}
+    any) ]
+
+type t_Established_SquareEmpty
+
+type t_Established_PlayerTurn
+
+type t_TicTacToeRulesEvidence = { square_empty: t_Established_SquareEmpty; player_turn: t_Established_PlayerTurn }
+
+predicate inv_Established_SquareEmpty (_1: t_Established_SquareEmpty)
+
+predicate inv_Established_PlayerTurn (_1: t_Established_PlayerTurn)
+
+predicate inv_TicTacToeRulesEvidence (_1: t_TicTacToeRulesEvidence)
+
+axiom inv_axiom [@rewrite]:
+  forall x: t_TicTacToeRulesEvidence [inv_TicTacToeRulesEvidence x]. inv_TicTacToeRulesEvidence x
+    = (inv_Established_SquareEmpty x.square_empty /\ inv_Established_PlayerTurn x.player_turn)
+
+predicate resolve_Established_SquareEmpty (_1: t_Established_SquareEmpty)
+
+predicate resolve_Established_PlayerTurn (_1: t_Established_PlayerTurn)
+
+predicate resolve_TicTacToeRulesEvidence (_1: t_TicTacToeRulesEvidence)
+
+axiom resolve_axiom [@rewrite]:
+  forall x: t_TicTacToeRulesEvidence [resolve_TicTacToeRulesEvidence x]. resolve_TicTacToeRulesEvidence x
+    = (resolve_Established_SquareEmpty x.square_empty /\ resolve_Established_PlayerTurn x.player_turn)
+
+type t_Move = { player: t_Player; position: t_Position }
+
+type t_GameResult = InProgress'0 t_GameInProgress | Finished'0 t_GameFinished
+
+type t_String
+
+type t_MoveError = SquareOccupied t_Position | WrongPlayer t_Player | InvariantViolation t_String
+
+type t_Result_GameResult_MoveError = Ok t_GameResult | Err t_MoveError
+
+predicate inv_GameSetup (_1: t_GameSetup)
+
+predicate inv_Board (_1: t_Board)
+
+predicate inv_GameInProgress (_1: t_GameInProgress)
+
+axiom inv_axiom'0 [@rewrite]: forall x: t_GameInProgress [inv_GameInProgress x]. inv_GameInProgress x
+    = inv_Board x.board
+
+predicate inv_GameFinished (_1: t_GameFinished)
+
+axiom inv_axiom'1 [@rewrite]: forall x: t_GameFinished [inv_GameFinished x]. inv_GameFinished x = inv_Board x.board'0
+
+predicate inv_TicTacToeState (_1: t_TicTacToeState)
+
+axiom inv_axiom'2 [@rewrite]: forall x: t_TicTacToeState [inv_TicTacToeState x]. inv_TicTacToeState x
+    = match x with
+      | Setup inner display_mode -> inv_GameSetup inner
+      | InProgress inner display_mode -> inv_GameInProgress inner
+      | Finished inner display_mode -> inv_GameFinished inner
+      end
+
+predicate inv_Established_TicTacToeConsistent (_1: t_Established_TicTacToeConsistent)
+
+constant const_MAX: UInt64.t = (18446744073709551615: UInt64.t)
+
+function view_Vec_Move_Global (self: t_Vec_Move_Global) : Seq.seq t_Move
+
+axiom view_Vec_Move_Global_spec: forall self: t_Vec_Move_Global. [%#svec] Seq.length (view_Vec_Move_Global self)
+    <= UInt64.t'int const_MAX
+
+predicate tictactoe_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 18 0 18 59] (state: t_TicTacToeState) =
+  [%#stictactoe_vsm'7] match state with
+    | Setup _ _ -> true
+    | InProgress inner _ -> Seq.length (view_Vec_Move_Global inner.history) <= 9
+    | Finished inner _ -> Seq.length (view_Vec_Move_Global inner.history'0) >= 5
+    end
+
+predicate inv_tup2_TicTacToeState_Established_TicTacToeConsistent [@inline:trivial] (_1: tup2_TicTacToeState_Established_TicTacToeConsistent) =
+  inv_TicTacToeState _1.f0 /\ inv_Established_TicTacToeConsistent _1.f1
+
+meta "rewrite_def" predicate inv_tup2_TicTacToeState_Established_TicTacToeConsistent
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec ttt_make_move__creusot
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 58 0 64 55]
+  (state: t_TicTacToeState) (proof: t_Established_TicTacToeConsistent) (mov: t_Move)
+  (square_proof: t_Established_SquareEmpty) (turn_proof: t_Established_PlayerTurn)
+  (return (x: tup2_TicTacToeState_Established_TicTacToeConsistent)) =
+  {[@stop_split] [@expl:ttt_make_move__creusot requires] ([@stop_split] [@expl:ttt_make_move__creusot 'state' type invariant] [%#stictactoe_vsm'0] inv_TicTacToeState state)
+  /\ ([@stop_split] [@expl:ttt_make_move__creusot 'proof' type invariant] [%#stictactoe_vsm'1] inv_Established_TicTacToeConsistent proof)
+  /\ ([@stop_split] [@expl:ttt_make_move__creusot 'square_proof' type invariant] [%#stictactoe_vsm'2] inv_Established_SquareEmpty square_proof)
+  /\ ([@stop_split] [@expl:ttt_make_move__creusot 'turn_proof' type invariant] [%#stictactoe_vsm'3] inv_Established_PlayerTurn turn_proof)
+  /\ ([@stop_split] [@expl:ttt_make_move__creusot requires] [%#stictactoe_vsm'4] tictactoe_consistent state)}
+  (! bb0
+  [ bb0 = any
+    [ br0 (x0: t_GameSetup) (x1: t_TttDisplayMode) -> {state = Setup x0 x1} (! bb1)
+    | br1 (x0: t_GameInProgress) (x1: t_TttDisplayMode) -> {state = InProgress x0 x1} (! bb4)
+    | br2 (x0: t_GameFinished) (x1: t_TttDisplayMode) -> {state = Finished x0 x1} (! bb1) ]
+  | bb1 = s0 [ s0 = [ &_ret <- { f0 = state; f1 = proof } ] s1 | s1 = return {_ret} ]
+  | bb4 = s0
+    [ s0 = elim_InProgress {state}
+        (fun (rinner: t_GameInProgress) (rdisplay_mode: t_TttDisplayMode) -> [ &game <- rinner ] s1)
+    | s1 = elim_InProgress {state}
+        (fun (rinner: t_GameInProgress) (rdisplay_mode: t_TttDisplayMode) -> [ &display_mode <- rdisplay_mode ] s2)
+    | s2 = [ &_18 <- { square_empty = square_proof; player_turn = turn_proof } ] s3
+    | s3 = s4 [ _ck -> (! {[@expl:type invariant] inv_TicTacToeRulesEvidence _18} any) ]
+    | s4 = -{resolve_TicTacToeRulesEvidence _18}- s5
+    | s5 = [ &_17 <- _18 ] s6
+    | s6 = {[%#stictactoe_vsm] false} any ] ]
+  [ & _ret: tup2_TicTacToeState_Established_TicTacToeConsistent = Any.any_l ()
+  | & state: t_TicTacToeState = state
+  | & proof: t_Established_TicTacToeConsistent = proof
+  | & mov: t_Move = mov
+  | & square_proof: t_Established_SquareEmpty = square_proof
+  | & turn_proof: t_Established_PlayerTurn = turn_proof
+  | & game: t_GameInProgress = Any.any_l ()
+  | & display_mode: t_TttDisplayMode = Any.any_l ()
+  | & new_proof: t_Established_TicTacToeConsistent = Any.any_l ()
+  | & _17: t_TicTacToeRulesEvidence = Any.any_l ()
+  | & _18: t_TicTacToeRulesEvidence = Any.any_l ()
+  | & _21: t_Result_GameResult_MoveError = Any.any_l ()
+  | & g: t_GameInProgress = Any.any_l ()
+  | & _27: t_TicTacToeState = Any.any_l ()
+  | & _28: t_GameInProgress = Any.any_l ()
+  | & _29: t_TttDisplayMode = Any.any_l ()
+  | & _30: t_Established_TicTacToeConsistent = Any.any_l ()
+  | & g'0: t_GameFinished = Any.any_l ()
+  | & _32: t_TicTacToeState = Any.any_l ()
+  | & _33: t_GameFinished = Any.any_l ()
+  | & _34: t_TttDisplayMode = Any.any_l ()
+  | & _35: t_Established_TicTacToeConsistent = Any.any_l () ])
+  [ return (result: tup2_TicTacToeState_Established_TicTacToeConsistent) ->
+  {[@stop_split] [@expl:ttt_make_move__creusot ensures] ([@stop_split] [@expl:ttt_make_move__creusot result type invariant] [%#stictactoe_vsm'5] inv_tup2_TicTacToeState_Established_TicTacToeConsistent result)
+    /\ ([@stop_split] [@expl:ttt_make_move__creusot ensures] [%#stictactoe_vsm'6] tictactoe_consistent result.f0)}
+    (! return {result}) ]

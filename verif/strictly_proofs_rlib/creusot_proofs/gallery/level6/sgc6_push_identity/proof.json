@@ -1,0 +1,10 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_sgc6_debit": { "prover": "alt-ergo", "time": 0.033 },
+      "vc_sgc6_push_identity": { "prover": "alt-ergo", "time": 0.054 },
+      "vc_sgc6_settle": { "prover": "alt-ergo", "time": 0.033 }
+    }
+  }
+}

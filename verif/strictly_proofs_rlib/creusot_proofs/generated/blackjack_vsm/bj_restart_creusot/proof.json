@@ -1,0 +1,13 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_bj_restart__creusot": { "prover": "alt-ergo", "time": 0.083 },
+      "vc_default_BlackjackDisplayMode": {
+        "prover": "alt-ergo",
+        "time": 0.046
+      },
+      "vc_default_GameSetup": { "prover": "alt-ergo", "time": 0.047 }
+    }
+  }
+}

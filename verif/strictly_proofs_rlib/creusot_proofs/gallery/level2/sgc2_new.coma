@@ -1,0 +1,50 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 41 0 41 35 *)
+
+let%span slevel2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 43 17 43 27
+let%span slevel2'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 38 11 38 15
+let%span slevel2'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 39 10 39 33
+let%span slevel2'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 40 10 40 36
+let%span slevel2'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 33 8 33 33
+let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 102 18 102 36
+let%span svec'0 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
+
+use seq.Seq
+use creusot.int.UInt8
+use creusot.int.UInt64
+use creusot.prelude.Any
+use int.Int
+
+type t_Vec_u8_Global
+
+constant const_MAX: UInt64.t = (18446744073709551615: UInt64.t)
+
+function view_Vec_u8_Global (self: t_Vec_u8_Global) : Seq.seq UInt8.t
+
+axiom view_Vec_u8_Global_spec: forall self: t_Vec_u8_Global. [%#svec'0] Seq.length (view_Vec_u8_Global self)
+    <= UInt64.t'int const_MAX
+
+let rec new_u8 (return (x: t_Vec_u8_Global)) = any
+  [ return (result: t_Vec_u8_Global) ->
+  {[@stop_split] [@expl:new ensures] [%#svec] Seq.length (view_Vec_u8_Global result) = 0}
+    (! return {result}) ]
+
+type t_MiniInProgress = { history: t_Vec_u8_Global }
+
+predicate sgc2_invariant [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 31 0 31 53] (inner: t_MiniInProgress) =
+  [%#slevel2'3] Seq.length (view_Vec_u8_Global inner.history) <= 9
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec sgc2_new
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level2.rs" 41 0 41 35]
+  (return (x: t_MiniInProgress)) = (! bb0
+  [ bb0 = s0
+    [ s0 = new_u8 [%#slevel2] (fun (_x: t_Vec_u8_Global) -> [ &_4 <- _x ] s1)
+    | s1 = [ &_ret <- { history = _4 } ] s2
+    | s2 = return {_ret} ] ] [ & _ret: t_MiniInProgress = Any.any_l () | & _4: t_Vec_u8_Global = Any.any_l () ])
+  [ return (result: t_MiniInProgress) ->
+  {[@stop_split] [@expl:sgc2_new ensures] ([@stop_split] [@expl:sgc2_new ensures #0] [%#slevel2'1] sgc2_invariant result)
+    /\ ([@stop_split] [@expl:sgc2_new ensures #1] [%#slevel2'2] Seq.length (view_Vec_u8_Global result.history) = 0)}
+    (! return {result}) ]

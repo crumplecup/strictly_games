@@ -167,9 +167,12 @@ impl GameInProgress {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameFinished {
-    board: Board,
-    history: Vec<Move>,
-    outcome: Outcome, // ✅ NOT Option
+    /// Final board state at game end.
+    pub board: Board,
+    /// Full move history for the completed game.
+    pub history: Vec<Move>,
+    /// The definitive game outcome (never None — guaranteed by typestate).
+    pub outcome: Outcome,
 }
 
 impl GameFinished {

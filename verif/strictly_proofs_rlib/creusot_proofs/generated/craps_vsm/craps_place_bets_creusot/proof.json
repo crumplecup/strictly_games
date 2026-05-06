@@ -1,0 +1,24 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_craps_place_bets__creusot": {
+        "tactic": "compute_specified",
+        "children": [
+          {
+            "tactic": "split_vc",
+            "children": [
+              null,
+              { "prover": "alt-ergo", "time": 0.042 },
+              { "prover": "alt-ergo", "time": 0.063 },
+              { "prover": "alt-ergo", "time": 0.055 },
+              { "prover": "alt-ergo", "time": 0.058 },
+              { "prover": "alt-ergo", "time": 0.043 }
+            ]
+          }
+        ]
+      },
+      "vc_elim_Betting": { "prover": "alt-ergo", "time": 0.035 }
+    }
+  }
+}

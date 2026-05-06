@@ -1,0 +1,23 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_elim_Finished": { "prover": "alt-ergo", "time": 0.029 },
+      "vc_ttt_restart__creusot": {
+        "tactic": "compute_specified",
+        "children": [
+          {
+            "tactic": "split_vc",
+            "children": [
+              { "prover": "alt-ergo", "time": 0.045 },
+              { "prover": "alt-ergo", "time": 0.05 },
+              null,
+              { "prover": "alt-ergo", "time": 0.046 },
+              { "prover": "alt-ergo", "time": 0.046 }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_bj_place_bet__creusot": {
+        "tactic": "compute_specified",
+        "children": [
+          {
+            "tactic": "split_vc",
+            "children": [
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.055 },
+              null,
+              { "prover": "alt-ergo", "time": 0.065 },
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.063 },
+              { "prover": "alt-ergo", "time": 0.061 },
+              { "prover": "alt-ergo", "time": 0.06 }
+            ]
+          }
+        ]
+      },
+      "vc_clone_GameBetting": { "prover": "alt-ergo", "time": 0.024 },
+      "vc_elim_Betting": { "prover": "alt-ergo", "time": 0.027 }
+    }
+  }
+}

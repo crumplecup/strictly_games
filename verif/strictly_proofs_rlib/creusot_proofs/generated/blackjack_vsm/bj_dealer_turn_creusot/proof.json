@@ -1,0 +1,25 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_bj_dealer_turn__creusot": {
+        "tactic": "compute_specified",
+        "children": [
+          {
+            "tactic": "split_vc",
+            "children": [
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.065 },
+              null,
+              { "prover": "alt-ergo", "time": 0.061 },
+              { "prover": "alt-ergo", "time": 0.058 },
+              { "prover": "alt-ergo", "time": 0.059 }
+            ]
+          }
+        ]
+      },
+      "vc_elim_DealerTurn": { "prover": "alt-ergo", "time": 0.026 }
+    }
+  }
+}

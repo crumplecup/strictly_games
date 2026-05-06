@@ -1,0 +1,9 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_inline_gross_return": { "prover": "alt-ergo", "time": 0.027 },
+      "vc_verify_loss_deduction": { "prover": "alt-ergo", "time": 0.056 }
+    }
+  }
+}

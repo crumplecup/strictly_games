@@ -1,0 +1,26 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_bj_player_action__creusot": {
+        "tactic": "compute_specified",
+        "children": [
+          {
+            "tactic": "split_vc",
+            "children": [
+              { "prover": "alt-ergo", "time": 0.061 },
+              { "prover": "alt-ergo", "time": 0.056 },
+              null,
+              { "prover": "alt-ergo", "time": 0.043 },
+              { "prover": "alt-ergo", "time": 0.063 },
+              { "prover": "alt-ergo", "time": 0.056 },
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.056 }
+            ]
+          }
+        ]
+      },
+      "vc_elim_PlayerTurn": { "prover": "alt-ergo", "time": 0.026 }
+    }
+  }
+}

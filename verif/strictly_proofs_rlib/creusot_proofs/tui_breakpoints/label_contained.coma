@@ -2,9 +2,9 @@
 
 let%span stui_breakpoints = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 58 45 58 46
 let%span stui_breakpoints'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/tui_breakpoints.rs" 58 19 58 47
-let%span snum = "/home/erik/repos/creusot/creusot-std/src/std/num.rs" 325 20 326 51
-let%span snum'0 = "/home/erik/repos/creusot/creusot-std/src/std/num.rs" 329 26 329 83
-let%span snum'1 = "/home/erik/repos/creusot/creusot-std/src/std/num.rs" 330 26 330 83
+let%span snum = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/num.rs" 325 20 326 51
+let%span snum'0 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/num.rs" 329 26 329 83
+let%span snum'1 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/num.rs" 330 26 330 83
 
 use creusot.int.UInt64
 use creusot.prelude.Any

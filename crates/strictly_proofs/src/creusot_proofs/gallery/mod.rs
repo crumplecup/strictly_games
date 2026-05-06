@@ -12,9 +12,11 @@
 //! | SGC3  | Vec push transition preserving `@.len() <= 9`   |
 //! | SGC4  | Full multi-state lifecycle, typestate wrappers   |
 //! | SGC5  | Cross-crate real `TicTacToeState` field access   |
+//! | SGC6  | Cross-crate enum + inlined arithmetic proofs     |
 
 pub mod level1;
 pub mod level2;
 pub mod level3;
 pub mod level4;
 pub mod level5;
+pub mod level6;

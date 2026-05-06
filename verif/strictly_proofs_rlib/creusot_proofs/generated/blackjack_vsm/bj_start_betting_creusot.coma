@@ -1,0 +1,231 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 37 0 41 55 *)
+
+let%span sblackjack_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 51 19 51 56
+let%span sblackjack_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 38 4 38 9
+let%span sblackjack_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 39 4 39 9
+let%span sblackjack_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 35 11 35 39
+let%span sblackjack_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 41 5 41 55
+let%span sblackjack_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 36 10 36 41
+let%span sblackjack_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 20 8 24 29
+let%span shand = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/hand.rs" 19 0 19 33
+let%span sarray = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/array.rs" 9 20 9 51
+let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
+let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
+
+use creusot.int.UInt64
+use creusot.slice.Slice64
+use creusot.prelude.Any
+use seq.Seq
+use int.Int
+
+type t_GameSetup
+
+type t_BlackjackDisplayMode = Table | Scorecard
+
+type t_Shoe
+
+type t_GameBetting = { shoe: t_Shoe; bankroll: UInt64.t }
+
+type t_Hand
+
+type t_BankrollLedger = { post_bet_balance: UInt64.t; bet: UInt64.t }
+
+type t_Established_BetDeducted
+
+type t_GamePlayerTurn = {
+  shoe'0: t_Shoe;
+  player_hands'0: Slice64.array t_Hand;
+  num_hands'0: UInt64.t;
+  current_hand_index'0: UInt64.t;
+  dealer_hand'0: t_Hand;
+  bets'0: Slice64.array UInt64.t;
+  ledger'0: t_BankrollLedger;
+  bet_deducted'0: t_Established_BetDeducted }
+
+type t_GameDealerTurn = {
+  shoe'1: t_Shoe;
+  player_hands'1: Slice64.array t_Hand;
+  num_hands'1: UInt64.t;
+  dealer_hand'1: t_Hand;
+  bets'1: Slice64.array UInt64.t;
+  ledger'1: t_BankrollLedger;
+  bet_deducted'1: t_Established_BetDeducted }
+
+type t_Outcome = Win | Blackjack | Push | Loss | Surrender
+
+type t_GameFinished = {
+  player_hands'2: Slice64.array t_Hand;
+  num_hands'2: UInt64.t;
+  dealer_hand'2: t_Hand;
+  bets'2: Slice64.array UInt64.t;
+  outcomes'2: Slice64.array t_Outcome;
+  bankroll'2: UInt64.t }
+
+type t_BlackjackState =
+  | Setup t_GameSetup t_BlackjackDisplayMode
+  | Betting t_GameBetting t_BlackjackDisplayMode
+  | PlayerTurn t_GamePlayerTurn t_BlackjackDisplayMode
+  | DealerTurn t_GameDealerTurn t_BlackjackDisplayMode
+  | Finished t_GameFinished t_BlackjackDisplayMode
+
+type t_Established_BlackjackConsistent
+
+type tup2_BlackjackState_Established_BlackjackConsistent = {
+  f0: t_BlackjackState;
+  f1: t_Established_BlackjackConsistent }
+
+let rec elim_Setup (_x: t_BlackjackState) (return (inner: t_GameSetup) (display_mode: t_BlackjackDisplayMode)) = any
+  [ _k (inner: t_GameSetup) (display_mode: t_BlackjackDisplayMode) -> {Setup inner display_mode = _x}
+    (! return {inner} {display_mode})
+  | _chk -> (! {[@expl:elim Setup] match _x with
+      | Setup _ _ -> true
+      | _ -> false
+      end}
+    any) ]
+
+predicate inv_GameSetup (_1: t_GameSetup)
+
+predicate inv_Shoe (_1: t_Shoe)
+
+predicate inv_GameBetting (_1: t_GameBetting)
+
+axiom inv_axiom [@rewrite]: forall x: t_GameBetting [inv_GameBetting x]. inv_GameBetting x = inv_Shoe x.shoe
+
+predicate inv_Hand (_1: t_Hand)
+
+predicate invariant_ref_Hand [@inline:trivial] (self: t_Hand) = [%#sinvariant] inv_Hand self
+
+meta "rewrite_def" predicate invariant_ref_Hand
+
+predicate inv_ref_Hand [@inline:trivial] (_1: t_Hand) = invariant_ref_Hand _1
+
+meta "rewrite_def" predicate inv_ref_Hand
+
+predicate invariant_Seq_Hand [@inline:trivial] (self: Seq.seq t_Hand) =
+  [%#sseq] forall i: int. 0 <= i /\ i < Seq.length self -> inv_ref_Hand (Seq.get self i)
+
+meta "rewrite_def" predicate invariant_Seq_Hand
+
+predicate inv_Seq_Hand [@inline:trivial] (_1: Seq.seq t_Hand) = invariant_Seq_Hand _1
+
+meta "rewrite_def" predicate inv_Seq_Hand
+
+predicate invariant_array_Hand_4 (self: Slice64.array t_Hand) =
+  [%#sarray] inv_Seq_Hand (Slice64.view self) /\ Seq.length (Slice64.view self) = UInt64.t'int (4: UInt64.t)
+
+predicate inv_array_Hand_4 [@inline:trivial] (_1: Slice64.array t_Hand) = invariant_array_Hand_4 _1
+
+meta "rewrite_def" predicate inv_array_Hand_4
+
+predicate inv_Seq_u64 [@inline:trivial] (_1: Seq.seq UInt64.t) = true
+
+meta "rewrite_def" predicate inv_Seq_u64
+
+predicate invariant_array_u64_4 (self: Slice64.array UInt64.t) =
+  [%#sarray] inv_Seq_u64 (Slice64.view self) /\ Seq.length (Slice64.view self) = UInt64.t'int (4: UInt64.t)
+
+predicate inv_array_u64_4 [@inline:trivial] (_1: Slice64.array UInt64.t) = invariant_array_u64_4 _1
+
+meta "rewrite_def" predicate inv_array_u64_4
+
+predicate inv_Established_BetDeducted (_1: t_Established_BetDeducted)
+
+predicate inv_GamePlayerTurn (_1: t_GamePlayerTurn)
+
+axiom inv_axiom'0 [@rewrite]: forall x: t_GamePlayerTurn [inv_GamePlayerTurn x]. inv_GamePlayerTurn x
+    = (inv_Shoe x.shoe'0
+    /\ inv_array_Hand_4 x.player_hands'0
+    /\ inv_Hand x.dealer_hand'0 /\ inv_array_u64_4 x.bets'0 /\ inv_Established_BetDeducted x.bet_deducted'0)
+
+predicate inv_GameDealerTurn (_1: t_GameDealerTurn)
+
+axiom inv_axiom'1 [@rewrite]: forall x: t_GameDealerTurn [inv_GameDealerTurn x]. inv_GameDealerTurn x
+    = (inv_Shoe x.shoe'1
+    /\ inv_array_Hand_4 x.player_hands'1
+    /\ inv_Hand x.dealer_hand'1 /\ inv_array_u64_4 x.bets'1 /\ inv_Established_BetDeducted x.bet_deducted'1)
+
+predicate inv_Seq_Outcome [@inline:trivial] (_1: Seq.seq t_Outcome) = true
+
+meta "rewrite_def" predicate inv_Seq_Outcome
+
+predicate invariant_array_Outcome_4 (self: Slice64.array t_Outcome) =
+  [%#sarray] inv_Seq_Outcome (Slice64.view self) /\ Seq.length (Slice64.view self) = UInt64.t'int (4: UInt64.t)
+
+predicate inv_array_Outcome_4 [@inline:trivial] (_1: Slice64.array t_Outcome) = invariant_array_Outcome_4 _1
+
+meta "rewrite_def" predicate inv_array_Outcome_4
+
+predicate inv_GameFinished (_1: t_GameFinished)
+
+axiom inv_axiom'2 [@rewrite]: forall x: t_GameFinished [inv_GameFinished x]. inv_GameFinished x
+    = (inv_array_Hand_4 x.player_hands'2
+    /\ inv_Hand x.dealer_hand'2 /\ inv_array_u64_4 x.bets'2 /\ inv_array_Outcome_4 x.outcomes'2)
+
+predicate inv_BlackjackState (_1: t_BlackjackState)
+
+axiom inv_axiom'3 [@rewrite]: forall x: t_BlackjackState [inv_BlackjackState x]. inv_BlackjackState x
+    = match x with
+      | Setup inner display_mode -> inv_GameSetup inner
+      | Betting inner display_mode -> inv_GameBetting inner
+      | PlayerTurn inner display_mode -> inv_GamePlayerTurn inner
+      | DealerTurn inner display_mode -> inv_GameDealerTurn inner
+      | Finished inner display_mode -> inv_GameFinished inner
+      end
+
+predicate inv_Established_BlackjackConsistent (_1: t_Established_BlackjackConsistent)
+
+constant const_MAX_PLAYER_HANDS: UInt64.t = [%#shand] (4: UInt64.t)
+
+predicate blackjack_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 18 0 18 59] (state: t_BlackjackState) =
+  [%#sblackjack_vsm'5] match state with
+    | Setup _ _ -> true
+    | Betting inner _ -> UInt64.t'int inner.bankroll > 0
+    | PlayerTurn inner _ -> UInt64.t'int inner.current_hand_index'0 < UInt64.t'int inner.num_hands'0
+    | DealerTurn _ _ -> true
+    | Finished inner _ -> UInt64.t'int inner.num_hands'2 <= UInt64.t'int const_MAX_PLAYER_HANDS
+    end
+
+predicate inv_tup2_BlackjackState_Established_BlackjackConsistent [@inline:trivial] (_1: tup2_BlackjackState_Established_BlackjackConsistent) =
+  inv_BlackjackState _1.f0 /\ inv_Established_BlackjackConsistent _1.f1
+
+meta "rewrite_def" predicate inv_tup2_BlackjackState_Established_BlackjackConsistent
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec bj_start_betting__creusot
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 37 0 41 55]
+  (state: t_BlackjackState) (proof: t_Established_BlackjackConsistent) (initial_bankroll: UInt64.t)
+  (return (x: tup2_BlackjackState_Established_BlackjackConsistent)) =
+  {[@stop_split] [@expl:bj_start_betting__creusot requires] ([@stop_split] [@expl:bj_start_betting__creusot 'state' type invariant] [%#sblackjack_vsm'0] inv_BlackjackState state)
+  /\ ([@stop_split] [@expl:bj_start_betting__creusot 'proof' type invariant] [%#sblackjack_vsm'1] inv_Established_BlackjackConsistent proof)
+  /\ ([@stop_split] [@expl:bj_start_betting__creusot requires] [%#sblackjack_vsm'2] blackjack_consistent state)}
+  (! bb0
+  [ bb0 = any
+    [ br0 (x0: t_GameSetup) (x1: t_BlackjackDisplayMode) -> {state = Setup x0 x1} (! bb4)
+    | br1 (x0: t_GameBetting) (x1: t_BlackjackDisplayMode) -> {state = Betting x0 x1} (! bb1)
+    | br2 (x0: t_GamePlayerTurn) (x1: t_BlackjackDisplayMode) -> {state = PlayerTurn x0 x1} (! bb1)
+    | br3 (x0: t_GameDealerTurn) (x1: t_BlackjackDisplayMode) -> {state = DealerTurn x0 x1} (! bb1)
+    | br4 (x0: t_GameFinished) (x1: t_BlackjackDisplayMode) -> {state = Finished x0 x1} (! bb1) ]
+  | bb1 = s0 [ s0 = [ &_ret <- { f0 = state; f1 = proof } ] s1 | s1 = return {_ret} ]
+  | bb4 = s0
+    [ s0 = elim_Setup {state}
+        (fun (rinner: t_GameSetup) (rdisplay_mode: t_BlackjackDisplayMode) -> [ &setup <- rinner ] s1)
+    | s1 = elim_Setup {state}
+        (fun (rinner: t_GameSetup) (rdisplay_mode: t_BlackjackDisplayMode) -> [ &display_mode <- rdisplay_mode ] s2)
+    | s2 = {[%#sblackjack_vsm] false} any ] ]
+  [ & _ret: tup2_BlackjackState_Established_BlackjackConsistent = Any.any_l ()
+  | & state: t_BlackjackState = state
+  | & proof: t_Established_BlackjackConsistent = proof
+  | & initial_bankroll: UInt64.t = initial_bankroll
+  | & setup: t_GameSetup = Any.any_l ()
+  | & display_mode: t_BlackjackDisplayMode = Any.any_l ()
+  | & _13: t_BlackjackState = Any.any_l ()
+  | & _14: t_GameBetting = Any.any_l ()
+  | & _17: t_BlackjackDisplayMode = Any.any_l ()
+  | & _18: t_Established_BlackjackConsistent = Any.any_l () ])
+  [ return (result: tup2_BlackjackState_Established_BlackjackConsistent) ->
+  {[@stop_split] [@expl:bj_start_betting__creusot ensures] ([@stop_split] [@expl:bj_start_betting__creusot result type invariant] [%#sblackjack_vsm'3] inv_tup2_BlackjackState_Established_BlackjackConsistent result)
+    /\ ([@stop_split] [@expl:bj_start_betting__creusot ensures] [%#sblackjack_vsm'4] blackjack_consistent result.f0)}
+    (! return {result}) ]

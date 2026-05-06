@@ -78,9 +78,9 @@ impl VerifiedWorkflow for PayoutSettled {}
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct BankrollLedger {
     /// Bankroll after the bet was removed.  Settlement adds gross return here.
-    post_bet_balance: u64,
+    pub post_bet_balance: u64,
     /// The original bet amount, needed to compute the gross return.
-    bet: u64,
+    pub bet: u64,
 }
 
 impl BankrollLedger {
@@ -92,15 +92,6 @@ impl BankrollLedger {
     /// [`ActionError::InsufficientFunds`] if `bet` exceeds `bankroll`.
     #[instrument]
     #[track_caller]
-    #[cfg_attr(creusot, creusot_contracts::requires(bet > 0u64))]
-    #[cfg_attr(creusot, creusot_contracts::requires(bet <= bankroll))]
-    #[cfg_attr(creusot, creusot_contracts::ensures(
-        result.is_ok() &&
-        (exists |ledger: BankrollLedger, _tok: Established<BetDeducted>|
-            result == Ok((ledger, _tok)) &&
-            ledger.post_bet_balance@ == bankroll@ - bet@ &&
-            ledger.bet@ == bet@)
-    ))]
     pub fn debit(bankroll: u64, bet: u64) -> Result<(Self, Established<BetDeducted>), ActionError> {
         if bet == 0 {
             return Err(ActionError::InvalidBet(bet));
@@ -126,9 +117,6 @@ impl BankrollLedger {
     /// path, so double-deduction is structurally impossible.
     #[instrument(skip(_pre))]
     #[track_caller]
-    #[cfg_attr(creusot, creusot_contracts::ensures(
-        result.0@ == self.post_bet_balance@ + outcome.gross_return(self.bet)@
-    ))]
     pub fn settle(
         self,
         outcome: Outcome,

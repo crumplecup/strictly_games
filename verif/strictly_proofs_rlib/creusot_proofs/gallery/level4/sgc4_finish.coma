@@ -1,0 +1,69 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 143 0 143 49 *)
+
+let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
+let%span slevel4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 141 11 141 58
+let%span slevel4'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 142 10 142 33
+let%span slevel4'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 69 8 73 9
+let%span slevel4'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 92 8 95 9
+
+use creusot.prelude.Any
+use seq.Seq
+use creusot.int.UInt8
+use creusot.int.UInt64
+use int.Int
+
+type t_Vec_u8_Global
+
+type t_MiniInProgress = { history: t_Vec_u8_Global }
+
+type t_MiniState = Setup | InProgress t_MiniInProgress | Done t_MiniInProgress
+
+let rec elim_InProgress (_x: t_MiniState) (return (inner: t_MiniInProgress)) = any
+  [ _k (inner: t_MiniInProgress) -> {InProgress inner = _x} (! return {inner})
+  | _chk -> (! {[@expl:elim InProgress] match _x with
+      | InProgress _ -> true
+      | _ -> false
+      end}
+    any) ]
+
+constant const_MAX: UInt64.t = (18446744073709551615: UInt64.t)
+
+function view_Vec_u8_Global (self: t_Vec_u8_Global) : Seq.seq UInt8.t
+
+axiom view_Vec_u8_Global_spec: forall self: t_Vec_u8_Global. [%#svec] Seq.length (view_Vec_u8_Global self)
+    <= UInt64.t'int const_MAX
+
+predicate sgc4_invariant [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 67 0 67 48] (state: t_MiniState) =
+  [%#slevel4'1] match state with
+    | Setup -> true
+    | InProgress inner -> Seq.length (view_Vec_u8_Global inner.history) <= 9
+    | Done inner -> Seq.length (view_Vec_u8_Global inner.history) >= 1
+    end
+
+predicate sgc4_has_move [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 90 0 90 47] (state: t_MiniState) =
+  [%#slevel4'2] match state with
+    | InProgress inner -> Seq.length (view_Vec_u8_Global inner.history) >= 1
+    | _ -> false
+    end
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec sgc4_finish
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level4.rs" 143 0 143 49]
+  (state: t_MiniState) (return (x: t_MiniState)) =
+  {[@stop_split] [@expl:sgc4_finish requires] [%#slevel4] sgc4_invariant state /\ sgc4_has_move state}
+  (! bb0
+  [ bb0 = any
+    [ br0 -> {state = Setup} (! bb1)
+    | br1 (x0: t_MiniInProgress) -> {state = InProgress x0} (! bb3)
+    | br2 (x0: t_MiniInProgress) -> {state = Done x0} (! bb1) ]
+  | bb1 = s0 [ s0 = [ &_ret <- state ] s1 | s1 = return {_ret} ]
+  | bb3 = s0
+    [ s0 = elim_InProgress {state} (fun (rinner: t_MiniInProgress) -> [ &inner <- rinner ] s1)
+    | s1 = [ &_ret <- Done inner ] s2
+    | s2 = return {_ret} ] ]
+  [ & _ret: t_MiniState = Any.any_l () | & state: t_MiniState = state | & inner: t_MiniInProgress = Any.any_l () ])
+  [ return (result: t_MiniState) -> {[@stop_split] [@expl:sgc4_finish ensures] [%#slevel4'0] sgc4_invariant result}
+    (! return {result}) ]

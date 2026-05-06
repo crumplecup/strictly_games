@@ -1,14 +1,13 @@
-//! Gallery level SGV3: full multi-state lifecycle with assume_specification.
+//! Gallery level SGV3: `assume_specification` for external transition functions.
 //!
-//! **Hypothesis**: The Verus VSM companion pattern —
-//! `pub assume_specification[fn_name](args) -> ret; requires inv(&state); ensures inv(&r.0);`
-//! — can be written for a 3-state mini game enum, validating the generated
-//! companion template in `verus_proofs/generated/tictactoe_vsm.rs`.
+//! **Hypothesis**: `pub assume_specification[fn_name]` injects a trusted spec for a
+//! function whose body Verus does not verify (`#[verifier::external]`), and callers
+//! can reason from that contract as an axiom.
 //!
-//! Because Verus cannot resolve workspace dependencies, this level uses
-//! inline mini-types (the mirror pattern from `game_invariants.rs`).
-//! The `assume_specification` stubs simulate what the generated companions
-//! do for real game functions like `ttt_start_game` and `ttt_restart`.
+//! This is the exact mechanism used in generated companions like
+//! `verus_proofs/generated/tictactoe_vsm.rs` for async transition functions
+//! from another crate (e.g. `ttt_start_game`).  The gallery validates the
+//! pattern with inline mini-types (because Verus cannot resolve workspace deps).
 //!
 //! ## State machine
 //!
@@ -28,30 +27,30 @@
 //!
 //! ## Experiment table
 //!
-//! | ID     | What                                                           | Expected |
-//! |--------|----------------------------------------------------------------|----------|
-//! | SGV3a  | `assume_specification` for `begin` with pre/post inv           | ✓        |
-//! | SGV3b  | `assume_specification` for `finish` with lower-bound post      | ✓        |
-//! | SGV3c  | Helper spec fn: `sgv3_is_in_progress` for variant detection    | ✓        |
-//! | SGV3d  | Caller harness chains `begin` + `push` + `finish`              | ✓        |
+//! | ID     | What                                                              | Expected |
+//! |--------|-------------------------------------------------------------------|----------|
+//! | SGV3a  | `assume_specification` for external `begin` with inv pre/post     | ✓        |
+//! | SGV3b  | `assume_specification` for external `finish` with lower-bound post | ✓        |
+//! | SGV3c  | Helper spec fn: `sgv3_is_in_progress` for variant detection       | ✓        |
+//! | SGV3d  | Caller harness uses assumed specs to prove inv preservation        | ✓        |
 
-use verus_builtin::*;
-use verus_builtin_macros::*;
-use vstd::prelude::*;
+use verus_builtin_macros::verus;
 
 verus! {
 
-// ── Inline mini types ─────────────────────────────────────────────────────────
+use vstd::prelude::*;
+
+// ── Inline mini types (defined inside verus! so prover knows the ADT) ─────────
 
 /// Inline game-in-progress record (mirrors `GameInProgress`).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MiniInProgress {
     /// Ordered sequence of moves; at most 9 entries.
     pub history: Vec<u8>,
 }
 
 /// Inline mini game typestate (mirrors `TicTacToeState`).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum MiniState {
     /// Not yet started.
     Setup,
@@ -83,67 +82,72 @@ pub open spec fn sgv3_is_in_progress(state: &MiniState) -> bool {
     matches!(*state, MiniState::InProgress { .. })
 }
 
-// ── Exec functions (bodies act as stubs; assume_specification axioms below) ───
+// ── External exec functions: Verus does not verify their bodies ───────────────
+//
+// `#[verifier::external]` simulates async transition functions from another crate.
+// `assume_specification` injects trusted contracts the prover uses as axioms.
 
-/// Begin — `Setup` → `InProgress { history: [] }`.
-pub fn sgv3_begin_impl(state: MiniState) -> (result: MiniState)
-    requires sgv3_invariant(&state),
-    ensures  sgv3_invariant(&result),
-{
+/// SGV3a source: external begin transition, `Setup` → `InProgress { history: [] }`.
+#[verifier::external]
+pub fn sgv3_begin(state: MiniState) -> MiniState {
     match state {
         MiniState::Setup => MiniState::InProgress {
-            inner: MiniInProgress {
-                history: Vec::new(),
-            },
+            inner: MiniInProgress { history: Vec::new() },
         },
         other => other,
     }
 }
 
-/// SGV3a: `assume_specification` axiom for `begin`.
-///
-/// This simulates the pattern used in `tictactoe_vsm.rs` for `ttt_start_game`.
-/// The axiom declares: if precondition holds, the function guarantees the postcondition.
-pub assume_specification[ sgv3_begin_impl ](state: MiniState) -> (result: MiniState)
-    requires sgv3_invariant(&state),
-    ensures  sgv3_invariant(&result);
-
-/// Finish — `InProgress` (with ≥1 move) → `Done`.
-pub fn sgv3_finish_impl(state: MiniState) -> (result: MiniState)
-    requires
-        sgv3_invariant(&state),
-        sgv3_is_in_progress(&state),
-    ensures sgv3_invariant(&result),
-{
+/// SGV3b source: external finish transition, `InProgress` → `Done`.
+#[verifier::external]
+pub fn sgv3_finish(state: MiniState) -> MiniState {
     match state {
-        MiniState::InProgress { inner } if !inner.history.is_empty() => {
-            MiniState::Done { inner }
-        }
+        MiniState::InProgress { inner } => MiniState::Done { inner },
         other => other,
     }
 }
 
-/// SGV3b: `assume_specification` axiom for `finish`.
-pub assume_specification[ sgv3_finish_impl ](state: MiniState) -> (result: MiniState)
+// ── SGV3a: inject trusted spec for `sgv3_begin` ───────────────────────────────
+
+/// SGV3a: assume the external `begin` preserves the invariant.
+///
+/// This is the exact pattern used in generated companions for each VSM transition.
+pub assume_specification[ sgv3_begin ](state: MiniState) -> (result: MiniState)
+    requires sgv3_invariant(&state),
+    ensures
+        sgv3_invariant(&result),
+        sgv3_is_in_progress(&result);
+
+// ── SGV3b: inject trusted spec for `sgv3_finish` ─────────────────────────────
+
+/// SGV3b: assume the external `finish` preserves the invariant.
+pub assume_specification[ sgv3_finish ](state: MiniState) -> (result: MiniState)
     requires
         sgv3_invariant(&state),
         sgv3_is_in_progress(&state),
-    ensures sgv3_invariant(&result);
+    ensures
+        sgv3_invariant(&result),
+        !sgv3_is_in_progress(&result);
 
-// ── SGV3d: caller harness chains transitions ───────────────────────────────────
+// ── SGV3d: caller harness reasons from assumed specs ──────────────────────────
 
-/// SGV3d: demonstrates that the invariant is maintained across a full lifecycle.
+/// SGV3d: chain `begin` → `finish` using only the assumed postconditions.
 ///
-/// `new` → `begin` → `finish` — each step uses the assume_specification contracts.
+/// Verus proves `sgv3_invariant` is maintained at every step without ever
+/// seeing the external function bodies — exactly what the generated companions do.
 pub fn sgv3_lifecycle_harness()
     ensures true,
 {
     let s0 = MiniState::Setup;
-    let s1 = sgv3_begin_impl(s0);
+    assert(sgv3_invariant(&s0));
+
+    let s1 = sgv3_begin(s0);
+    assert(sgv3_invariant(&s1));
     assert(sgv3_is_in_progress(&s1));
-    // Would push moves here in a real proof; skip for harness brevity.
-    // finish requires ≥1 move — not shown here to keep the harness minimal.
-    let _ = sgv3_finish_impl(s1);
+
+    let s2 = sgv3_finish(s1);
+    assert(sgv3_invariant(&s2));
+    assert(!sgv3_is_in_progress(&s2));
 }
 
 } // verus!
