@@ -1,5 +1,7 @@
 //! Verus formal verification proofs for strictly_games.
 
+pub mod gallery;
+
 pub mod bankroll_financial;
 pub mod compositional_proof;
 pub mod game_invariants;

@@ -1,6 +1,9 @@
 //! Creusot formal verification proofs for strictly_games.
 
 #[cfg(creusot)]
+pub mod gallery;
+
+#[cfg(creusot)]
 pub mod bankroll_financial;
 
 #[cfg(creusot)]
