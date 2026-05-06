@@ -17,7 +17,12 @@ use crate::BetsPlaced;
 /// Wired to [`CrapsRulesEvidence`]: formal-method harnesses call
 /// `Established::prove(&CrapsConsistent::kani_proof_credential())`.
 #[derive(elicitation::Prop)]
-#[prop(credential = CrapsRulesEvidence)]
+#[prop(
+    credential = CrapsRulesEvidence,
+    kani_invariant_fn = "craps_consistent",
+    creusot_invariant_fn = "craps_consistent",
+    verus_invariant_fn = "craps_consistent"
+)]
 pub struct CrapsConsistent;
 
 impl VerifiedWorkflow for CrapsConsistent {}

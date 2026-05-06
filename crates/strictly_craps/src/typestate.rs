@@ -35,10 +35,10 @@ pub const MAX_ROLLS_PER_ROUND: usize = 100;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameSetup {
-    /// Number of seats at the table.
-    num_seats: usize,
-    /// Maximum odds multiple allowed.
-    max_odds: u8,
+    /// Number of seats at the table (capped at `MAX_SEATS`).
+    pub num_seats: usize,
+    /// Maximum odds multiple allowed (e.g. 3 = 3× odds).
+    pub max_odds: u8,
 }
 
 impl GameSetup {
@@ -85,11 +85,11 @@ impl Default for GameSetup {
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameBetting {
     /// Current bankrolls for each seat.
-    bankrolls: Vec<u64>,
+    pub bankrolls: Vec<u64>,
     /// Maximum odds multiple.
-    max_odds: u8,
-    /// Index of the current shooter.
-    shooter_idx: usize,
+    pub max_odds: u8,
+    /// Index of the current shooter (< `bankrolls.len()`).
+    pub shooter_idx: usize,
 }
 
 impl GameBetting {
@@ -131,13 +131,13 @@ impl GameBetting {
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameComeOut {
     /// Current bankrolls.
-    bankrolls: Vec<u64>,
+    pub bankrolls: Vec<u64>,
     /// Active bets per seat.
-    seat_bets: Vec<Vec<ActiveBet>>,
+    pub seat_bets: Vec<Vec<ActiveBet>>,
     /// Maximum odds multiple.
-    max_odds: u8,
-    /// Current shooter.
-    shooter_idx: usize,
+    pub max_odds: u8,
+    /// Current shooter (< `bankrolls.len()`).
+    pub shooter_idx: usize,
 }
 
 impl GameComeOut {
@@ -211,17 +211,17 @@ pub enum ComeOutResult {
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GamePointPhase {
     /// Current bankrolls.
-    bankrolls: Vec<u64>,
+    pub bankrolls: Vec<u64>,
     /// Active bets per seat.
-    seat_bets: Vec<Vec<ActiveBet>>,
+    pub seat_bets: Vec<Vec<ActiveBet>>,
     /// The established point (immutable).
-    point: Point,
+    pub point: Point,
     /// All rolls this round.
-    roll_history: Vec<DiceRoll>,
+    pub roll_history: Vec<DiceRoll>,
     /// Maximum odds multiple.
-    max_odds: u8,
-    /// Current shooter.
-    shooter_idx: usize,
+    pub max_odds: u8,
+    /// Current shooter (< `bankrolls.len()`).
+    pub shooter_idx: usize,
 }
 
 impl GamePointPhase {
@@ -307,17 +307,17 @@ pub enum PointRollResult {
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameResolved {
     /// Bankrolls before settlement.
-    bankrolls: Vec<u64>,
+    pub bankrolls: Vec<u64>,
     /// Active bets per seat at resolution time.
-    seat_bets: Vec<Vec<ActiveBet>>,
+    pub seat_bets: Vec<Vec<ActiveBet>>,
     /// The point that was established (None if resolved on come-out).
-    point: Option<Point>,
+    pub point: Option<Point>,
     /// Complete roll history for this round.
-    roll_history: Vec<DiceRoll>,
-    /// The shooter for this round.
-    shooter_idx: usize,
+    pub roll_history: Vec<DiceRoll>,
+    /// The shooter for this round (< `bankrolls.len()`).
+    pub shooter_idx: usize,
     /// Max odds (carried for next round).
-    max_odds: u8,
+    pub max_odds: u8,
 }
 
 impl GameResolved {

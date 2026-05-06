@@ -126,7 +126,12 @@ pub fn execute_move(mov: &Move, game: &mut GameInProgress, _proof: Established<L
 /// Wired to [`TicTacToeRulesEvidence`]: formal-method harnesses call
 /// `Established::prove(&TicTacToeConsistent::kani_proof_credential())`.
 #[derive(elicitation::Prop)]
-#[prop(credential = TicTacToeRulesEvidence)]
+#[prop(
+    credential = TicTacToeRulesEvidence,
+    kani_invariant_fn = "tictactoe_consistent",
+    creusot_invariant_fn = "tictactoe_consistent",
+    verus_invariant_fn = "tictactoe_consistent"
+)]
 pub struct TicTacToeConsistent;
 
 impl VerifiedWorkflow for TicTacToeConsistent {}

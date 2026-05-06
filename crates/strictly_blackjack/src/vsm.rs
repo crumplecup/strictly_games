@@ -293,3 +293,44 @@ pub fn bj_restart(
         proof,
     )
 }
+
+// ── Invariant Predicate ───────────────────────────────────────────────────────
+
+/// Structural invariant predicate for [`BlackjackState`].
+///
+/// Runtime-evaluable form of [`crate::contracts::BlackjackConsistent`] used by
+/// Kani `#[kani::requires]` / `#[kani::ensures]` in contracted transition
+/// harnesses.  Each variant enforces the structural guarantee expected of
+/// well-formed blackjack state:
+///
+/// - `Setup`: trivially valid — no game data yet.
+/// - `Betting`: bankroll must be positive before a wager can be placed.
+/// - `PlayerTurn`: the active hand index is within bounds of the hand list.
+/// - `DealerTurn`: well-formed by construction (no public accessors needed).
+/// - `Finished`: outcomes and bets slices have matching lengths.
+///
+/// Wired to the machine via
+/// `#[prop(kani_invariant_fn = "blackjack_consistent", ...)]` on
+/// [`crate::contracts::BlackjackConsistent`].
+#[cfg(kani)]
+pub fn blackjack_consistent(state: &BlackjackState) -> bool {
+    match state {
+        BlackjackState::Setup { .. } => true,
+        BlackjackState::Betting { inner, .. } => {
+            // A positive bankroll is required before any bet can be placed.
+            inner.bankroll() > 0
+        }
+        BlackjackState::PlayerTurn { inner, .. } => {
+            // The active hand index must be within the hand list bounds.
+            inner.current_hand_index() < inner.player_hands().len()
+        }
+        BlackjackState::DealerTurn { .. } => {
+            // No public accessors — well-formed by typestate construction.
+            true
+        }
+        BlackjackState::Finished { inner, .. } => {
+            // outcomes and bets must cover the same set of hands.
+            inner.outcomes().len() == inner.bets().len()
+        }
+    }
+}

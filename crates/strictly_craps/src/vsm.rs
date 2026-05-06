@@ -283,3 +283,37 @@ pub fn craps_next_round(
         proof,
     )
 }
+
+// ── Invariant Predicate ───────────────────────────────────────────────────────
+
+/// Structural invariant predicate for [`CrapsState`].
+///
+/// Runtime-evaluable form of [`crate::contracts::CrapsConsistent`] used by
+/// Kani `#[kani::requires]` / `#[kani::ensures]` in contracted transition
+/// harnesses.  Each variant enforces the structural guarantee expected of
+/// well-formed craps table state:
+///
+/// - `Setup`: at least one seat is configured.
+/// - `Betting`, `ComeOut`, `PointPhase`, `Resolved`: the shooter index is
+///   within the range of the bankroll array — i.e., the shooter is a valid
+///   seated player.
+///
+/// Wired to the machine via
+/// `#[prop(kani_invariant_fn = "craps_consistent", ...)]` on
+/// [`crate::contracts::CrapsConsistent`].
+#[cfg(kani)]
+pub fn craps_consistent(state: &CrapsState) -> bool {
+    match state {
+        CrapsState::Setup { inner, .. } => {
+            // At least one seat must be configured.
+            inner.num_seats() > 0
+        }
+        CrapsState::Betting { inner, .. } => {
+            // Shooter must be a valid seated player.
+            inner.shooter_idx() < inner.bankrolls().len()
+        }
+        CrapsState::ComeOut { inner, .. } => inner.shooter_idx() < inner.bankrolls().len(),
+        CrapsState::PointPhase { inner, .. } => inner.shooter_idx() < inner.bankrolls().len(),
+        CrapsState::Resolved { inner, .. } => inner.shooter_idx() < inner.bankrolls().len(),
+    }
+}

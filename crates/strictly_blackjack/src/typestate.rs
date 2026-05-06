@@ -61,8 +61,10 @@ impl GameSetup {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameBetting {
-    shoe: Shoe,
-    bankroll: u64,
+    /// Card shoe — source of randomness for dealing.
+    pub shoe: Shoe,
+    /// Player's bankroll before any bet is placed.
+    pub bankroll: u64,
 }
 
 impl GameBetting {
@@ -188,17 +190,23 @@ impl GameBetting {
 /// Game in player turn phase — player takes actions.
 #[derive(Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GamePlayerTurn {
-    pub(crate) shoe: Shoe,
-    pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
-    pub(crate) num_hands: usize,
-    pub(crate) current_hand_index: usize,
-    pub(crate) dealer_hand: Hand,
-    pub(crate) bets: [u64; MAX_PLAYER_HANDS],
+    /// Card shoe — continues to be drawn from on split/hit.
+    pub shoe: Shoe,
+    /// All player hands (only `[..num_hands]` are active).
+    pub player_hands: [Hand; MAX_PLAYER_HANDS],
+    /// Number of active hands (1 normally, up to `MAX_PLAYER_HANDS` after splits).
+    pub num_hands: usize,
+    /// Index of the hand currently being played (< `num_hands`).
+    pub current_hand_index: usize,
+    /// Dealer's visible + hole card.
+    pub dealer_hand: Hand,
+    /// Bet amounts parallel to `player_hands` (only `[..num_hands]` are active).
+    pub bets: [u64; MAX_PLAYER_HANDS],
     /// Financial ledger proving the bet was deducted exactly once.
-    pub(crate) ledger: BankrollLedger,
+    pub ledger: BankrollLedger,
     /// Proof token that the bet has been debited; consumed at settlement.
     #[serde(skip, default = "elicitation::contracts::Established::assert")]
-    pub(crate) bet_deducted: Established<BetDeducted>,
+    pub bet_deducted: Established<BetDeducted>,
 }
 
 impl std::fmt::Debug for GamePlayerTurn {
@@ -294,16 +302,21 @@ impl GamePlayerTurn {
 /// Game in dealer turn phase — dealer plays by fixed rules.
 #[derive(Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameDealerTurn {
-    pub(crate) shoe: Shoe,
-    pub(crate) player_hands: [Hand; MAX_PLAYER_HANDS],
-    pub(crate) num_hands: usize,
-    pub(crate) dealer_hand: Hand,
-    pub(crate) bets: [u64; MAX_PLAYER_HANDS],
+    /// Card shoe — dealer draws from this.
+    pub shoe: Shoe,
+    /// All player hands (only `[..num_hands]` are active).
+    pub player_hands: [Hand; MAX_PLAYER_HANDS],
+    /// Number of active hands.
+    pub num_hands: usize,
+    /// Dealer's hand, being completed by fixed house rules.
+    pub dealer_hand: Hand,
+    /// Bet amounts parallel to `player_hands`.
+    pub bets: [u64; MAX_PLAYER_HANDS],
     /// Financial ledger threading the BetDeducted proof to settlement.
-    pub(crate) ledger: BankrollLedger,
+    pub ledger: BankrollLedger,
     /// Proof token: bet was deducted; required by BankrollLedger::settle.
     #[serde(skip, default = "elicitation::contracts::Established::assert")]
-    pub(crate) bet_deducted: Established<BetDeducted>,
+    pub bet_deducted: Established<BetDeducted>,
 }
 
 impl std::fmt::Debug for GameDealerTurn {
@@ -391,12 +404,18 @@ impl GameDealerTurn {
 /// Game finished — outcomes determined.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 pub struct GameFinished {
-    player_hands: [Hand; MAX_PLAYER_HANDS],
-    num_hands: usize,
-    dealer_hand: Hand,
-    bets: [u64; MAX_PLAYER_HANDS],
-    outcomes: [Outcome; MAX_PLAYER_HANDS],
-    bankroll: u64,
+    /// Final player hands (only `[..num_hands]` are active).
+    pub player_hands: [Hand; MAX_PLAYER_HANDS],
+    /// Number of active hands (≤ `MAX_PLAYER_HANDS`).
+    pub num_hands: usize,
+    /// Dealer's completed hand.
+    pub dealer_hand: Hand,
+    /// Bets placed parallel to `player_hands`.
+    pub bets: [u64; MAX_PLAYER_HANDS],
+    /// Outcome per hand parallel to `bets`.
+    pub outcomes: [Outcome; MAX_PLAYER_HANDS],
+    /// Player bankroll after all bets are settled.
+    pub bankroll: u64,
 }
 
 impl GameFinished {

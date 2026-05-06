@@ -69,9 +69,12 @@ impl Default for GameSetup {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
 #[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameInProgress {
-    pub(super) board: Board,
-    pub(super) history: Vec<Move>,
-    pub(super) to_move: Player,
+    /// Current board state.
+    pub board: Board,
+    /// Ordered list of all moves played so far (length ≤ 9).
+    pub history: Vec<Move>,
+    /// Which player is next to move.
+    pub to_move: Player,
 }
 
 impl GameInProgress {

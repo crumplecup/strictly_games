@@ -152,6 +152,45 @@ pub fn ttt_make_move(
     }
 }
 
+// ── Invariant Predicate ───────────────────────────────────────────────────────
+
+/// Structural invariant predicate for [`TicTacToeState`].
+///
+/// Runtime-evaluable form of [`crate::contracts::TicTacToeConsistent`] used by
+/// Kani `#[kani::requires]` / `#[kani::ensures]` in contracted transition
+/// harnesses.  Each variant enforces the structural guarantee expected of
+/// well-formed tic-tac-toe state:
+///
+/// - `Setup`: the board is completely empty — no moves have been played yet.
+/// - `InProgress`: move history has not exceeded the 9-square board capacity.
+/// - `Finished`: at least 5 moves were played — the minimum to win.
+///
+/// Wired to the machine via
+/// `#[prop(kani_invariant_fn = "tictactoe_consistent", ...)]` on
+/// [`crate::contracts::TicTacToeConsistent`].
+#[cfg(kani)]
+pub fn tictactoe_consistent(state: &TicTacToeState) -> bool {
+    match state {
+        TicTacToeState::Setup { inner, .. } => {
+            // Board must be completely empty at setup.
+            inner
+                .board()
+                .squares()
+                .iter()
+                .all(|s| *s == crate::Square::Empty)
+        }
+        TicTacToeState::InProgress { inner, .. } => {
+            // History must not exceed the 9-square board capacity.
+            inner.history().len() <= 9
+        }
+        TicTacToeState::Finished { inner, .. } => {
+            // A finished game needs at least 5 moves: X wins in 5 (3+2),
+            // and a draw fills all 9 squares.
+            inner.history().len() >= 5
+        }
+    }
+}
+
 /// Transition: restart a finished game, returning to setup.
 ///
 /// Only valid from the `Finished` state; all other states are passed through.

@@ -54,7 +54,7 @@ winit = { version = "0.30", features = ["serde"] }
 futures = "0.3"
 
 # Verification
-creusot-std = { path = "/home/erik/repos/creusot/creusot-std", version = "0.10.0" }
+creusot-std = { path = "/home/erik/repos/elicitation/vendor/creusot-std", version = "0.10.0" }
 kani-verifier = { version = "0.67" }
 
 # Database
@@ -127,3 +127,9 @@ unicode-width = "0.2"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+[patch.crates-io]
+# creusot-std 0.10.0 on crates.io depends on pearlite-syn 0.10.0 which conflicts
+# with pearlite-syn 0.11 now on crates.io. Patch both to elicitation's vendor copies.
+creusot-std = { path = "/home/erik/repos/elicitation/vendor/creusot-std" }
+pearlite-syn = { path = "/home/erik/repos/elicitation/vendor/pearlite-syn" }

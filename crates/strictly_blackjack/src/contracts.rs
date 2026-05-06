@@ -113,7 +113,12 @@ pub fn execute_action(
 /// Wired to [`BlackjackRulesEvidence`]: formal-method harnesses call
 /// `Established::prove(&BlackjackConsistent::kani_proof_credential())`.
 #[derive(elicitation::Prop)]
-#[prop(credential = BlackjackRulesEvidence)]
+#[prop(
+    credential = BlackjackRulesEvidence,
+    kani_invariant_fn = "blackjack_consistent",
+    creusot_invariant_fn = "blackjack_consistent",
+    verus_invariant_fn = "blackjack_consistent"
+)]
 pub struct BlackjackConsistent;
 
 impl VerifiedWorkflow for BlackjackConsistent {}

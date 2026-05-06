@@ -11,3 +11,5 @@ pub mod game_invariants;
 
 #[cfg(creusot)]
 pub mod tui_breakpoints;
+
+pub mod generated;
