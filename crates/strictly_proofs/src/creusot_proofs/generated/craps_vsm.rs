@@ -34,11 +34,13 @@ pub fn verify_craps_consistent_prop_creusot() -> bool {
 }
 #[cfg(creusot)]
 #[requires(craps_consistent(&state))]
+#[requires(bankrolls@.len()>0)]
 #[ensures(craps_consistent(&result.0))]
 pub(crate) fn craps_start_betting__creusot(
     state: CrapsState,
     proof: Established<CrapsConsistent>,
     bankrolls: Vec<u64>,
+    bankrolls_proof: Established<NonEmptyBankrolls>,
 ) -> (CrapsState, Established<CrapsConsistent>) {
     let CrapsState::Setup {
         inner: setup,
@@ -47,12 +49,15 @@ pub(crate) fn craps_start_betting__creusot(
     else {
         return (state, proof);
     };
+    let new_proof = Established::prove(&CrapsBettingEvidence {
+        non_empty: bankrolls_proof,
+    });
     (
         CrapsState::Betting {
             inner: setup.start_betting(bankrolls),
             display_mode,
         },
-        proof,
+        new_proof,
     )
 }
 #[cfg(creusot)]
@@ -148,6 +153,7 @@ pub(crate) fn craps_point_roll__creusot(
 }
 #[cfg(creusot)]
 #[requires(craps_consistent(&state))]
+#[requires(updated_bankrolls@.len()>0)]
 #[ensures(craps_consistent(&result.0))]
 pub(crate) fn craps_next_round__creusot(
     state: CrapsState,

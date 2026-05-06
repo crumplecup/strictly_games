@@ -1,21 +1,25 @@
-(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 152 0 156 47 *)
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 158 0 162 47 *)
 
 let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
 let%span svec'0 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 87 20 87 30
-let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
+let%span svsm_extern_specs = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 189 22 189 26
+let%span svsm_extern_specs'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 187 19 187 47
+let%span svsm_extern_specs'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 188 18 188 63
 let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
-let%span scraps_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 166 19 166 57
-let%span scraps_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 153 4 153 9
-let%span scraps_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 154 4 154 9
-let%span scraps_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 150 11 150 35
-let%span scraps_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 156 5 156 47
-let%span scraps_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 151 10 151 37
-let%span scraps_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 20 8 25 38
+let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
+let%span scraps_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 172 19 172 57
+let%span scraps_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 159 4 159 9
+let%span scraps_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 160 4 160 9
+let%span scraps_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 155 11 155 35
+let%span scraps_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 156 11 156 37
+let%span scraps_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 162 5 162 47
+let%span scraps_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 157 10 157 37
+let%span scraps_vsm'6 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 20 8 25 38
 
 use creusot.int.UInt64
 use creusot.int.UInt8
-use creusot.prelude.Any
 use seq.Seq
+use creusot.prelude.Any
 use int.Int
 
 type t_GameSetup = { num_seats: UInt64.t; max_odds: UInt8.t }
@@ -149,11 +153,6 @@ axiom inv_axiom'0:
   forall x: t_Vec_Vec_ActiveBet_Global_Global [inv_Vec_Vec_ActiveBet_Global_Global x]. inv_Vec_Vec_ActiveBet_Global_Global x
     -> invariant_Vec_Vec_ActiveBet_Global_Global x
 
-predicate inv_GameComeOut (_1: t_GameComeOut)
-
-axiom inv_axiom'1 [@rewrite]: forall x: t_GameComeOut [inv_GameComeOut x]. inv_GameComeOut x
-    = inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'1
-
 type t_DiceRoll
 
 predicate inv_DiceRoll (_1: t_DiceRoll)
@@ -185,18 +184,38 @@ predicate invariant_Vec_DiceRoll_Global (self: t_Vec_DiceRoll_Global) =
 
 predicate inv_Vec_DiceRoll_Global (_1: t_Vec_DiceRoll_Global)
 
-axiom inv_axiom'2: forall x: t_Vec_DiceRoll_Global [inv_Vec_DiceRoll_Global x]. inv_Vec_DiceRoll_Global x
+axiom inv_axiom'1: forall x: t_Vec_DiceRoll_Global [inv_Vec_DiceRoll_Global x]. inv_Vec_DiceRoll_Global x
     -> invariant_Vec_DiceRoll_Global x
-
-predicate inv_GamePointPhase (_1: t_GamePointPhase)
-
-axiom inv_axiom'3 [@rewrite]: forall x: t_GamePointPhase [inv_GamePointPhase x]. inv_GamePointPhase x
-    = (inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'2 /\ inv_Vec_DiceRoll_Global x.roll_history'2)
 
 predicate inv_GameResolved (_1: t_GameResolved)
 
-axiom inv_axiom'4 [@rewrite]: forall x: t_GameResolved [inv_GameResolved x]. inv_GameResolved x
+axiom inv_axiom'2 [@rewrite]: forall x: t_GameResolved [inv_GameResolved x]. inv_GameResolved x
     = (inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'3 /\ inv_Vec_DiceRoll_Global x.roll_history'3)
+
+function view_Vec_u64_Global (self: t_Vec_u64_Global) : Seq.seq UInt64.t
+
+axiom view_Vec_u64_Global_spec: forall self: t_Vec_u64_Global. [%#svec] Seq.length (view_Vec_u64_Global self)
+    <= UInt64.t'int const_MAX
+
+let rec next_round (self_: t_GameResolved) (updated_bankrolls: t_Vec_u64_Global) (return (x: t_GameBetting)) =
+  {[@stop_split] [@expl:next_round requires] ([@stop_split] [@expl:next_round 'self_' type invariant] [%#svsm_extern_specs] inv_GameResolved self_)
+  /\ ([@stop_split] [@expl:next_round requires] [%#svsm_extern_specs'0] Seq.length (view_Vec_u64_Global updated_bankrolls)
+  > 0)}
+  any
+  [ return (result: t_GameBetting) ->
+  {[@stop_split] [@expl:next_round ensures] [%#svsm_extern_specs'1] UInt64.t'int result.shooter_idx'0
+    < Seq.length (view_Vec_u64_Global result.bankrolls'0)}
+    (! return {result}) ]
+
+predicate inv_GameComeOut (_1: t_GameComeOut)
+
+axiom inv_axiom'3 [@rewrite]: forall x: t_GameComeOut [inv_GameComeOut x]. inv_GameComeOut x
+    = inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'1
+
+predicate inv_GamePointPhase (_1: t_GamePointPhase)
+
+axiom inv_axiom'4 [@rewrite]: forall x: t_GamePointPhase [inv_GamePointPhase x]. inv_GamePointPhase x
+    = (inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'2 /\ inv_Vec_DiceRoll_Global x.roll_history'2)
 
 predicate inv_CrapsState (_1: t_CrapsState)
 
@@ -211,13 +230,8 @@ axiom inv_axiom'5 [@rewrite]: forall x: t_CrapsState [inv_CrapsState x]. inv_Cra
 
 predicate inv_Established_CrapsConsistent (_1: t_Established_CrapsConsistent)
 
-function view_Vec_u64_Global (self: t_Vec_u64_Global) : Seq.seq UInt64.t
-
-axiom view_Vec_u64_Global_spec: forall self: t_Vec_u64_Global. [%#svec] Seq.length (view_Vec_u64_Global self)
-    <= UInt64.t'int const_MAX
-
 predicate craps_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 18 0 18 51] (state: t_CrapsState) =
-  [%#scraps_vsm'5] match state with
+  [%#scraps_vsm'6] match state with
     | Setup inner _ -> UInt64.t'int inner.num_seats > 0
     | Betting inner _ -> UInt64.t'int inner.shooter_idx'0 < Seq.length (view_Vec_u64_Global inner.bankrolls'0)
     | ComeOut inner _ -> UInt64.t'int inner.shooter_idx'1 < Seq.length (view_Vec_u64_Global inner.bankrolls'1)
@@ -235,12 +249,14 @@ meta "compute_max_steps" 1000000
 meta "select_lsinst" "all"
 
 let rec craps_next_round__creusot
-  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 152 0 156 47]
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 158 0 162 47]
   (state: t_CrapsState) (proof: t_Established_CrapsConsistent) (updated_bankrolls: t_Vec_u64_Global)
   (return (x: tup2_CrapsState_Established_CrapsConsistent)) =
   {[@stop_split] [@expl:craps_next_round__creusot requires] ([@stop_split] [@expl:craps_next_round__creusot 'state' type invariant] [%#scraps_vsm'0] inv_CrapsState state)
   /\ ([@stop_split] [@expl:craps_next_round__creusot 'proof' type invariant] [%#scraps_vsm'1] inv_Established_CrapsConsistent proof)
-  /\ ([@stop_split] [@expl:craps_next_round__creusot requires] [%#scraps_vsm'2] craps_consistent state)}
+  /\ ([@stop_split] [@expl:craps_next_round__creusot requires #0] [%#scraps_vsm'2] craps_consistent state)
+  /\ ([@stop_split] [@expl:craps_next_round__creusot requires #1] [%#scraps_vsm'3] Seq.length (view_Vec_u64_Global updated_bankrolls)
+  > 0)}
   (! bb0
   [ bb0 = any
     [ br0 (x0: t_GameSetup) (x1: t_CrapsDisplayMode) -> {state = Setup x0 x1} (! bb1)
@@ -254,18 +270,19 @@ let rec craps_next_round__creusot
         (fun (rinner: t_GameResolved) (rdisplay_mode: t_CrapsDisplayMode) -> [ &resolved <- rinner ] s1)
     | s1 = elim_Resolved {state}
         (fun (rinner: t_GameResolved) (rdisplay_mode: t_CrapsDisplayMode) -> [ &display_mode <- rdisplay_mode ] s2)
-    | s2 = {[%#scraps_vsm] false} any ] ]
+    | s2 = next_round [%#scraps_vsm] {resolved} {updated_bankrolls} (fun (_x: t_GameBetting) -> [ &_16 <- _x ] s3)
+    | s3 = [ &_15 <- Betting _16 display_mode ] s4
+    | s4 = [ &_ret <- { f0 = _15; f1 = proof } ] s5
+    | s5 = return {_ret} ] ]
   [ & _ret: tup2_CrapsState_Established_CrapsConsistent = Any.any_l ()
   | & state: t_CrapsState = state
   | & proof: t_Established_CrapsConsistent = proof
   | & updated_bankrolls: t_Vec_u64_Global = updated_bankrolls
   | & resolved: t_GameResolved = Any.any_l ()
   | & display_mode: t_CrapsDisplayMode = Any.any_l ()
-  | & _13: t_CrapsState = Any.any_l ()
-  | & _14: t_GameBetting = Any.any_l ()
-  | & _17: t_CrapsDisplayMode = Any.any_l ()
-  | & _18: t_Established_CrapsConsistent = Any.any_l () ])
+  | & _15: t_CrapsState = Any.any_l ()
+  | & _16: t_GameBetting = Any.any_l () ])
   [ return (result: tup2_CrapsState_Established_CrapsConsistent) ->
-  {[@stop_split] [@expl:craps_next_round__creusot ensures] ([@stop_split] [@expl:craps_next_round__creusot result type invariant] [%#scraps_vsm'3] inv_tup2_CrapsState_Established_CrapsConsistent result)
-    /\ ([@stop_split] [@expl:craps_next_round__creusot ensures] [%#scraps_vsm'4] craps_consistent result.f0)}
+  {[@stop_split] [@expl:craps_next_round__creusot ensures] ([@stop_split] [@expl:craps_next_round__creusot result type invariant] [%#scraps_vsm'4] inv_tup2_CrapsState_Established_CrapsConsistent result)
+    /\ ([@stop_split] [@expl:craps_next_round__creusot ensures] [%#scraps_vsm'5] craps_consistent result.f0)}
     (! return {result}) ]

@@ -8,6 +8,9 @@ let%span stictactoe_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_pro
 let%span stictactoe_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 100 5 100 55
 let%span stictactoe_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 96 10 96 41
 let%span stictactoe_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 20 8 22 40
+let%span svsm_extern_specs = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 233 19 233 23
+let%span svsm_extern_specs'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 232 19 232 23
+let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_tictactoe/src/typestate.rs" 198 4 198 37
 
 use creusot.prelude.Any
 use seq.Seq
@@ -61,17 +64,25 @@ let rec elim_Finished (_x: t_TicTacToeState) (return (inner: t_GameFinished) (di
       end}
     any) ]
 
-predicate inv_GameSetup (_1: t_GameSetup)
-
 predicate inv_Board (_1: t_Board)
-
-predicate inv_GameInProgress (_1: t_GameInProgress)
-
-axiom inv_axiom [@rewrite]: forall x: t_GameInProgress [inv_GameInProgress x]. inv_GameInProgress x = inv_Board x.board
 
 predicate inv_GameFinished (_1: t_GameFinished)
 
-axiom inv_axiom'0 [@rewrite]: forall x: t_GameFinished [inv_GameFinished x]. inv_GameFinished x = inv_Board x.board'0
+axiom inv_axiom [@rewrite]: forall x: t_GameFinished [inv_GameFinished x]. inv_GameFinished x = inv_Board x.board'0
+
+predicate inv_GameSetup (_1: t_GameSetup)
+
+let rec restart (self_: t_GameFinished) (return (x: t_GameSetup)) =
+  {[@stop_split] [@expl:restart 'self_' type invariant] [%#svsm_extern_specs] inv_GameFinished self_}
+  any
+  [ return (result: t_GameSetup) ->
+  {[@stop_split] [@expl:restart result type invariant] [%#stypestate] inv_GameSetup result}
+    (! return {result}) ]
+
+predicate inv_GameInProgress (_1: t_GameInProgress)
+
+axiom inv_axiom'0 [@rewrite]: forall x: t_GameInProgress [inv_GameInProgress x]. inv_GameInProgress x
+    = inv_Board x.board
 
 predicate inv_TicTacToeState (_1: t_TicTacToeState)
 
@@ -127,16 +138,17 @@ let rec ttt_restart__creusot
         (fun (rinner: t_GameFinished) (rdisplay_mode: t_TttDisplayMode) -> [ &finished <- rinner ] s1)
     | s1 = elim_Finished {state}
         (fun (rinner: t_GameFinished) (rdisplay_mode: t_TttDisplayMode) -> [ &display_mode <- rdisplay_mode ] s2)
-    | s2 = {[%#stictactoe_vsm] false} any ] ]
+    | s2 = restart [%#stictactoe_vsm] {finished} (fun (_x: t_GameSetup) -> [ &_13 <- _x ] s3)
+    | s3 = [ &_12 <- Setup _13 display_mode ] s4
+    | s4 = [ &_ret <- { f0 = _12; f1 = proof } ] s5
+    | s5 = return {_ret} ] ]
   [ & _ret: tup2_TicTacToeState_Established_TicTacToeConsistent = Any.any_l ()
   | & state: t_TicTacToeState = state
   | & proof: t_Established_TicTacToeConsistent = proof
   | & finished: t_GameFinished = Any.any_l ()
   | & display_mode: t_TttDisplayMode = Any.any_l ()
   | & _12: t_TicTacToeState = Any.any_l ()
-  | & _13: t_GameSetup = Any.any_l ()
-  | & _15: t_TttDisplayMode = Any.any_l ()
-  | & _16: t_Established_TicTacToeConsistent = Any.any_l () ])
+  | & _13: t_GameSetup = Any.any_l () ])
   [ return (result: tup2_TicTacToeState_Established_TicTacToeConsistent) ->
   {[@stop_split] [@expl:ttt_restart__creusot ensures] ([@stop_split] [@expl:ttt_restart__creusot result type invariant] [%#stictactoe_vsm'3] inv_tup2_TicTacToeState_Established_TicTacToeConsistent result)
     /\ ([@stop_split] [@expl:ttt_restart__creusot ensures] [%#stictactoe_vsm'4] tictactoe_consistent result.f0)}

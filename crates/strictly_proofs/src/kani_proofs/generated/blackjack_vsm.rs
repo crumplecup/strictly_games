@@ -28,7 +28,11 @@ fn bj_start_betting__kani_closure() {
         ::elicitation::Established::prove(&__cred)
     };
     let initial_bankroll: u64 = <u64 as ::elicitation::KaniCompose>::kani_depth0();
-    let _result = bj_start_betting(state, proof, initial_bankroll);
+    let bankroll_proof: Established<BankrollPositive> = {
+        let __cred = BankrollPositive::kani_proof_credential();
+        ::elicitation::Established::prove(&__cred)
+    };
+    let _result = bj_start_betting(state, proof, initial_bankroll, bankroll_proof);
     ::std::mem::forget(_result);
 }
 #[allow(unexpected_cfgs)]

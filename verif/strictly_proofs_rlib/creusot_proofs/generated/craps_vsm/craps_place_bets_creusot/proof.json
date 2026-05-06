@@ -8,17 +8,21 @@
           {
             "tactic": "split_vc",
             "children": [
-              null,
-              { "prover": "alt-ergo", "time": 0.042 },
-              { "prover": "alt-ergo", "time": 0.063 },
-              { "prover": "alt-ergo", "time": 0.055 },
-              { "prover": "alt-ergo", "time": 0.058 },
-              { "prover": "alt-ergo", "time": 0.043 }
+              { "prover": "alt-ergo", "time": 0.045 },
+              { "prover": "alt-ergo", "time": 0.047 },
+              { "prover": "alt-ergo", "time": 0.12 },
+              { "prover": "alt-ergo", "time": 0.046 },
+              { "prover": "alt-ergo", "time": 0.057 },
+              { "prover": "alt-ergo", "time": 0.06 },
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.042 }
             ]
           }
         ]
       },
-      "vc_elim_Betting": { "prover": "alt-ergo", "time": 0.035 }
+      "vc_elim_Betting": { "prover": "alt-ergo", "time": 0.035 },
+      "vc_prove_CrapsConsistent": { "prover": "alt-ergo", "time": 0.029 },
+      "vc_start_comeout": { "prover": "alt-ergo", "time": 0.022 }
     }
   }
 }

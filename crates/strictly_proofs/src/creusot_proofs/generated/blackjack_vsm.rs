@@ -33,11 +33,13 @@ pub fn verify_blackjack_consistent_prop_creusot() -> bool {
 }
 #[cfg(creusot)]
 #[requires(blackjack_consistent(&state))]
+#[requires(initial_bankroll@>0)]
 #[ensures(blackjack_consistent(&result.0))]
 pub(crate) fn bj_start_betting__creusot(
     state: BlackjackState,
     proof: Established<BlackjackConsistent>,
     initial_bankroll: u64,
+    bankroll_proof: Established<BankrollPositive>,
 ) -> (BlackjackState, Established<BlackjackConsistent>) {
     let BlackjackState::Setup {
         inner: setup,
@@ -46,12 +48,15 @@ pub(crate) fn bj_start_betting__creusot(
     else {
         return (state, proof);
     };
+    let new_proof = Established::prove(&BettingStateEvidence {
+        bankroll_positive: bankroll_proof,
+    });
     (
         BlackjackState::Betting {
             inner: setup.start_betting(initial_bankroll),
             display_mode,
         },
-        proof,
+        new_proof,
     )
 }
 #[cfg(creusot)]

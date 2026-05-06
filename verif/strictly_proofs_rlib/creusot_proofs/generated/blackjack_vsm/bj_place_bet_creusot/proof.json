@@ -8,20 +8,49 @@
           {
             "tactic": "split_vc",
             "children": [
+              { "prover": "alt-ergo", "time": 0.071 },
+              { "prover": "alt-ergo", "time": 0.058 },
+              { "prover": "alt-ergo", "time": 0.047 },
+              { "prover": "alt-ergo", "time": 0.12 },
+              { "prover": "alt-ergo", "time": 0.071 },
+              { "prover": "alt-ergo", "time": 0.06 },
+              { "prover": "alt-ergo", "time": 0.056 },
+              { "prover": "alt-ergo", "time": 0.119 },
+              { "prover": "alt-ergo", "time": 0.06 },
+              { "prover": "alt-ergo", "time": 0.048 },
+              { "prover": "alt-ergo", "time": 0.045 },
+              { "prover": "alt-ergo", "time": 0.103 },
               { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.053 },
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.041 },
+              { "prover": "alt-ergo", "time": 0.058 },
+              { "prover": "alt-ergo", "time": 0.048 },
+              { "prover": "alt-ergo", "time": 0.04 },
+              {
+                "tactic": "split_vc",
+                "children": [
+                  { "prover": "alt-ergo", "time": 0.054 },
+                  { "prover": "alt-ergo", "time": 0.067 }
+                ]
+              },
+              { "prover": "alt-ergo", "time": 0.043 },
+              { "prover": "alt-ergo", "time": 0.056 },
+              { "prover": "alt-ergo", "time": 0.052 },
               { "prover": "alt-ergo", "time": 0.055 },
-              null,
-              { "prover": "alt-ergo", "time": 0.065 },
-              { "prover": "alt-ergo", "time": 0.059 },
-              { "prover": "alt-ergo", "time": 0.063 },
-              { "prover": "alt-ergo", "time": 0.061 },
-              { "prover": "alt-ergo", "time": 0.06 }
+              { "prover": "alt-ergo", "time": 0.051 },
+              { "prover": "alt-ergo", "time": 0.053 }
             ]
           }
         ]
       },
       "vc_clone_GameBetting": { "prover": "alt-ergo", "time": 0.024 },
-      "vc_elim_Betting": { "prover": "alt-ergo", "time": 0.027 }
+      "vc_elim_Betting": { "prover": "alt-ergo", "time": 0.027 },
+      "vc_elim_DealerTurn": { "prover": "alt-ergo", "time": 0.033 },
+      "vc_elim_Finished": { "prover": "alt-ergo", "time": 0.037 },
+      "vc_elim_Ok": { "prover": "alt-ergo", "time": 0.036 },
+      "vc_elim_PlayerTurn": { "prover": "alt-ergo", "time": 0.029 },
+      "vc_place_bet": { "prover": "alt-ergo", "time": 0.039 }
     }
   }
 }

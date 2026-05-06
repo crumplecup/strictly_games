@@ -8,18 +8,20 @@
           {
             "tactic": "split_vc",
             "children": [
+              { "prover": "alt-ergo", "time": 0.055 },
               { "prover": "alt-ergo", "time": 0.059 },
-              { "prover": "alt-ergo", "time": 0.059 },
-              { "prover": "alt-ergo", "time": 0.065 },
-              null,
               { "prover": "alt-ergo", "time": 0.061 },
-              { "prover": "alt-ergo", "time": 0.058 },
-              { "prover": "alt-ergo", "time": 0.059 }
+              { "prover": "alt-ergo", "time": 0.037 },
+              { "prover": "alt-ergo", "time": 0.08 },
+              { "prover": "alt-ergo", "time": 0.06 },
+              { "prover": "alt-ergo", "time": 0.06 },
+              { "prover": "alt-ergo", "time": 0.044 }
             ]
           }
         ]
       },
-      "vc_elim_DealerTurn": { "prover": "alt-ergo", "time": 0.026 }
+      "vc_elim_DealerTurn": { "prover": "alt-ergo", "time": 0.026 },
+      "vc_play_dealer_turn": { "prover": "alt-ergo", "time": 0.024 }
     }
   }
 }

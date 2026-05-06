@@ -22,7 +22,10 @@
 //!   └──────────────────────────────bj_restart──────────────┘
 //! ```
 
-use crate::contracts::{BlackjackConsistent, BlackjackRulesEvidence, NotBust, ValidAction};
+use crate::contracts::{
+    BankrollPositive, BettingStateEvidence, BlackjackConsistent, BlackjackRulesEvidence, NotBust,
+    ValidAction,
+};
 use crate::display::BlackjackDisplayMode;
 use crate::typestate::{GameFinished, GamePlayerTurn, GameResult, GameSetup};
 use crate::{BasicAction, GameBetting, GameDealerTurn};
@@ -111,13 +114,16 @@ impl Default for BlackjackState {
 
 /// Transition: initialise the bankroll and move from setup to betting.
 ///
+/// Requires [`Established<BankrollPositive>`] — a proof token that `initial_bankroll > 0`.
+/// Obtain it via [`crate::validate_bankroll_positive`] before calling.
 /// Only valid from the `Setup` state; all other states are passed through.
-#[formal_method(contracts = [BlackjackConsistent])]
-#[cfg_attr(not(kani), instrument(skip(proof)))]
+#[formal_method(contracts = [BlackjackConsistent], creusot_requires = ["initial_bankroll@ > 0"])]
+#[cfg_attr(not(kani), instrument(skip(proof, bankroll_proof)))]
 pub fn bj_start_betting(
     state: BlackjackState,
     proof: Established<BlackjackConsistent>,
     initial_bankroll: u64,
+    bankroll_proof: Established<BankrollPositive>,
 ) -> (BlackjackState, Established<BlackjackConsistent>) {
     let BlackjackState::Setup {
         inner: setup,
@@ -126,12 +132,15 @@ pub fn bj_start_betting(
     else {
         return (state, proof);
     };
+    let new_proof = Established::prove(&BettingStateEvidence {
+        bankroll_positive: bankroll_proof,
+    });
     (
         BlackjackState::Betting {
             inner: setup.start_betting(initial_bankroll),
             display_mode,
         },
-        proof,
+        new_proof,
     )
 }
 

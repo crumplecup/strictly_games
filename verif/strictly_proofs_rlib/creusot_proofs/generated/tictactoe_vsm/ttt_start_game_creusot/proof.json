@@ -3,17 +3,19 @@
   "proofs": {
     "Coma": {
       "vc_elim_Setup": { "prover": "alt-ergo", "time": 0.031 },
+      "vc_start": { "prover": "alt-ergo", "time": 0.019 },
       "vc_ttt_start_game__creusot": {
         "tactic": "compute_specified",
         "children": [
           {
             "tactic": "split_vc",
             "children": [
-              null,
+              { "prover": "alt-ergo", "time": 0.043 },
+              { "prover": "alt-ergo", "time": 0.054 },
               { "prover": "alt-ergo", "time": 0.048 },
-              { "prover": "alt-ergo", "time": 0.042 },
-              { "prover": "alt-ergo", "time": 0.05 },
-              { "prover": "alt-ergo", "time": 0.046 }
+              { "prover": "alt-ergo", "time": 0.041 },
+              { "prover": "alt-ergo", "time": 0.046 },
+              { "prover": "alt-ergo", "time": 0.048 }
             ]
           }
         ]

@@ -6,7 +6,33 @@
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::{Established, ProvableFrom};
 
-use crate::BetsPlaced;
+use crate::{BetsPlaced, CrapsError, CrapsErrorKind};
+
+// ─────────────────────────────────────────────────────────────
+//  Bankrolls Proposition
+// ─────────────────────────────────────────────────────────────
+
+/// Proposition: the bankrolls list is non-empty.
+///
+/// Obtaining this token is the only way to call `craps_start_betting`.
+/// The issuing function [`validate_non_empty_bankrolls`] is the "unsafe block"
+/// that upholds the invariant: it checks `bankrolls.len() > 0` before asserting.
+#[derive(elicitation::Prop)]
+pub struct NonEmptyBankrolls;
+impl VerifiedWorkflow for NonEmptyBankrolls {}
+
+/// Validates that the bankrolls slice is non-empty and issues a proof token.
+///
+/// This is the single point of trust for the `NonEmptyBankrolls` invariant,
+/// satisfying the craps invariant `shooter_idx@ < bankrolls@.len()` (shooter
+/// starts at 0, so `bankrolls.len() >= 1` is required).
+pub fn validate_non_empty_bankrolls(bankrolls: &[u64]) -> Result<Established<NonEmptyBankrolls>, CrapsError> {
+    if !bankrolls.is_empty() {
+        Ok(Established::assert())
+    } else {
+        Err(CrapsError::new(CrapsErrorKind::EmptyBankrolls))
+    }
+}
 
 // ─────────────────────────────────────────────────────────────
 //  Top-Level Invariant
@@ -40,6 +66,17 @@ pub struct CrapsRulesEvidence {
 }
 
 impl ProvableFrom<CrapsRulesEvidence> for CrapsConsistent {}
+
+/// Evidence bundle for establishing [`CrapsConsistent`] in the `Betting` state.
+///
+/// Assembling this forces proof that the bankrolls list is non-empty,
+/// satisfying `shooter_idx@ < bankrolls@.len()` (shooter starts at index 0).
+pub struct CrapsBettingEvidence {
+    /// Proof that the bankrolls list is non-empty.
+    pub non_empty: Established<NonEmptyBankrolls>,
+}
+
+impl ProvableFrom<CrapsBettingEvidence> for CrapsConsistent {}
 
 #[cfg(kani)]
 impl kani::Arbitrary for CrapsRulesEvidence {

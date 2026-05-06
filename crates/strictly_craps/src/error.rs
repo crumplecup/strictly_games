@@ -56,6 +56,10 @@ pub enum CrapsErrorKind {
     #[display("Come bets cannot be placed during the come-out roll")]
     ComeBetOnComeOut,
 
+    /// Bankrolls list must be non-empty.
+    #[display("Cannot start game with empty bankrolls list")]
+    EmptyBankrolls,
+
     /// Game phase does not allow this action.
     #[display("Invalid action in current phase: {}", _0)]
     InvalidPhase(String),

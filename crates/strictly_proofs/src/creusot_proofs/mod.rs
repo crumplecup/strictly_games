@@ -13,6 +13,9 @@ pub mod compositional_proof;
 pub mod game_invariants;
 
 #[cfg(creusot)]
+pub mod vsm_extern_specs;
+
+#[cfg(creusot)]
 pub mod tui_breakpoints;
 
 pub mod generated;

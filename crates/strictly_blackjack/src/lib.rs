@@ -39,8 +39,7 @@ pub use bet_amount::BetAmount;
 pub use card::{Card, Rank, Suit};
 pub use contracts::{LegalAction, NotBust, ValidAction, execute_action, validate_action};
 pub use display::BlackjackDisplayMode;
-pub use error::ActionError;
-pub use explore::BlackjackAction;
+pub use error::ActionError;pub use explore::BlackjackAction;
 pub use hand::{Hand, HandValue, MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 pub use ledger::{BankrollLedger, BetDeducted, PayoutSettled};
 pub use multi_player::{MAX_SEATS, MultiRound, SeatBet, SeatPlay, SeatResult};
@@ -56,7 +55,10 @@ pub use workflow::{
     execute_dealer_turn, execute_place_bet, execute_play_action,
 };
 // VSM re-exports
-pub use contracts::{BlackjackConsistent, BlackjackRulesEvidence};
+pub use contracts::{
+    BankrollPositive, BettingStateEvidence, BlackjackConsistent, BlackjackRulesEvidence,
+    validate_bankroll_positive,
+};
 pub use traits::BlackjackRuleEnforcer;
 pub use vsm::{
     BlackjackMachine, BlackjackState, bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart,

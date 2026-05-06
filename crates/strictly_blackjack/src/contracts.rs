@@ -11,6 +11,32 @@ use tracing::instrument;
 use crate::{ActionError, BasicAction, GamePlayerTurn, PlayerAction};
 
 // ─────────────────────────────────────────────────────────────
+//  Bankroll Proposition
+// ─────────────────────────────────────────────────────────────
+
+/// Proposition: the initial bankroll is positive (greater than zero).
+///
+/// Obtaining this token is the only way to call `bj_start_betting`.
+/// The issuing function [`validate_bankroll_positive`] is the "unsafe block"
+/// that upholds the invariant: it checks `amount > 0` before asserting.
+#[derive(elicitation::Prop)]
+pub struct BankrollPositive;
+impl VerifiedWorkflow for BankrollPositive {}
+
+/// Validates that a bankroll amount is positive and issues a proof token.
+///
+/// This is the single point of trust for the `BankrollPositive` invariant.
+/// Only code that holds `Established<BankrollPositive>` may start the betting phase.
+#[instrument]
+pub fn validate_bankroll_positive(amount: u64) -> Result<Established<BankrollPositive>, ActionError> {
+    if amount > 0 {
+        Ok(Established::assert())
+    } else {
+        Err(ActionError::ZeroBankroll)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 //  Propositions (Type-Level Statements)
 // ─────────────────────────────────────────────────────────────
 
@@ -138,6 +164,17 @@ pub struct BlackjackRulesEvidence {
 }
 
 impl ProvableFrom<BlackjackRulesEvidence> for BlackjackConsistent {}
+
+/// Evidence bundle for establishing [`BlackjackConsistent`] in the `Betting` state.
+///
+/// Assembling this forces proof that the initial bankroll is positive,
+/// which is exactly the invariant for `Betting { inner } => inner.bankroll@ > 0`.
+pub struct BettingStateEvidence {
+    /// Proof that the initial bankroll is positive.
+    pub bankroll_positive: Established<BankrollPositive>,
+}
+
+impl ProvableFrom<BettingStateEvidence> for BlackjackConsistent {}
 
 #[cfg(kani)]
 impl kani::Arbitrary for BlackjackRulesEvidence {

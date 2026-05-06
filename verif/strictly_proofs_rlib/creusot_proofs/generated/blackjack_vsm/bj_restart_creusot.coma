@@ -1,19 +1,19 @@
-(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 176 0 179 55 *)
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 181 0 184 55 *)
 
-let%span sblackjack_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 185 19 185 39
-let%span sblackjack_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 186 26 186 57
-let%span sblackjack_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 177 4 177 9
-let%span sblackjack_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 178 4 178 9
-let%span sblackjack_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 174 11 174 39
-let%span sblackjack_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 179 5 179 55
-let%span sblackjack_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 175 10 175 41
+let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/typestate.rs" 24 18 24 25
+let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
+let%span sblackjack_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 190 19 190 39
+let%span sblackjack_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 191 26 191 57
+let%span sblackjack_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 182 4 182 9
+let%span sblackjack_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 183 4 183 9
+let%span sblackjack_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 179 11 179 39
+let%span sblackjack_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 184 5 184 55
+let%span sblackjack_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 180 10 180 41
 let%span sblackjack_vsm'6 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 20 8 24 29
 let%span shand = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/hand.rs" 19 0 19 33
 let%span sarray = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/array.rs" 9 20 9 51
 let%span sarray'0 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/array.rs" 41 20 41 73
 let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
-let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
-let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/typestate.rs" 24 18 24 25
 
 use creusot.int.UInt64
 use creusot.slice.Slice64
@@ -260,7 +260,7 @@ meta "compute_max_steps" 1000000
 meta "select_lsinst" "all"
 
 let rec bj_restart__creusot
-  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 176 0 179 55]
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 181 0 184 55]
   (state: t_BlackjackState) (proof: t_Established_BlackjackConsistent)
   (return (x: tup2_BlackjackState_Established_BlackjackConsistent)) =
   {[@stop_split] [@expl:bj_restart__creusot requires] ([@stop_split] [@expl:bj_restart__creusot 'state' type invariant] [%#sblackjack_vsm'1] inv_BlackjackState state)

@@ -31,7 +31,7 @@
 //!                                       Betting
 //! ```
 
-use crate::contracts::{CrapsConsistent, CrapsRulesEvidence};
+use crate::contracts::{CrapsConsistent, CrapsBettingEvidence, CrapsRulesEvidence, NonEmptyBankrolls};
 use crate::display::CrapsDisplayMode;
 use crate::typestate::{ComeOutResult, GameSetup, PointRollResult};
 use crate::workflow::BetsPlaced;
@@ -121,14 +121,16 @@ impl Default for CrapsState {
 
 /// Transition: initialise bankrolls and move from setup to betting.
 ///
-/// Only valid from the `Setup` state; all other states are passed through
-/// unchanged.
-#[formal_method(contracts = [CrapsConsistent])]
-#[cfg_attr(not(kani), instrument(skip(proof)))]
+/// Requires [`Established<NonEmptyBankrolls>`] — a proof token that `bankrolls` is non-empty.
+/// Obtain it via [`crate::validate_non_empty_bankrolls`] before calling.
+/// Only valid from the `Setup` state; all other states are passed through unchanged.
+#[formal_method(contracts = [CrapsConsistent], creusot_requires = ["bankrolls@.len() > 0"])]
+#[cfg_attr(not(kani), instrument(skip(proof, bankrolls_proof)))]
 pub fn craps_start_betting(
     state: CrapsState,
     proof: Established<CrapsConsistent>,
     bankrolls: Vec<u64>,
+    bankrolls_proof: Established<NonEmptyBankrolls>,
 ) -> (CrapsState, Established<CrapsConsistent>) {
     let CrapsState::Setup {
         inner: setup,
@@ -137,12 +139,15 @@ pub fn craps_start_betting(
     else {
         return (state, proof);
     };
+    let new_proof = Established::prove(&CrapsBettingEvidence {
+        non_empty: bankrolls_proof,
+    });
     (
         CrapsState::Betting {
             inner: setup.start_betting(bankrolls),
             display_mode,
         },
-        proof,
+        new_proof,
     )
 }
 
@@ -261,7 +266,7 @@ pub fn craps_point_roll(
 /// Rotates the shooter index and resets bets with updated bankrolls.
 ///
 /// Only valid from the `Resolved` state; all other states are passed through.
-#[formal_method(contracts = [CrapsConsistent])]
+#[formal_method(contracts = [CrapsConsistent], creusot_requires = ["updated_bankrolls@.len() > 0"])]
 #[cfg_attr(not(kani), instrument(skip(proof)))]
 pub fn craps_next_round(
     state: CrapsState,

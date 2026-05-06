@@ -55,7 +55,10 @@ pub use workflow::{
 };
 
 // VSM layer
-pub use contracts::{CrapsConsistent, CrapsRulesEvidence};
+pub use contracts::{
+    CrapsBettingEvidence, CrapsConsistent, CrapsRulesEvidence, NonEmptyBankrolls,
+    validate_non_empty_bankrolls,
+};
 pub use traits::CrapsRuleEnforcer;
 pub use vsm::{
     CrapsMachine, CrapsState, craps_comeout_roll, craps_next_round, craps_place_bets,

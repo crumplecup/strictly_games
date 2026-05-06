@@ -28,7 +28,11 @@ fn craps_start_betting__kani_closure() {
         ::elicitation::Established::prove(&__cred)
     };
     let bankrolls: Vec<u64> = ::std::vec::Vec::new();
-    let _result = craps_start_betting(state, proof, bankrolls);
+    let bankrolls_proof: Established<NonEmptyBankrolls> = {
+        let __cred = NonEmptyBankrolls::kani_proof_credential();
+        ::elicitation::Established::prove(&__cred)
+    };
+    let _result = craps_start_betting(state, proof, bankrolls, bankrolls_proof);
     ::std::mem::forget(_result);
 }
 #[allow(unexpected_cfgs)]

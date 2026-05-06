@@ -33,6 +33,10 @@ pub enum ActionError {
     #[display("Invalid bet amount: {}", _0)]
     InvalidBet(#[error(not(source))] u64),
 
+    /// Bankroll must be greater than zero.
+    #[display("Bankroll must be positive, got 0")]
+    ZeroBankroll,
+
     /// Shoe exhausted.
     #[display("No cards remaining in shoe")]
     DeckExhausted,

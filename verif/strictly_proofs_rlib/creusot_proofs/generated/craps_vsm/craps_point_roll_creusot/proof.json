@@ -8,18 +8,25 @@
           {
             "tactic": "split_vc",
             "children": [
-              { "prover": "alt-ergo", "time": 0.053 },
-              { "prover": "alt-ergo", "time": 0.052 },
+              { "prover": "alt-ergo", "time": 0.054 },
+              { "prover": "alt-ergo", "time": 0.061 },
+              { "prover": "alt-ergo", "time": 0.058 },
+              { "prover": "alt-ergo", "time": 0.05 },
+              { "prover": "alt-ergo", "time": 0.134 },
               { "prover": "alt-ergo", "time": 0.051 },
-              null,
-              { "prover": "alt-ergo", "time": 0.06 },
-              { "prover": "alt-ergo", "time": 0.06 },
+              { "prover": "alt-ergo", "time": 0.145 },
+              { "prover": "alt-ergo", "time": 0.042 },
+              { "prover": "alt-ergo", "time": 0.058 },
+              { "prover": "alt-ergo", "time": 0.061 },
               { "prover": "alt-ergo", "time": 0.054 }
             ]
           }
         ]
       },
-      "vc_elim_PointPhase": { "prover": "alt-ergo", "time": 0.032 }
+      "vc_elim_Continue": { "prover": "alt-ergo", "time": 0.026 },
+      "vc_elim_PointPhase": { "prover": "alt-ergo", "time": 0.032 },
+      "vc_elim_Resolved": { "prover": "alt-ergo", "time": 0.029 },
+      "vc_roll": { "prover": "alt-ergo", "time": 0.023 }
     }
   }
 }

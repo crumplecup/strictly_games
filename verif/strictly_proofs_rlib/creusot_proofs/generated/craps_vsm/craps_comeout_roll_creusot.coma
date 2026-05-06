@@ -1,22 +1,26 @@
-(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 88 0 92 47 *)
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 93 0 97 47 *)
 
 let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
 let%span svec'0 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 87 20 87 30
-let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
+let%span svsm_extern_specs = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 161 16 161 20
+let%span svsm_extern_specs'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 161 22 161 26
+let%span svsm_extern_specs'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 153 18 160 9
+let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_craps/src/typestate.rs" 167 4 167 54
 let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
-let%span scraps_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 100 10 100 28
-let%span scraps_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 89 4 89 9
-let%span scraps_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 90 4 90 9
-let%span scraps_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 91 4 91 8
-let%span scraps_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 86 11 86 35
-let%span scraps_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 92 5 92 47
-let%span scraps_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 87 10 87 37
+let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
+let%span scraps_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 105 10 105 28
+let%span scraps_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 94 4 94 9
+let%span scraps_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 95 4 95 9
+let%span scraps_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 96 4 96 8
+let%span scraps_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 91 11 91 35
+let%span scraps_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 97 5 97 47
+let%span scraps_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 92 10 92 37
 let%span scraps_vsm'6 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 20 8 25 38
 
 use creusot.int.UInt64
 use creusot.int.UInt8
-use creusot.prelude.Any
 use seq.Seq
+use creusot.prelude.Any
 use int.Int
 
 type t_GameSetup = { num_seats: UInt64.t; max_odds: UInt8.t }
@@ -201,9 +205,52 @@ predicate inv_GameResolved (_1: t_GameResolved)
 axiom inv_axiom'4 [@rewrite]: forall x: t_GameResolved [inv_GameResolved x]. inv_GameResolved x
     = (inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'3 /\ inv_Vec_DiceRoll_Global x.roll_history'3)
 
+predicate inv_ComeOutResult (_1: t_ComeOutResult)
+
+axiom inv_axiom'5 [@rewrite]: forall x: t_ComeOutResult [inv_ComeOutResult x]. inv_ComeOutResult x
+    = match x with
+      | PointSet'0 f0'0 -> inv_GamePointPhase f0'0
+      | Resolved'0 f0'0 -> inv_GameResolved f0'0
+      end
+
+function view_Vec_u64_Global (self: t_Vec_u64_Global) : Seq.seq UInt64.t
+
+axiom view_Vec_u64_Global_spec: forall self: t_Vec_u64_Global. [%#svec] Seq.length (view_Vec_u64_Global self)
+    <= UInt64.t'int const_MAX
+
+let rec roll (self_: t_GameComeOut) (dice: t_DiceRoll) (return (x: t_ComeOutResult)) =
+  {[@stop_split] [@expl:roll requires] ([@stop_split] [@expl:roll 'self_' type invariant] [%#svsm_extern_specs] inv_GameComeOut self_)
+  /\ ([@stop_split] [@expl:roll 'dice' type invariant] [%#svsm_extern_specs'0] inv_DiceRoll dice)}
+  any
+  [ return (result: t_ComeOutResult) ->
+  {[@stop_split] [@expl:roll ensures] ([@stop_split] [@expl:roll result type invariant] [%#stypestate] inv_ComeOutResult result)
+    /\ ([@stop_split] [@expl:roll ensures] [%#svsm_extern_specs'1] match result with
+      | PointSet'0 pp -> UInt64.t'int pp.shooter_idx'2 = UInt64.t'int self_.shooter_idx'1
+      /\ Seq.length (view_Vec_u64_Global pp.bankrolls'2) = Seq.length (view_Vec_u64_Global self_.bankrolls'1)
+      | Resolved'0 r -> UInt64.t'int r.shooter_idx'3 = UInt64.t'int self_.shooter_idx'1
+      /\ Seq.length (view_Vec_u64_Global r.bankrolls'3) = Seq.length (view_Vec_u64_Global self_.bankrolls'1)
+      end)}
+    (! return {result}) ]
+
+let rec elim_Resolved (_x: t_ComeOutResult) (return (f0'0: t_GameResolved)) = any
+  [ _k (f0'0: t_GameResolved) -> {Resolved'0 f0'0 = _x} (! return {f0'0})
+  | _chk -> (! {[@expl:elim Resolved] match _x with
+      | Resolved'0 _ -> true
+      | _ -> false
+      end}
+    any) ]
+
+let rec elim_PointSet (_x: t_ComeOutResult) (return (f0'0: t_GamePointPhase)) = any
+  [ _k (f0'0: t_GamePointPhase) -> {PointSet'0 f0'0 = _x} (! return {f0'0})
+  | _chk -> (! {[@expl:elim PointSet] match _x with
+      | PointSet'0 _ -> true
+      | _ -> false
+      end}
+    any) ]
+
 predicate inv_CrapsState (_1: t_CrapsState)
 
-axiom inv_axiom'5 [@rewrite]: forall x: t_CrapsState [inv_CrapsState x]. inv_CrapsState x
+axiom inv_axiom'6 [@rewrite]: forall x: t_CrapsState [inv_CrapsState x]. inv_CrapsState x
     = match x with
       | Setup inner display_mode -> true
       | Betting inner display_mode -> true
@@ -213,11 +260,6 @@ axiom inv_axiom'5 [@rewrite]: forall x: t_CrapsState [inv_CrapsState x]. inv_Cra
       end
 
 predicate inv_Established_CrapsConsistent (_1: t_Established_CrapsConsistent)
-
-function view_Vec_u64_Global (self: t_Vec_u64_Global) : Seq.seq UInt64.t
-
-axiom view_Vec_u64_Global_spec: forall self: t_Vec_u64_Global. [%#svec] Seq.length (view_Vec_u64_Global self)
-    <= UInt64.t'int const_MAX
 
 predicate craps_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 18 0 18 51] (state: t_CrapsState) =
   [%#scraps_vsm'6] match state with
@@ -238,7 +280,7 @@ meta "compute_max_steps" 1000000
 meta "select_lsinst" "all"
 
 let rec craps_comeout_roll__creusot
-  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 88 0 92 47]
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/craps_vsm.rs" 93 0 97 47]
   (state: t_CrapsState) (proof: t_Established_CrapsConsistent) (dice: t_DiceRoll)
   (return (x: tup2_CrapsState_Established_CrapsConsistent)) =
   {[@stop_split] [@expl:craps_comeout_roll__creusot requires] ([@stop_split] [@expl:craps_comeout_roll__creusot 'state' type invariant] [%#scraps_vsm'0] inv_CrapsState state)
@@ -258,7 +300,20 @@ let rec craps_comeout_roll__creusot
         (fun (rinner: t_GameComeOut) (rdisplay_mode: t_CrapsDisplayMode) -> [ &comeout <- rinner ] s1)
     | s1 = elim_ComeOut {state}
         (fun (rinner: t_GameComeOut) (rdisplay_mode: t_CrapsDisplayMode) -> [ &display_mode <- rdisplay_mode ] s2)
-    | s2 = {[%#scraps_vsm] false} any ] ]
+    | s2 = roll [%#scraps_vsm] {comeout} {dice} (fun (_x: t_ComeOutResult) -> [ &_13 <- _x ] s3)
+    | s3 = any
+      [ br0 (x0: t_GamePointPhase) -> {_13 = PointSet'0 x0} (! bb9)
+      | br1 (x0: t_GameResolved) -> {_13 = Resolved'0 x0} (! bb8) ] ]
+  | bb8 = s0
+    [ s0 = elim_Resolved {_13} (fun (r0: t_GameResolved) -> [ &r <- r0 ] s1)
+    | s1 = [ &_23 <- Resolved r display_mode ] s2
+    | s2 = [ &_ret <- { f0 = _23; f1 = proof } ] s3
+    | s3 = return {_ret} ]
+  | bb9 = s0
+    [ s0 = elim_PointSet {_13} (fun (r0: t_GamePointPhase) -> [ &pp <- r0 ] s1)
+    | s1 = [ &_18 <- PointPhase pp display_mode ] s2
+    | s2 = [ &_ret <- { f0 = _18; f1 = proof } ] s3
+    | s3 = return {_ret} ] ]
   [ & _ret: tup2_CrapsState_Established_CrapsConsistent = Any.any_l ()
   | & state: t_CrapsState = state
   | & proof: t_Established_CrapsConsistent = proof
@@ -268,14 +323,8 @@ let rec craps_comeout_roll__creusot
   | & _13: t_ComeOutResult = Any.any_l ()
   | & pp: t_GamePointPhase = Any.any_l ()
   | & _18: t_CrapsState = Any.any_l ()
-  | & _19: t_GamePointPhase = Any.any_l ()
-  | & _20: t_CrapsDisplayMode = Any.any_l ()
-  | & _21: t_Established_CrapsConsistent = Any.any_l ()
   | & r: t_GameResolved = Any.any_l ()
-  | & _23: t_CrapsState = Any.any_l ()
-  | & _24: t_GameResolved = Any.any_l ()
-  | & _25: t_CrapsDisplayMode = Any.any_l ()
-  | & _26: t_Established_CrapsConsistent = Any.any_l () ])
+  | & _23: t_CrapsState = Any.any_l () ])
   [ return (result: tup2_CrapsState_Established_CrapsConsistent) ->
   {[@stop_split] [@expl:craps_comeout_roll__creusot ensures] ([@stop_split] [@expl:craps_comeout_roll__creusot result type invariant] [%#scraps_vsm'4] inv_tup2_CrapsState_Established_CrapsConsistent result)
     /\ ([@stop_split] [@expl:craps_comeout_roll__creusot ensures] [%#scraps_vsm'5] craps_consistent result.f0)}
