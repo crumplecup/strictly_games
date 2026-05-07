@@ -26,6 +26,7 @@ use elicitation::Elicit;
 #[cfg(feature = "roll")]
 use elicitation::Generator;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 /// A single die face (1–6).
@@ -87,7 +88,7 @@ impl DieFace {
     /// Creates a [`DieFace`] from a numeric value (1–6).
     ///
     /// Returns `None` for values outside 1..=6.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn from_value(v: u8) -> Option<Self> {
         match v {
             1 => Some(DieFace::One),

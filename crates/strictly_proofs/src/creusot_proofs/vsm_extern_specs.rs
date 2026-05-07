@@ -202,7 +202,7 @@ extern_spec! {
         /// `start` creates a fresh in-progress game with an empty history.
         ///
         /// `result.history@.len() == 0 <= 9` satisfies the `InProgress` branch
-        /// of `tictactoe_consistent`.
+        /// of `tic_tac_toe_consistent`.
         #[ensures(result.history@.len() == 0)]
         fn start(self, first_player: Player) -> TttInProgress;
     }
@@ -228,7 +228,7 @@ extern_spec! {
 
 extern_spec! {
     impl TttFinished {
-        /// `restart` returns a fresh setup — `Setup => true` in `tictactoe_consistent`.
+        /// `restart` returns a fresh setup — `Setup => true` in `tic_tac_toe_consistent`.
         #[requires(true)]
         fn restart(self) -> TttSetup;
     }

@@ -7,6 +7,7 @@
 
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::Position;
@@ -45,19 +46,19 @@ pub enum TicTacToeAction {
 
 impl TicTacToeAction {
     /// Returns `true` for game-move variants.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn is_commit(&self) -> bool {
         matches!(self, Self::Play(_))
     }
 
     /// Returns `true` for state-query variants.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn is_explore(&self) -> bool {
         !self.is_commit()
     }
 
     /// Extracts the [`Position`] from a commit variant.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn to_position(self) -> Option<Position> {
         match self {
             Self::Play(pos) => Some(pos),
@@ -66,7 +67,7 @@ impl TicTacToeAction {
     }
 
     /// Maps explore variants to their TypeSpec category name.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn explore_category(&self) -> Option<&'static str> {
         match self {
             Self::ViewBoard => Some("board"),

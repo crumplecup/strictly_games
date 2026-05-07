@@ -38,7 +38,7 @@ impl BetAmount {
 }
 
 impl std::fmt::Display for BetAmount {
-    #[tracing::instrument(skip(self, f))]
+    #[cfg_attr(not(kani), tracing::instrument(skip(self, f)))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }

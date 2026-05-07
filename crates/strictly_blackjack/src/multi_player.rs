@@ -30,6 +30,7 @@
 
 use elicitation::Generator;
 use elicitation::contracts::Established;
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::MAX_HAND_CARDS;
@@ -97,7 +98,7 @@ impl SeatPlay {
     /// # Errors
     ///
     /// Returns [`ActionError::DeckExhausted`] if the shoe has no more cards.
-    #[instrument(skip(self, shoe), fields(seat = %self.name))]
+    #[cfg_attr(not(kani), instrument(skip(self, shoe), fields(seat = %self.name)))]
     pub fn hit(&mut self, shoe: &Shoe) -> Result<(), ActionError> {
         if self.is_done() {
             return Ok(());
@@ -106,14 +107,16 @@ impl SeatPlay {
         self.hand.add_card(card);
         if self.hand.is_bust() {
             self.bust = true;
+            #[cfg(not(kani))]
             tracing::debug!(seat = %self.name, value = self.hand.value().best(), "Bust");
         }
         Ok(())
     }
 
     /// Records that the player has chosen to stand.
-    #[instrument(skip(self), fields(seat = %self.name))]
+    #[cfg_attr(not(kani), instrument(skip(self), fields(seat = %self.name)))]
     pub fn stand(&mut self) {
+        #[cfg(not(kani))]
         tracing::debug!(seat = %self.name, "Stand");
         self.stood = true;
     }
@@ -134,7 +137,7 @@ impl SeatPlay {
     ///
     /// - Natural vs dealer natural → `Push` (original bet returned).
     /// - Natural vs dealer non-natural → `Blackjack` (3:2 payout).
-    #[instrument(skip(self, dealer_hand), fields(seat = %self.name))]
+    #[cfg_attr(not(kani), instrument(skip(self, dealer_hand), fields(seat = %self.name)))]
     pub fn settle(self, dealer_hand: &Hand) -> SeatResult {
         let dealer_bust = dealer_hand.is_bust();
         let dealer_natural = dealer_hand.is_blackjack();
@@ -161,6 +164,7 @@ impl SeatPlay {
 
         let (final_bankroll, _settled) = self.ledger.settle(outcome, self.bet_deducted);
 
+        #[cfg(not(kani))]
         tracing::info!(
             seat = %self.name,
             ?outcome,
@@ -230,14 +234,14 @@ impl MultiRound {
     /// runs out mid-deal (structurally impossible with a fresh 52-card shoe and
     /// ≤ [`MAX_SEATS`] players, but guarded against for safety).
     #[cfg(feature = "shuffle")]
-    #[instrument(skip(bets), fields(num_seats = bets.len()))]
+    #[cfg_attr(not(kani), instrument(skip(bets), fields(num_seats = bets.len())))]
     pub fn deal(bets: Vec<SeatBet>, seed: u64) -> Result<Self, ActionError> {
         let shoe = Shoe::new(seed, 1);
         Self::deal_with_shoe(bets, shoe)
     }
 
     /// Deals a new round using a pre-built shoe (for testing / formal verification).
-    #[instrument(skip(bets, shoe), fields(num_seats = bets.len()))]
+    #[cfg_attr(not(kani), instrument(skip(bets, shoe), fields(num_seats = bets.len())))]
     pub fn deal_with_shoe(bets: Vec<SeatBet>, shoe: Shoe) -> Result<Self, ActionError> {
         let num_seats = bets.len();
 
@@ -280,10 +284,12 @@ impl MultiRound {
         for seat in &mut seats {
             if seat.hand.is_blackjack() {
                 seat.natural = true;
+                #[cfg(not(kani))]
                 tracing::info!(seat = %seat.name, "Natural blackjack on deal");
             }
         }
 
+        #[cfg(not(kani))]
         tracing::info!(
             num_seats,
             dealer_up_card = ?dealer_hand,
@@ -308,7 +314,7 @@ impl MultiRound {
     /// Plays the dealer's turn using fixed casino rules: hit on ≤ 16, stand on ≥ 17.
     ///
     /// Must be called after all player turns are complete.
-    #[instrument(skip(self), fields(dealer_value = self.dealer_hand.value().best()))]
+    #[cfg_attr(not(kani), instrument(skip(self), fields(dealer_value = self.dealer_hand.value().best())))]
     pub fn play_dealer(&mut self) {
         // Bounded loop so Kani can determine unroll depth from MAX_HAND_CARDS.
         for _ in 0..MAX_HAND_CARDS {
@@ -321,6 +327,7 @@ impl MultiRound {
                 break;
             }
         }
+        #[cfg(not(kani))]
         tracing::debug!(
             dealer_value = self.dealer_hand.value().best(),
             bust = self.dealer_hand.is_bust(),
@@ -331,7 +338,7 @@ impl MultiRound {
     /// Settles all seats against the dealer's final hand.
     ///
     /// Consumes `self` and returns one [`SeatResult`] per seat in deal order.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn settle(self) -> Vec<SeatResult> {
         let dealer_hand = self.dealer_hand;
         self.seats

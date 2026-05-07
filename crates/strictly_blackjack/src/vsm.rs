@@ -117,7 +117,7 @@ impl Default for BlackjackState {
 /// Requires [`Established<BankrollPositive>`] — a proof token that `initial_bankroll > 0`.
 /// Obtain it via [`crate::validate_bankroll_positive`] before calling.
 /// Only valid from the `Setup` state; all other states are passed through.
-#[formal_method(contracts = [BlackjackConsistent], creusot_requires = ["initial_bankroll@ > 0"])]
+#[formal_method(contracts = [BlackjackConsistent], creusot_requires = ["initial_bankroll@ > 0"], kani_requires = ["initial_bankroll > 0"])]
 #[cfg_attr(not(kani), instrument(skip(proof, bankroll_proof)))]
 pub fn bj_start_betting(
     state: BlackjackState,

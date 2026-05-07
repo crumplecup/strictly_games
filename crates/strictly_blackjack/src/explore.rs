@@ -7,6 +7,7 @@
 
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::BasicAction;
@@ -56,19 +57,19 @@ pub enum BlackjackAction {
 
 impl BlackjackAction {
     /// Returns `true` for game-move variants (Hit, Stand).
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn is_commit(&self) -> bool {
         matches!(self, Self::Hit | Self::Stand)
     }
 
     /// Returns `true` for state-query variants.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn is_explore(&self) -> bool {
         !self.is_commit()
     }
 
     /// Extracts the corresponding [`BasicAction`] for commit variants.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn to_basic_action(self) -> Option<BasicAction> {
         match self {
             Self::Hit => Some(BasicAction::Hit),
@@ -78,7 +79,7 @@ impl BlackjackAction {
     }
 
     /// Maps explore variants to their TypeSpec category name.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn explore_category(&self) -> Option<&'static str> {
         match self {
             Self::ViewHand => Some("your_hand"),

@@ -6,8 +6,6 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_tictactoe::vsm::*;
-#[cfg(kani)]
 use strictly_tictactoe::*;
 #[cfg(kani)]
 #[kani::proof]
@@ -19,8 +17,8 @@ fn verify_tic_tac_toe_consistent_prop_marker() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(ttt_start_game)]
 fn ttt_start_game__kani_closure() {
-    let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_any();
-    ::kani::assume(tictactoe_consistent(&state));
+    let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth2();
+    ::kani::assume(tic_tac_toe_consistent(&state));
     ::std::mem::forget(state);
     let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth0();
     let proof: Established<TicTacToeConsistent> = {
@@ -35,8 +33,8 @@ fn ttt_start_game__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(ttt_make_move)]
 fn ttt_make_move__kani_closure() {
-    let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_any();
-    ::kani::assume(tictactoe_consistent(&state));
+    let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth2();
+    ::kani::assume(tic_tac_toe_consistent(&state));
     ::std::mem::forget(state);
     let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth0();
     let proof: Established<TicTacToeConsistent> = {
@@ -59,8 +57,8 @@ fn ttt_make_move__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(ttt_restart)]
 fn ttt_restart__kani_closure() {
-    let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_any();
-    ::kani::assume(tictactoe_consistent(&state));
+    let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth2();
+    ::kani::assume(tic_tac_toe_consistent(&state));
     ::std::mem::forget(state);
     let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth0();
     let proof: Established<TicTacToeConsistent> = {

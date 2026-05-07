@@ -10,6 +10,7 @@ use crate::outcome::Outcome;
 use crate::{Board, Player, Position};
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ pub struct GameSetup {
 
 impl GameSetup {
     /// Creates a new game in setup phase.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn new() -> Self {
         Self {
             board: Board::new(),
@@ -41,7 +42,7 @@ impl GameSetup {
     }
 
     /// Starts the game with the first player (consumes setup, returns in-progress).
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn start(self, first_player: Player) -> GameInProgress {
         GameInProgress {
             board: self.board,
@@ -86,7 +87,7 @@ impl GameInProgress {
     /// - Establishes proof of LegalMove (square empty AND player turn)
     /// - Executes move with proof (zero-cost guarantee)
     /// - Type system enforces validation happened
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn make_move(self, action: Move) -> Result<GameResult, MoveError> {
         // Establish proof that preconditions hold
         let proof = validate_move(&action, &self)?;
@@ -135,13 +136,13 @@ impl GameInProgress {
     }
 
     /// Returns valid positions.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn valid_moves(&self) -> Vec<Position> {
         Position::valid_moves(&self.board)
     }
 
     /// Replays moves from initial state.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn replay(moves: &[Move]) -> Result<GameResult, MoveError> {
         let mut game = GameSetup::new().start(Player::X);
 
@@ -194,7 +195,7 @@ impl GameFinished {
     }
 
     /// Restarts the game (consumes finished, returns setup).
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn restart(self) -> GameSetup {
         GameSetup::new()
     }

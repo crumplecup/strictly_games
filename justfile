@@ -408,6 +408,20 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         winner_detects_diagonal
         winner_detects_row
         win_payout_never_zero
+        # VSM transition harnesses (proof_for_contract)
+        bj_start_betting__kani_closure
+        bj_place_bet__kani_closure
+        bj_player_action__kani_closure
+        bj_dealer_turn__kani_closure
+        bj_restart__kani_closure
+        craps_start_betting__kani_closure
+        craps_place_bets__kani_closure
+        craps_comeout_roll__kani_closure
+        craps_point_roll__kani_closure
+        craps_next_round__kani_closure
+        ttt_start_game__kani_closure
+        ttt_make_move__kani_closure
+        ttt_restart__kani_closure
     )
     TOTAL=${#HARNESSES[@]}
     echo "🔬 Running $TOTAL Kani harnesses → $CSV"
@@ -417,7 +431,7 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         IDX=$((IDX + 1))
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
+        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs -Z function-contracts -Z stubbing &>/dev/null; then
             END=$(date +%s)
             ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
@@ -598,6 +612,20 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
         winner_detects_diagonal
         winner_detects_row
         win_payout_never_zero
+        # VSM transition harnesses (proof_for_contract)
+        bj_start_betting__kani_closure
+        bj_place_bet__kani_closure
+        bj_player_action__kani_closure
+        bj_dealer_turn__kani_closure
+        bj_restart__kani_closure
+        craps_start_betting__kani_closure
+        craps_place_bets__kani_closure
+        craps_comeout_roll__kani_closure
+        craps_point_roll__kani_closure
+        craps_next_round__kani_closure
+        ttt_start_game__kani_closure
+        ttt_make_move__kani_closure
+        ttt_restart__kani_closure
     )
     PASS=0; FAIL=0; SKIP=0
     TOTAL=${#HARNESSES[@]}
@@ -613,7 +641,7 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
         fi
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs &>/dev/null; then
+        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs -Z function-contracts -Z stubbing &>/dev/null; then
             END=$(date +%s); ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
             printf "✅ PASS (%ds)\n" "$ELAPSED"
@@ -670,6 +698,288 @@ verify-kani-failed csv="kani_verification_results.csv":
         awk -F',' '$3=="FAIL" {printf "  %s  (%ss)\n", $2, $4}' "$CSV"
     fi
 
+
+# ─────────────────────────────────────────────────────────────
+# VSM Kani proof tracking (derived proof_for_contract harnesses only)
+# CSV format: module,harness,status,duration_secs,timestamp
+# These are the auto-generated harnesses in generated/*_vsm.rs — the new
+# derived-proof pattern.  Old manual harnesses are excluded intentionally.
+# ─────────────────────────────────────────────────────────────
+
+# Run all 13 VSM harnesses with per-harness CSV tracking.
+# Usage: just verify-kani-vsm                  (fresh run)
+#        just verify-kani-vsm my.csv           (custom CSV)
+#        just verify-kani-vsm my.csv 240       (custom timeout)
+verify-kani-vsm csv="vsm_kani_results.csv" timeout="240":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CSV="{{csv}}"
+    echo "module,harness,status,duration_secs,timestamp" > "$CSV"
+    PASS=0; FAIL=0
+    HARNESSES=(
+        bj_start_betting__kani_closure
+        bj_place_bet__kani_closure
+        bj_player_action__kani_closure
+        bj_dealer_turn__kani_closure
+        bj_restart__kani_closure
+        craps_start_betting__kani_closure
+        craps_place_bets__kani_closure
+        craps_comeout_roll__kani_closure
+        craps_point_roll__kani_closure
+        craps_next_round__kani_closure
+        ttt_start_game__kani_closure
+        ttt_make_move__kani_closure
+        ttt_restart__kani_closure
+    )
+    TOTAL=${#HARNESSES[@]}
+    echo "🔬 Running $TOTAL VSM Kani harnesses → $CSV"
+    echo ""
+    IDX=0
+    for harness in "${HARNESSES[@]}"; do
+        IDX=$((IDX + 1))
+        printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
+        START=$(date +%s)
+        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs \
+                -Z function-contracts -Z stubbing &>/dev/null; then
+            END=$(date +%s); ELAPSED=$((END - START))
+            echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            printf "✅ PASS (%ds)\n" "$ELAPSED"
+            PASS=$((PASS + 1))
+        else
+            END=$(date +%s); ELAPSED=$((END - START))
+            STATUS=$( [ $ELAPSED -ge {{timeout}} ] && echo "TIMEOUT" || echo "FAIL" )
+            echo "kani_proofs,$harness,$STATUS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            [ "$STATUS" = "TIMEOUT" ] && printf "⏱  TIMEOUT (%ds)\n" "$ELAPSED" || printf "❌ FAIL (%ds)\n" "$ELAPSED"
+            FAIL=$((FAIL + 1))
+        fi
+    done
+    echo ""
+    echo "Results: $PASS/$TOTAL passed, $FAIL failed"
+    echo "CSV:     $CSV"
+
+# Resume VSM run — skips harnesses already recorded as PASS in the CSV.
+verify-kani-vsm-resume csv="vsm_kani_results.csv" timeout="240":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then
+        echo "No existing CSV at $CSV — run 'just verify-kani-vsm' first."
+        exit 1
+    fi
+    PASSED=$(awk -F',' '$3=="PASS" {print $2}' "$CSV" | sort -u)
+    HARNESSES=(
+        bj_start_betting__kani_closure
+        bj_place_bet__kani_closure
+        bj_player_action__kani_closure
+        bj_dealer_turn__kani_closure
+        bj_restart__kani_closure
+        craps_start_betting__kani_closure
+        craps_place_bets__kani_closure
+        craps_comeout_roll__kani_closure
+        craps_point_roll__kani_closure
+        craps_next_round__kani_closure
+        ttt_start_game__kani_closure
+        ttt_make_move__kani_closure
+        ttt_restart__kani_closure
+    )
+    PASS=0; FAIL=0; SKIP=0
+    TOTAL=${#HARNESSES[@]}
+    echo "🔬 Resuming VSM Kani run ($TOTAL total)"
+    echo ""
+    IDX=0
+    for harness in "${HARNESSES[@]}"; do
+        IDX=$((IDX + 1))
+        if echo "$PASSED" | grep -qx "$harness"; then
+            printf "  [%d/%d] %-50s⏭  SKIP\n" "$IDX" "$TOTAL" "$harness"
+            SKIP=$((SKIP + 1))
+            continue
+        fi
+        printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
+        START=$(date +%s)
+        if timeout "{{timeout}}" cargo kani --harness "$harness" -p strictly_proofs \
+                -Z function-contracts -Z stubbing &>/dev/null; then
+            END=$(date +%s); ELAPSED=$((END - START))
+            echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            printf "✅ PASS (%ds)\n" "$ELAPSED"
+            PASS=$((PASS + 1))
+        else
+            END=$(date +%s); ELAPSED=$((END - START))
+            STATUS=$( [ $ELAPSED -ge {{timeout}} ] && echo "TIMEOUT" || echo "FAIL" )
+            echo "kani_proofs,$harness,$STATUS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
+            [ "$STATUS" = "TIMEOUT" ] && printf "⏱  TIMEOUT (%ds)\n" "$ELAPSED" || printf "❌ FAIL (%ds)\n" "$ELAPSED"
+            FAIL=$((FAIL + 1))
+        fi
+    done
+    echo ""
+    echo "Results: $PASS newly passed, $FAIL failed, $SKIP skipped"
+    echo "CSV:     $CSV"
+
+# Print summary of VSM verification results.
+verify-kani-vsm-summary csv="vsm_kani_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then echo "No CSV at $CSV"; exit 1; fi
+    PASS=$(awk -F',' '$3=="PASS"' "$CSV" | wc -l | tr -d ' ')
+    FAIL=$(awk -F',' '$3=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    TIMEOUT=$(awk -F',' '$3=="TIMEOUT"' "$CSV" | wc -l | tr -d ' ')
+    TOTAL=$((PASS + FAIL + TIMEOUT))
+    echo "📊 VSM Kani summary ($CSV)"
+    echo "   Passed:  $PASS / $TOTAL"
+    [ "$FAIL" -gt 0 ]    && echo "   Failed:  $FAIL"
+    [ "$TIMEOUT" -gt 0 ] && echo "   Timeout: $TIMEOUT"
+    if [ "$FAIL" -gt 0 ]; then
+        echo ""; echo "Failed:"
+        awk -F',' '$3=="FAIL" {printf "  ❌ %s  (%ss)\n", $2, $4}' "$CSV"
+    fi
+    if [ "$TIMEOUT" -gt 0 ]; then
+        echo ""; echo "Timed out:"
+        awk -F',' '$3=="TIMEOUT" {printf "  ⏱  %s  (%ss)\n", $2, $4}' "$CSV"
+    fi
+
+
+# ─────────────────────────────────────────────────────────────
+# Verus VSM-only recipes (generated companion contracts only)
+# These run only the three derived VSM companion files — not
+# the old manual proofs — to focus on the new architecture.
+# ─────────────────────────────────────────────────────────────
+
+# Run only the generated Verus VSM companion contracts (BJ + Craps + TTT)
+# Usage: just verify-verus-vsm                  (fresh run)
+#        just verify-verus-vsm my.csv           (custom CSV)
+#        just verify-verus-vsm my.csv 300       (custom timeout)
+verify-verus-vsm csv="vsm_verus_results.csv" timeout="300":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    RAW_VERUS=$(grep -v '^#' .env 2>/dev/null | grep '^VERUS_PATH=' | sed 's/^VERUS_PATH=//' | tr -d '"' || true)
+    VERUS_BIN="${RAW_VERUS/\~/$HOME}"
+    if [ -z "$VERUS_BIN" ] || [ ! -f "$VERUS_BIN" ]; then
+        echo "❌ Verus not found at: '${VERUS_BIN}'"
+        echo "   Set VERUS_PATH in .env"
+        exit 1
+    fi
+
+    CSV="{{csv}}"
+    echo "module,status,verified,errors,duration_secs,timestamp" > "$CSV"
+    PASS=0; FAIL=0
+
+    # Ensure generated files are up to date
+    cargo build -p strictly_verus --quiet 2>/dev/null || true
+
+    VSM_FILES=(
+        "crates/strictly_verus/src/generated/blackjack.rs"
+        "crates/strictly_verus/src/generated/craps.rs"
+        "crates/strictly_verus/src/generated/tictactoe.rs"
+    )
+
+    for file in "${VSM_FILES[@]}"; do
+        [[ -f "$file" ]] || { echo "⚠️  Missing: $file"; continue; }
+        module=$(basename "$file" .rs)
+
+        echo -n "  🔬 $module ... "
+        START=$(date +%s%3N)
+        OUTPUT=$(timeout "{{timeout}}" "$VERUS_BIN" --crate-type=lib "$file" 2>&1) || true
+        END=$(date +%s%3N)
+        ELAPSED=$(( (END - START) / 1000 ))
+
+        VERIFIED=$(echo "$OUTPUT" | grep -oP '\d+(?= verified)' | tail -1 || echo "0")
+        ERRORS=$(echo "$OUTPUT" | grep -oP '\d+(?= error)' | tail -1 || echo "0")
+        TS=$(date -Iseconds)
+
+        if [[ "${ERRORS:-0}" == "0" ]] && echo "$OUTPUT" | grep -q "verified"; then
+            STATUS="PASS"; PASS=$((PASS + 1))
+            echo "✅  ($VERIFIED verified, ${ELAPSED}s)"
+        else
+            STATUS="FAIL"; FAIL=$((FAIL + 1))
+            echo "❌  ($ERRORS errors, ${ELAPSED}s)"
+            echo "$OUTPUT" | tail -20
+        fi
+        echo "$module,$STATUS,$VERIFIED,$ERRORS,$ELAPSED,$TS" >> "$CSV"
+    done
+
+    echo ""
+    echo "Results: $PASS passed, $FAIL failed"
+    echo "CSV:     $CSV"
+    [ "$FAIL" -eq 0 ] || exit 1
+
+# Resume VSM Verus run — skip modules already PASS in CSV
+verify-verus-vsm-resume csv="vsm_verus_results.csv" timeout="300":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    RAW_VERUS=$(grep -v '^#' .env 2>/dev/null | grep '^VERUS_PATH=' | sed 's/^VERUS_PATH=//' | tr -d '"' || true)
+    VERUS_BIN="${RAW_VERUS/\~/$HOME}"
+    if [ -z "$VERUS_BIN" ] || [ ! -f "$VERUS_BIN" ]; then
+        echo "❌ Verus not found at: '${VERUS_BIN}'. Set VERUS_PATH in .env"; exit 1
+    fi
+
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then
+        echo "No CSV at $CSV — use 'just verify-verus-vsm' to start fresh."
+        exit 1
+    fi
+
+    PASS=0; FAIL=0; SKIP=0
+
+    cargo build -p strictly_verus --quiet 2>/dev/null || true
+
+    VSM_FILES=(
+        "crates/strictly_verus/src/generated/blackjack.rs"
+        "crates/strictly_verus/src/generated/craps.rs"
+        "crates/strictly_verus/src/generated/tictactoe.rs"
+    )
+
+    for file in "${VSM_FILES[@]}"; do
+        [[ -f "$file" ]] || continue
+        module=$(basename "$file" .rs)
+
+        if grep -q "^$module,PASS," "$CSV" 2>/dev/null; then
+            echo "  ⏭  $module (already PASS — skipping)"
+            SKIP=$((SKIP + 1)); continue
+        fi
+
+        echo -n "  🔬 $module ... "
+        START=$(date +%s%3N)
+        OUTPUT=$(timeout "{{timeout}}" "$VERUS_BIN" --crate-type=lib "$file" 2>&1) || true
+        END=$(date +%s%3N)
+        ELAPSED=$(( (END - START) / 1000 ))
+
+        VERIFIED=$(echo "$OUTPUT" | grep -oP '\d+(?= verified)' | tail -1 || echo "0")
+        ERRORS=$(echo "$OUTPUT" | grep -oP '\d+(?= error)' | tail -1 || echo "0")
+        TS=$(date -Iseconds)
+
+        if [[ "${ERRORS:-0}" == "0" ]] && echo "$OUTPUT" | grep -q "verified"; then
+            STATUS="PASS"; PASS=$((PASS + 1))
+            echo "✅  ($VERIFIED verified, ${ELAPSED}s)"
+        else
+            STATUS="FAIL"; FAIL=$((FAIL + 1))
+            echo "❌  ($ERRORS errors, ${ELAPSED}s)"
+            echo "$OUTPUT" | tail -20
+        fi
+        sed -i "/^$module,/d" "$CSV" 2>/dev/null || true
+        echo "$module,$STATUS,$VERIFIED,$ERRORS,$ELAPSED,$TS" >> "$CSV"
+    done
+
+    echo ""
+    echo "Results: $PASS newly passed, $FAIL failed, $SKIP skipped"
+    echo "CSV:     $CSV"
+
+# Show VSM Verus summary from CSV
+verify-verus-vsm-summary csv="vsm_verus_results.csv":
+    #!/usr/bin/env bash
+    CSV="{{csv}}"
+    if [ ! -f "$CSV" ]; then echo "No CSV at $CSV"; exit 1; fi
+    PASS=$(awk -F',' '$2=="PASS"' "$CSV" | wc -l | tr -d ' ')
+    FAIL=$(awk -F',' '$2=="FAIL"' "$CSV" | wc -l | tr -d ' ')
+    TOTAL=$((PASS + FAIL))
+    echo "📊 Verus VSM summary ($CSV)"
+    echo "   Passed: $PASS / $TOTAL"
+    echo "   Failed: $FAIL"
+    if [ "$FAIL" -gt 0 ]; then
+        echo ""
+        echo "Failed modules:"
+        awk -F',' '$2=="FAIL" {printf "  ❌ %s\n", $1}' "$CSV"
+    fi
 
 # ─────────────────────────────────────────────────────────────
 # Verus verification tracking

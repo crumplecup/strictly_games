@@ -15,7 +15,7 @@ use strictly_tictactoe::vsm::*;
 use strictly_tictactoe::*;
 #[cfg(creusot)]
 #[logic]
-pub fn tictactoe_consistent(state: &TicTacToeState) -> bool {
+pub fn tic_tac_toe_consistent(state: &TicTacToeState) -> bool {
     pearlite! {
         match state { TicTacToeState::Setup { .. } => true, TicTacToeState::InProgress {
         inner, .. } => inner.history @.len() <= 9, TicTacToeState::Finished { inner, .. }
@@ -30,8 +30,8 @@ pub fn verify_tic_tac_toe_consistent_prop_creusot() -> bool {
     true
 }
 #[cfg(creusot)]
-#[requires(tictactoe_consistent(&state))]
-#[ensures(tictactoe_consistent(&result.0))]
+#[requires(tic_tac_toe_consistent(&state))]
+#[ensures(tic_tac_toe_consistent(&result.0))]
 pub(crate) fn ttt_start_game__creusot(
     state: TicTacToeState,
     proof: Established<TicTacToeConsistent>,
@@ -53,8 +53,8 @@ pub(crate) fn ttt_start_game__creusot(
     )
 }
 #[cfg(creusot)]
-#[requires(tictactoe_consistent(&state))]
-#[ensures(tictactoe_consistent(&result.0))]
+#[requires(tic_tac_toe_consistent(&state))]
+#[ensures(tic_tac_toe_consistent(&result.0))]
 pub(crate) fn ttt_make_move__creusot(
     state: TicTacToeState,
     proof: Established<TicTacToeConsistent>,
@@ -92,8 +92,8 @@ pub(crate) fn ttt_make_move__creusot(
     }
 }
 #[cfg(creusot)]
-#[requires(tictactoe_consistent(&state))]
-#[ensures(tictactoe_consistent(&result.0))]
+#[requires(tic_tac_toe_consistent(&state))]
+#[ensures(tic_tac_toe_consistent(&result.0))]
 pub(crate) fn ttt_restart__creusot(
     state: TicTacToeState,
     proof: Established<TicTacToeConsistent>,

@@ -42,6 +42,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use elicitation::{Elicit, Generator};
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::{Card, Rank, Suit};
@@ -117,7 +118,7 @@ impl Shoe {
     /// let card = shoe.generate().unwrap();
     /// ```
     #[cfg(feature = "shuffle")]
-    #[instrument(skip_all, fields(seed, num_decks))]
+    #[cfg_attr(not(kani), instrument(skip_all, fields(seed, num_decks)))]
     pub fn new(seed: u64, num_decks: u8) -> Self {
         assert!(num_decks > 0 && num_decks <= 8, "num_decks must be 1..=8");
 
@@ -141,6 +142,7 @@ impl Shoe {
             cards.swap(i, j);
         }
 
+        #[cfg(not(kani))]
         tracing::debug!(total = cards.len(), "Shoe created and shuffled");
 
         Self {
@@ -153,8 +155,9 @@ impl Shoe {
     ///
     /// Cards are placed in deal order: first card in the slice is dealt first.
     /// No shuffling occurs regardless of feature flags.
-    #[instrument(skip_all, fields(num_cards = cards.len()))]
+    #[cfg_attr(not(kani), instrument(skip_all, fields(num_cards = cards.len())))]
     pub fn from_ordered(cards: &[Card]) -> Self {
+        #[cfg(not(kani))]
         tracing::debug!(num_cards = cards.len(), "Shoe created from ordered cards");
         Self {
             cards: cards.to_vec(),
@@ -193,7 +196,7 @@ impl Shoe {
 
     /// Reshuffles the shoe and resets the deal counter.
     #[cfg(feature = "shuffle")]
-    #[instrument(skip_all, fields(seed))]
+    #[cfg_attr(not(kani), instrument(skip_all, fields(seed)))]
     pub fn reshuffle(&mut self, seed: u64) {
         use elicitation_rand::SeedableRng;
         let rng = elicitation_rand::StdRng::seed_from_u64(seed);
@@ -203,6 +206,7 @@ impl Shoe {
             self.cards.swap(i, j);
         }
         self.dealt.store(0, Ordering::Relaxed);
+        #[cfg(not(kani))]
         tracing::debug!(total = self.cards.len(), "Shoe reshuffled");
     }
 }

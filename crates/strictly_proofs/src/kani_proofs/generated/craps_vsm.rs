@@ -6,8 +6,6 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_craps::vsm::*;
-#[cfg(kani)]
 use strictly_craps::*;
 #[cfg(kani)]
 #[kani::proof]
@@ -19,7 +17,7 @@ fn verify_craps_consistent_prop_marker() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(craps_start_betting)]
 fn craps_start_betting__kani_closure() {
-    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_any();
+    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
     ::std::mem::forget(state);
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth0();
@@ -39,7 +37,7 @@ fn craps_start_betting__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(craps_place_bets)]
 fn craps_place_bets__kani_closure() {
-    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_any();
+    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
     ::std::mem::forget(state);
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth0();
@@ -59,7 +57,7 @@ fn craps_place_bets__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(craps_comeout_roll)]
 fn craps_comeout_roll__kani_closure() {
-    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_any();
+    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
     ::std::mem::forget(state);
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth0();
@@ -75,7 +73,7 @@ fn craps_comeout_roll__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(craps_point_roll)]
 fn craps_point_roll__kani_closure() {
-    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_any();
+    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
     ::std::mem::forget(state);
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth0();
@@ -91,7 +89,7 @@ fn craps_point_roll__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(craps_next_round)]
 fn craps_next_round__kani_closure() {
-    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_any();
+    let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
     ::std::mem::forget(state);
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth0();

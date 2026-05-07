@@ -7,6 +7,7 @@
 
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 /// A craps betting action — either a bet/done or a state query.
@@ -52,19 +53,19 @@ pub enum CrapsAction {
 
 impl CrapsAction {
     /// Returns `true` for betting-move variants (PlaceBet, Done).
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn is_commit(&self) -> bool {
         matches!(self, Self::PlaceBet | Self::Done)
     }
 
     /// Returns `true` for state-query variants.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn is_explore(&self) -> bool {
         !self.is_commit()
     }
 
     /// Maps explore variants to their TypeSpec category name.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn explore_category(&self) -> Option<&'static str> {
         match self {
             Self::ViewPoint => Some("point"),

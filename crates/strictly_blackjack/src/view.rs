@@ -8,6 +8,7 @@ use elicitation::{
     ElicitSpec, SpecCategoryBuilder, SpecEntryBuilder, TypeSpec, TypeSpecBuilder,
     TypeSpecInventoryKey,
 };
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::{GamePlayerTurn, Hand, HandValue, MultiRound};
@@ -29,7 +30,7 @@ pub struct BlackjackPlayerView {
 
 impl BlackjackPlayerView {
     /// Builds a view snapshot from live game state.
-    #[instrument(skip(state))]
+    #[cfg_attr(not(kani), instrument(skip(state)))]
     pub fn from_game_state(state: &GamePlayerTurn, seat_index: usize, bankroll: u64) -> Self {
         let hands = state.player_hands();
         let hand_descriptions: Vec<String> = hands.iter().map(format_hand).collect();
@@ -60,7 +61,7 @@ impl BlackjackPlayerView {
     /// Uses the shared [`MultiRound`] rather than the single-player
     /// [`GamePlayerTurn`], populating other players' visible cards from
     /// the round's seat list.
-    #[instrument(skip(round))]
+    #[cfg_attr(not(kani), instrument(skip(round)))]
     pub fn from_multi_round(round: &MultiRound, seat_idx: usize, bankroll: u64) -> Self {
         let seat = &round.seats[seat_idx];
         let hand_descriptions = vec![format_hand(&seat.hand)];
@@ -91,7 +92,7 @@ impl BlackjackPlayerView {
     }
 
     /// Formats the response for a given explore category.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn describe_category(&self, category: &str) -> Option<String> {
         match category {
             "your_hand" => {
@@ -135,7 +136,7 @@ impl BlackjackPlayerView {
 }
 
 /// Formats a hand for display: cards and value summary.
-#[instrument(skip(hand))]
+#[cfg_attr(not(kani), instrument(skip(hand)))]
 fn format_hand(hand: &Hand) -> String {
     let cards: Vec<String> = hand.cards().iter().map(|c| format!("{c}")).collect();
     let cards_str = cards.join(" ");
@@ -153,7 +154,7 @@ fn format_hand(hand: &Hand) -> String {
 }
 
 /// Formats a hand value as "hard N" or "soft N/hard N".
-#[instrument]
+#[cfg_attr(not(kani), instrument)]
 fn format_hand_value(value: &HandValue) -> String {
     match value.soft() {
         Some(soft) if value.is_soft() => format!("soft {}/hard {}", soft, value.hard()),

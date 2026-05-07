@@ -7,6 +7,7 @@
 use elicitation::contracts::Established;
 use elicitation::{Elicit, Generator};
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::{
@@ -31,7 +32,7 @@ pub struct GameSetup {
 impl GameSetup {
     /// Creates a new game in setup phase with a shuffled single-deck shoe.
     #[cfg(feature = "shuffle")]
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn new(seed: u64) -> Self {
         Self {
             shoe: Shoe::new(seed, 1),
@@ -44,7 +45,7 @@ impl GameSetup {
     }
 
     /// Starts betting phase with initial bankroll (consumes setup, returns betting).
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn start_betting(self, initial_bankroll: u64) -> GameBetting {
         GameBetting {
             shoe: self.shoe,
@@ -82,7 +83,7 @@ impl GameBetting {
     }
 
     /// Places bet and deals initial cards (consumes betting, returns result).
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn place_bet(self, bet: u64) -> Result<GameResult, ActionError> {
         let (ledger, bet_deducted) = BankrollLedger::debit(self.bankroll, bet)?;
 
@@ -232,14 +233,14 @@ impl GamePlayerTurn {
     /// Equivalent to `take_action(PlayerAction::new(action, self.current_hand_index()))`.
     /// Prefer this over `take_action` in single-hand play; use `take_action` directly
     /// only when you need explicit hand targeting (e.g., future split scenarios).
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn action_on_current(self, action: BasicAction) -> Result<GameResult, ActionError> {
         let idx = self.current_hand_index;
         self.take_action(PlayerAction::new(action, idx))
     }
 
     /// Takes an action, consuming self and transitioning to next state.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn take_action(self, action: PlayerAction) -> Result<GameResult, ActionError> {
         let proof = validate_action(&action, &self)?;
         let mut game = self;
@@ -255,7 +256,7 @@ impl GamePlayerTurn {
     }
 
     /// Advances to next hand or transitions to dealer turn.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     fn advance_hand(mut self) -> Result<GameResult, ActionError> {
         self.current_hand_index += 1;
 
@@ -336,7 +337,7 @@ impl std::fmt::Debug for GameDealerTurn {
 
 impl GameDealerTurn {
     /// Plays dealer turn and resolves game (consumes dealer turn, returns finished).
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn play_dealer_turn(mut self) -> (GameFinished, Established<PayoutSettled>) {
         // Dealer follows fixed rules: hit on 16 or less, stand on 17+.
         //
@@ -359,7 +360,7 @@ impl GameDealerTurn {
     ///
     /// Calls [`BankrollLedger::settle`] which consumes `Established<BetDeducted>`,
     /// proving that settlement occurs exactly once after a validated debit.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     fn resolve(self) -> (GameFinished, Established<PayoutSettled>) {
         let dealer_value = self.dealer_hand.value().best();
         let dealer_bust = self.dealer_hand.is_bust();

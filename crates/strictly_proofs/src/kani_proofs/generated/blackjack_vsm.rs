@@ -6,8 +6,6 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_blackjack::vsm::*;
-#[cfg(kani)]
 use strictly_blackjack::*;
 #[cfg(kani)]
 #[kani::proof]
@@ -19,7 +17,7 @@ fn verify_blackjack_consistent_prop_marker() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(bj_start_betting)]
 fn bj_start_betting__kani_closure() {
-    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_any();
+    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(blackjack_consistent(&state));
     ::std::mem::forget(state);
     let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth0();
@@ -39,7 +37,7 @@ fn bj_start_betting__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(bj_place_bet)]
 fn bj_place_bet__kani_closure() {
-    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_any();
+    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(blackjack_consistent(&state));
     ::std::mem::forget(state);
     let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth0();
@@ -55,7 +53,7 @@ fn bj_place_bet__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(bj_player_action)]
 fn bj_player_action__kani_closure() {
-    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_any();
+    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(blackjack_consistent(&state));
     ::std::mem::forget(state);
     let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth0();
@@ -79,7 +77,7 @@ fn bj_player_action__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(bj_dealer_turn)]
 fn bj_dealer_turn__kani_closure() {
-    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_any();
+    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(blackjack_consistent(&state));
     ::std::mem::forget(state);
     let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth0();
@@ -94,7 +92,7 @@ fn bj_dealer_turn__kani_closure() {
 #[cfg(kani)]
 #[::kani::proof_for_contract(bj_restart)]
 fn bj_restart__kani_closure() {
-    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_any();
+    let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(blackjack_consistent(&state));
     ::std::mem::forget(state);
     let state: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth0();

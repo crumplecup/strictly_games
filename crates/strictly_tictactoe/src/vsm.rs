@@ -166,10 +166,10 @@ pub fn ttt_make_move(
 /// - `Finished`: at least 5 moves were played — the minimum to win.
 ///
 /// Wired to the machine via
-/// `#[prop(kani_invariant_fn = "tictactoe_consistent", ...)]` on
+/// `#[prop(kani_invariant_fn = "tic_tac_toe_consistent", ...)]` on
 /// [`crate::contracts::TicTacToeConsistent`].
 #[cfg(kani)]
-pub fn tictactoe_consistent(state: &TicTacToeState) -> bool {
+pub fn tic_tac_toe_consistent(state: &TicTacToeState) -> bool {
     match state {
         TicTacToeState::Setup { inner, .. } => {
             // Board must be completely empty at setup.

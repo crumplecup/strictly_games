@@ -11,6 +11,7 @@ use crate::typestate::GameInProgress;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::{And, Established, ProvableFrom, both};
 #[cfg(not(kani))]
+#[cfg(not(kani))]
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -128,9 +129,9 @@ pub fn execute_move(mov: &Move, game: &mut GameInProgress, _proof: Established<L
 #[derive(elicitation::Prop)]
 #[prop(
     credential = TicTacToeRulesEvidence,
-    kani_invariant_fn = "tictactoe_consistent",
-    creusot_invariant_fn = "tictactoe_consistent",
-    verus_invariant_fn = "tictactoe_consistent"
+    kani_invariant_fn = "tic_tac_toe_consistent",
+    creusot_invariant_fn = "tic_tac_toe_consistent",
+    verus_invariant_fn = "tic_tac_toe_consistent"
 )]
 pub struct TicTacToeConsistent;
 

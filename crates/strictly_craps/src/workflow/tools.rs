@@ -11,6 +11,7 @@
 //! | [`execute_point_roll`] | [`PointEstablished`] | [`PointEstablished`] or [`RoundSettled`] | Rolls during point phase |
 
 use elicitation::contracts::Established;
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::ledger::RoundSettled;
@@ -29,7 +30,7 @@ use super::propositions::{BetsPlaced, PointEstablished};
 ///
 /// **Pre:** (none — `True` assumed by caller)
 /// **Post:** [`BetsPlaced`]
-#[instrument(skip(betting, seat_bets))]
+#[cfg_attr(not(kani), instrument(skip(betting, seat_bets)))]
 pub fn execute_place_bets(
     betting: GameBetting,
     seat_bets: Vec<Vec<ActiveBet>>,
@@ -71,7 +72,7 @@ pub enum ComeOutOutput {
 ///
 /// **Pre:** [`BetsPlaced`]
 /// **Post:** [`PointEstablished`] on point, [`RoundSettled`] on natural/craps
-#[instrument(skip(comeout, _pre))]
+#[cfg_attr(not(kani), instrument(skip(comeout, _pre)))]
 pub fn execute_comeout_roll(
     comeout: GameComeOut,
     roll: crate::DiceRoll,
@@ -101,7 +102,7 @@ pub enum PointRollOutput {
 ///
 /// **Pre:** [`PointEstablished`]
 /// **Post:** [`PointEstablished`] on continue, [`RoundSettled`] on resolution
-#[instrument(skip(point_phase, _pre))]
+#[cfg_attr(not(kani), instrument(skip(point_phase, _pre)))]
 pub fn execute_point_roll(
     point_phase: GamePointPhase,
     roll: crate::DiceRoll,

@@ -25,6 +25,7 @@ use elicitation::Elicit;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::Established;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::CrapsError;
@@ -92,7 +93,7 @@ impl CrapsLedger {
     ///
     /// Returns [`CrapsErrorKind::InvalidBet`] if `amount` is zero, or
     /// [`CrapsErrorKind::InsufficientFunds`] if `amount` exceeds balance.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     #[track_caller]
     pub fn debit(&mut self, amount: u64) -> Result<Established<BetDeducted>, CrapsError> {
         if amount == 0 {
@@ -107,6 +108,7 @@ impl CrapsLedger {
         }
         self.current_balance -= amount;
         self.total_wagered += amount;
+        #[cfg(not(kani))]
         tracing::debug!(
             amount,
             remaining = self.current_balance,
@@ -125,7 +127,7 @@ impl CrapsLedger {
     /// - `NoAction`: returns the original wager (bet stays but round ends)
     ///
     /// Consumes the debit proof — settlement happens exactly once.
-    #[instrument(skip(_pre))]
+    #[cfg_attr(not(kani), instrument(skip(_pre)))]
     #[track_caller]
     pub fn settle_round(
         self,
@@ -148,6 +150,7 @@ impl CrapsLedger {
             }
         }
 
+        #[cfg(not(kani))]
         tracing::debug!(
             original = self.original_bankroll,
             final_balance = balance,

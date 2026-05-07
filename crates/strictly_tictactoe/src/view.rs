@@ -8,6 +8,7 @@ use elicitation::{
     ElicitSpec, SpecCategoryBuilder, SpecEntryBuilder, TypeSpec, TypeSpecBuilder,
     TypeSpecInventoryKey,
 };
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::rules::{check_winner, is_full};
@@ -23,7 +24,7 @@ pub struct TicTacToeView {
 
 impl TicTacToeView {
     /// Builds a view snapshot from live board state.
-    #[instrument(skip(board))]
+    #[cfg_attr(not(kani), instrument(skip(board)))]
     pub fn from_board(board: &Board, current_player: Player) -> Self {
         let board_display = format_board(board);
         let legal_moves = Position::valid_moves(board);
@@ -37,7 +38,7 @@ impl TicTacToeView {
     }
 
     /// Formats the response for a given explore category.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn describe_category(&self, category: &str) -> Option<String> {
         match category {
             "board" => Some(self.board_display.clone()),
@@ -66,7 +67,7 @@ impl TicTacToeView {
 }
 
 /// Formats the board as a readable 3×3 grid.
-#[instrument(skip(board))]
+#[cfg_attr(not(kani), instrument(skip(board)))]
 fn format_board(board: &Board) -> String {
     let squares = board.squares();
     let mut lines = Vec::with_capacity(5);
@@ -95,7 +96,7 @@ fn format_board(board: &Board) -> String {
 }
 
 /// Finds immediate win and block opportunities.
-#[instrument(skip(board))]
+#[cfg_attr(not(kani), instrument(skip(board)))]
 fn find_threats(board: &Board, current_player: Player) -> Vec<String> {
     let mut threats = Vec::new();
     let opponent = current_player.opponent();

@@ -11,6 +11,7 @@
 //! | [`execute_dealer_turn`] | [`PlayerTurnComplete`] | [`PayoutSettled`] | Plays dealer and settles payout |
 
 use elicitation::contracts::Established;
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::{
@@ -41,7 +42,7 @@ pub enum PlaceBetOutput {
 ///
 /// **Pre:** (none — `True` assumed by caller)
 /// **Post:** [`BetPlaced`] on normal path, [`PayoutSettled`] on fast-finish
-#[instrument(skip(betting))]
+#[cfg_attr(not(kani), instrument(skip(betting)))]
 pub fn execute_place_bet(betting: GameBetting, bet: u64) -> Result<PlaceBetOutput, ActionError> {
     let result = betting.place_bet(bet)?;
     let output = match result {
@@ -80,7 +81,7 @@ pub enum PlayActionResult {
 ///
 /// **Pre:** [`BetPlaced`]
 /// **Post:** [`PlayerTurnComplete`] on terminal action, [`BetPlaced`] on Hit
-#[instrument(skip(player_turn, _pre))]
+#[cfg_attr(not(kani), instrument(skip(player_turn, _pre)))]
 pub fn execute_play_action(
     player_turn: GamePlayerTurn,
     action: BasicAction,
@@ -111,7 +112,7 @@ pub fn execute_play_action(
 /// **Pre:** [`PlayerTurnComplete`]
 /// **Post:** [`PayoutSettled`] — proof that [`crate::BankrollLedger::settle`]
 /// ran with a valid [`crate::BetDeducted`] token.
-#[instrument(skip(dealer_turn, _pre))]
+#[cfg_attr(not(kani), instrument(skip(dealer_turn, _pre)))]
 pub fn execute_dealer_turn(
     dealer_turn: GameDealerTurn,
     _pre: Established<PlayerTurnComplete>,

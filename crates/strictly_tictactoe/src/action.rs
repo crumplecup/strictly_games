@@ -6,6 +6,7 @@
 use crate::{Player, Position};
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 /// A move in tic-tac-toe: a player placing their mark at a position.
@@ -28,7 +29,7 @@ pub struct Move {
 
 impl Move {
     /// Creates a new move.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn new(player: Player, position: Position) -> Self {
         Self { player, position }
     }
@@ -67,3 +68,15 @@ pub enum MoveError {
 }
 
 impl std::error::Error for MoveError {}
+
+#[cfg(kani)]
+impl kani::Arbitrary for MoveError {
+    fn any() -> Self {
+        match kani::any::<u8>() % 3 {
+            0 => MoveError::SquareOccupied(kani::any()),
+            1 => MoveError::WrongPlayer(kani::any()),
+            // InvariantViolation holds a String; use empty string for symbolic model.
+            _ => MoveError::InvariantViolation(String::new()),
+        }
+    }
+}

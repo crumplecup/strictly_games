@@ -8,6 +8,7 @@ use elicitation::{
     ElicitSpec, SpecCategoryBuilder, SpecEntryBuilder, TypeSpec, TypeSpecBuilder,
     TypeSpecInventoryKey,
 };
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::{ActiveBet, DiceRoll, Point};
@@ -24,7 +25,7 @@ pub struct CrapsTableView {
 
 impl CrapsTableView {
     /// Builds a view from betting phase state (no point established).
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn from_betting(bankroll: u64) -> Self {
         Self {
             point: None,
@@ -36,7 +37,7 @@ impl CrapsTableView {
     }
 
     /// Builds a view from point phase state.
-    #[instrument(skip(player_bets, other_bets, roll_history))]
+    #[cfg_attr(not(kani), instrument(skip(player_bets, other_bets, roll_history)))]
     pub fn from_point_phase(
         point: Point,
         player_bets: Vec<ActiveBet>,
@@ -54,7 +55,7 @@ impl CrapsTableView {
     }
 
     /// Formats the response for a given explore category.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn describe_category(&self, category: &str) -> Option<String> {
         match category {
             "point" => {

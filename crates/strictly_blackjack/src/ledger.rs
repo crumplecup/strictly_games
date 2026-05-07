@@ -35,6 +35,7 @@ use elicitation::Elicit;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::Established;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::Outcome;
@@ -90,7 +91,7 @@ impl BankrollLedger {
     ///
     /// Returns [`ActionError::InvalidBet`] if `bet` is zero, or
     /// [`ActionError::InsufficientFunds`] if `bet` exceeds `bankroll`.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     #[track_caller]
     pub fn debit(bankroll: u64, bet: u64) -> Result<(Self, Established<BetDeducted>), ActionError> {
         if bet == 0 {
@@ -115,7 +116,7 @@ impl BankrollLedger {
     ///
     /// Uses [`Outcome::gross_return`] exclusively — there is no subtraction
     /// path, so double-deduction is structurally impossible.
-    #[instrument(skip(_pre))]
+    #[cfg_attr(not(kani), instrument(skip(_pre)))]
     #[track_caller]
     pub fn settle(
         self,
@@ -124,6 +125,7 @@ impl BankrollLedger {
     ) -> (u64, Established<PayoutSettled>) {
         let returned = outcome.gross_return(self.bet);
         let final_balance = self.post_bet_balance + returned;
+        #[cfg(not(kani))]
         tracing::debug!(
             bet = self.bet,
             post_bet_balance = self.post_bet_balance,

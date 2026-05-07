@@ -3,17 +3,11 @@
 // Regenerate: cargo build -p strictly_proofs
 //
 // Verus companion contracts for TicTacToeMachine.
-// All items are gated with #[cfg(verus)]; invisible to normal Rust builds.
+// Run via: just verify-verus-tracked
 
-#[cfg(verus)]
 use ::vstd::prelude::*;
-#[cfg(verus)]
 use ::verus_builtin_macros::verus;
-#[cfg(verus)]
 use elicitation::Established;
-#[cfg(verus)]
-use strictly_tictactoe::vsm::*;
-#[cfg(verus)]
 use strictly_tictactoe::*;
-#[cfg(verus)] verus! { pub open spec fn tictactoe_consistent(state: &TicTacToeState) -> bool { match *state { TicTacToeState::Setup { .. } => true, TicTacToeState::InProgress { inner, .. } => inner.history@.len() <= 9, TicTacToeState::Finished { inner, .. } => inner.history@.len() >= 5, } } }
-# [cfg (verus)] verus ! { pub fn verify_tic_tac_toe_consistent_prop_contract () -> (result : bool) ensures result == true , { true } } # [cfg (verus)] verus ! { pub assume_specification [ttt_start_game] (state : TicTacToeState , proof : Established < TicTacToeConsistent > , first_player : Player ,) -> (r : (TicTacToeState , Established < TicTacToeConsistent >)) requires tictactoe_consistent (& state) , ensures tictactoe_consistent (& r . 0) , ; } # [cfg (verus)] verus ! { pub assume_specification [ttt_make_move] (state : TicTacToeState , proof : Established < TicTacToeConsistent > , mov : Move , square_proof : Established < SquareEmpty > , turn_proof : Established < PlayerTurn > ,) -> (r : (TicTacToeState , Established < TicTacToeConsistent >)) requires tictactoe_consistent (& state) , ensures tictactoe_consistent (& r . 0) , ; } # [cfg (verus)] verus ! { pub assume_specification [ttt_restart] (state : TicTacToeState , proof : Established < TicTacToeConsistent > ,) -> (r : (TicTacToeState , Established < TicTacToeConsistent >)) requires tictactoe_consistent (& state) , ensures tictactoe_consistent (& r . 0) , ; }
+verus! { pub open spec fn tic_tac_toe_consistent(state: &TicTacToeState) -> bool { match *state { TicTacToeState::Setup { .. } => true, TicTacToeState::InProgress { inner, .. } => inner.history@.len() <= 9, TicTacToeState::Finished { inner, .. } => inner.history@.len() >= 5, } } }
+verus ! { pub fn verify_tic_tac_toe_consistent_prop_contract () -> (result : bool) ensures result == true , { true } } verus ! { pub assume_specification [ttt_start_game] (state : TicTacToeState , proof : Established < TicTacToeConsistent > , first_player : Player ,) -> (r : (TicTacToeState , Established < TicTacToeConsistent >)) requires tic_tac_toe_consistent (& state) , ensures tic_tac_toe_consistent (& r . 0) , ; } verus ! { pub assume_specification [ttt_make_move] (state : TicTacToeState , proof : Established < TicTacToeConsistent > , mov : Move , square_proof : Established < SquareEmpty > , turn_proof : Established < PlayerTurn > ,) -> (r : (TicTacToeState , Established < TicTacToeConsistent >)) requires tic_tac_toe_consistent (& state) , ensures tic_tac_toe_consistent (& r . 0) , ; } verus ! { pub assume_specification [ttt_restart] (state : TicTacToeState , proof : Established < TicTacToeConsistent > ,) -> (r : (TicTacToeState , Established < TicTacToeConsistent >)) requires tic_tac_toe_consistent (& state) , ensures tic_tac_toe_consistent (& r . 0) , ; }

@@ -1,0 +1,14 @@
+module,harness,status,duration_secs,timestamp
+kani_proofs,bj_start_betting__kani_closure,PASS,26,2026-05-06T20:16:21-07:00
+kani_proofs,bj_place_bet__kani_closure,PASS,19,2026-05-06T20:16:40-07:00
+kani_proofs,bj_player_action__kani_closure,PASS,16,2026-05-06T20:16:56-07:00
+kani_proofs,bj_dealer_turn__kani_closure,PASS,16,2026-05-06T20:17:12-07:00
+kani_proofs,bj_restart__kani_closure,PASS,19,2026-05-06T20:17:31-07:00
+kani_proofs,craps_start_betting__kani_closure,PASS,5,2026-05-06T20:17:36-07:00
+kani_proofs,craps_place_bets__kani_closure,PASS,9,2026-05-06T20:17:45-07:00
+kani_proofs,craps_comeout_roll__kani_closure,PASS,5,2026-05-06T20:17:50-07:00
+kani_proofs,craps_point_roll__kani_closure,PASS,6,2026-05-06T20:17:56-07:00
+kani_proofs,craps_next_round__kani_closure,PASS,9,2026-05-06T20:18:05-07:00
+kani_proofs,ttt_start_game__kani_closure,PASS,7,2026-05-06T20:18:12-07:00
+kani_proofs,ttt_make_move__kani_closure,PASS,10,2026-05-06T20:18:22-07:00
+kani_proofs,ttt_restart__kani_closure,PASS,7,2026-05-06T20:18:29-07:00

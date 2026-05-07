@@ -6,6 +6,7 @@
 use elicitation::Generator;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::{And, Established, ProvableFrom, both};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::{ActionError, BasicAction, GamePlayerTurn, PlayerAction};
@@ -27,7 +28,7 @@ impl VerifiedWorkflow for BankrollPositive {}
 ///
 /// This is the single point of trust for the `BankrollPositive` invariant.
 /// Only code that holds `Established<BankrollPositive>` may start the betting phase.
-#[instrument]
+#[cfg_attr(not(kani), instrument)]
 pub fn validate_bankroll_positive(amount: u64) -> Result<Established<BankrollPositive>, ActionError> {
     if amount > 0 {
         Ok(Established::assert())
@@ -59,7 +60,7 @@ pub type LegalAction = And<ValidAction, NotBust>;
 // ─────────────────────────────────────────────────────────────
 
 /// Validates that the action is valid for the current state.
-#[instrument(skip(game))]
+#[cfg_attr(not(kani), instrument(skip(game)))]
 pub fn validate_valid_action(
     action: &PlayerAction,
     game: &GamePlayerTurn,
@@ -77,7 +78,7 @@ pub fn validate_valid_action(
 }
 
 /// Validates that the hand is not bust.
-#[instrument(skip(game))]
+#[cfg_attr(not(kani), instrument(skip(game)))]
 pub fn validate_not_bust(
     action: &PlayerAction,
     game: &GamePlayerTurn,
@@ -93,7 +94,7 @@ pub fn validate_not_bust(
 /// Validates all preconditions for an action.
 ///
 /// Returns composite proof (ValidAction AND NotBust) if valid.
-#[instrument(skip(game))]
+#[cfg_attr(not(kani), instrument(skip(game)))]
 pub fn validate_action(
     action: &PlayerAction,
     game: &GamePlayerTurn,
@@ -111,7 +112,7 @@ pub fn validate_action(
 ///
 /// The `_proof` parameter is zero-cost (PhantomData) but enforces
 /// that validation happened at compile time.
-#[instrument(skip(game, _proof))]
+#[cfg_attr(not(kani), instrument(skip(game, _proof)))]
 pub fn execute_action(
     action: &PlayerAction,
     game: &mut GamePlayerTurn,

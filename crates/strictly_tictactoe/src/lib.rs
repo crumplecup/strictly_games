@@ -42,4 +42,6 @@ pub use traits::TicTacToeRuleEnforcer;
 pub use types::{Board, Player, Square};
 pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 pub use view::TicTacToeView;
-pub use vsm::{TicTacToeMachine, TicTacToeState};
+pub use vsm::{TicTacToeMachine, TicTacToeState, ttt_make_move, ttt_restart, ttt_start_game};
+#[cfg(kani)]
+pub use vsm::tic_tac_toe_consistent;

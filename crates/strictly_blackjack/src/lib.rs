@@ -64,3 +64,5 @@ pub use vsm::{
     BlackjackMachine, BlackjackState, bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart,
     bj_start_betting,
 };
+#[cfg(kani)]
+pub use vsm::blackjack_consistent;

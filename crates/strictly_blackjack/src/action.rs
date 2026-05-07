@@ -2,6 +2,7 @@
 
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 /// Basic actions available to the player.
@@ -58,7 +59,7 @@ pub struct PlayerActionContext {
 
 impl PlayerAction {
     /// Creates a new player action.
-    #[instrument]
+    #[cfg_attr(not(kani), instrument)]
     pub fn new(action: BasicAction, hand_index: usize) -> Self {
         Self { action, hand_index }
     }

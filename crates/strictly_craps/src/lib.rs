@@ -64,3 +64,5 @@ pub use vsm::{
     CrapsMachine, CrapsState, craps_comeout_roll, craps_next_round, craps_place_bets,
     craps_point_roll, craps_start_betting,
 };
+#[cfg(kani)]
+pub use vsm::craps_consistent;

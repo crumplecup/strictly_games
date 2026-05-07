@@ -20,6 +20,7 @@
 use derive_getters::Getters;
 use elicitation::Elicit;
 use serde::{Deserialize, Serialize};
+#[cfg(not(kani))]
 use tracing::instrument;
 
 use crate::lesson::LessonProgress;
@@ -50,7 +51,7 @@ pub struct CrapsSeat {
 
 impl CrapsSeat {
     /// Creates a new seat with the given name and bankroll.
-    #[instrument(skip_all, fields(bankroll))]
+    #[cfg_attr(not(kani), instrument(skip_all, fields(bankroll)))]
     pub fn new(name: impl Into<String>, bankroll: u64) -> Self {
         Self {
             name: name.into(),
@@ -76,7 +77,7 @@ impl CrapsSeat {
     /// Deducts wagers from the bankroll.
     ///
     /// Returns an error if total wagers exceed bankroll.
-    #[instrument(skip(self), fields(seat = %self.name))]
+    #[cfg_attr(not(kani), instrument(skip(self), fields(seat = %self.name)))]
     pub fn deduct_wagers(&mut self, total: u64) -> Result<(), CrapsError> {
         if total > self.bankroll {
             return Err(CrapsErrorKind::InsufficientFunds {
@@ -90,19 +91,19 @@ impl CrapsSeat {
     }
 
     /// Credits winnings to the bankroll.
-    #[instrument(skip(self), fields(seat = %self.name, amount))]
+    #[cfg_attr(not(kani), instrument(skip(self), fields(seat = %self.name, amount)))]
     pub fn credit_winnings(&mut self, amount: u64) {
         self.bankroll += amount;
     }
 
     /// Advances lesson progress by one round.
-    #[instrument(skip(self), fields(seat = %self.name))]
+    #[cfg_attr(not(kani), instrument(skip(self), fields(seat = %self.name)))]
     pub fn advance_round(&mut self) -> bool {
         self.lesson.try_advance()
     }
 
     /// Records a round played for lesson progress.
-    #[instrument(skip(self), fields(seat = %self.name))]
+    #[cfg_attr(not(kani), instrument(skip(self), fields(seat = %self.name)))]
     pub fn record_round(&mut self) {
         self.lesson.record_round();
     }
@@ -191,7 +192,7 @@ pub struct CrapsTable {
 
 impl CrapsTable {
     /// Creates a new table with the given odds limit and bet range.
-    #[instrument(skip_all, fields(max_odds, table_min, table_max))]
+    #[cfg_attr(not(kani), instrument(skip_all, fields(max_odds, table_min, table_max)))]
     pub fn new(max_odds: u8, table_min: u64, table_max: u64) -> Self {
         Self {
             seats: Vec::new(),
@@ -228,7 +229,7 @@ impl CrapsTable {
     }
 
     /// Adds a player to the table.
-    #[instrument(skip(self, seat), fields(name = %seat.name))]
+    #[cfg_attr(not(kani), instrument(skip(self, seat), fields(name = %seat.name)))]
     pub fn add_seat(&mut self, seat: CrapsSeat) {
         self.seats.push(seat);
     }
@@ -244,7 +245,7 @@ impl CrapsTable {
     }
 
     /// Returns bankrolls as a vector (feeds into typestate).
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn bankroll_vec(&self) -> Vec<u64> {
         self.seats.iter().map(|s| *s.bankroll()).collect()
     }
@@ -253,7 +254,7 @@ impl CrapsTable {
     ///
     /// Checks lesson level, table limits, line-bet prerequisites,
     /// and bankroll sufficiency.
-    #[instrument(skip(self), fields(seat_idx, bet_type = %bet_type, amount))]
+    #[cfg_attr(not(kani), instrument(skip(self), fields(seat_idx, bet_type = %bet_type, amount)))]
     pub fn validate_bet(
         &self,
         seat_idx: usize,
@@ -344,7 +345,7 @@ impl CrapsTable {
     /// Settles all bets after round resolution.
     ///
     /// Computes outcomes per seat, updates bankrolls, records rounds.
-    #[instrument(skip(self, seat_bets, last_roll))]
+    #[cfg_attr(not(kani), instrument(skip(self, seat_bets, last_roll)))]
     pub fn settle_round(
         &mut self,
         seat_bets: &[Vec<ActiveBet>],
@@ -403,7 +404,7 @@ impl CrapsTable {
     }
 
     /// Rotates the shooter to the next seat.
-    #[instrument(skip(self))]
+    #[cfg_attr(not(kani), instrument(skip(self)))]
     pub fn rotate_shooter(&mut self) {
         if !self.seats.is_empty() {
             // Clear old shooter

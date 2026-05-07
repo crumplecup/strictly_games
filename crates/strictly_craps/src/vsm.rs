@@ -124,7 +124,7 @@ impl Default for CrapsState {
 /// Requires [`Established<NonEmptyBankrolls>`] — a proof token that `bankrolls` is non-empty.
 /// Obtain it via [`crate::validate_non_empty_bankrolls`] before calling.
 /// Only valid from the `Setup` state; all other states are passed through unchanged.
-#[formal_method(contracts = [CrapsConsistent], creusot_requires = ["bankrolls@.len() > 0"])]
+#[formal_method(contracts = [CrapsConsistent], creusot_requires = ["bankrolls@.len() > 0"], kani_requires = ["!bankrolls.is_empty()"])]
 #[cfg_attr(not(kani), instrument(skip(proof, bankrolls_proof)))]
 pub fn craps_start_betting(
     state: CrapsState,
