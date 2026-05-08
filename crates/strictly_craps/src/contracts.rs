@@ -47,7 +47,9 @@ pub fn validate_non_empty_bankrolls(bankrolls: &[u64]) -> Result<Established<Non
     credential = CrapsRulesEvidence,
     kani_invariant_fn = "craps_consistent",
     creusot_invariant_fn = "craps_consistent",
-    verus_invariant_fn = "craps_consistent"
+    creusot_inv_body = "match state { CrapsState::Setup { inner, .. } => inner.num_seats@ > 0, CrapsState::Betting { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::ComeOut { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::PointPhase { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::Resolved { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), }",
+    verus_invariant_fn = "craps_consistent",
+    verus_inv_body = "match *state { CrapsState::Setup { inner, .. } => inner.num_seats@ > 0, CrapsState::Betting { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::ComeOut { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::PointPhase { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::Resolved { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), }"
 )]
 pub struct CrapsConsistent;
 

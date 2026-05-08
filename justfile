@@ -112,6 +112,82 @@ verify-tictactoe-function-contracts:
     cargo kani -p strictly_proofs -Z function-contracts \
         --harness make_move_alternates_player_compositional
 
+# ─────────────────────────────────────────────────────────────
+# elicitation generate — regenerate proof files from VSM source
+# Requires: elicitation binary on PATH  (cargo install elicitation --features cli)
+# ─────────────────────────────────────────────────────────────
+
+# Regenerate Kani VSM harnesses for all three game crates.
+# Output replaces crates/strictly_proofs/src/kani_proofs/generated/*_vsm.rs
+generate-kani-vsm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ELICIT="${ELICIT_BIN:-elicitation}"
+    OUT="crates/strictly_proofs/src/kani_proofs/generated"
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    $ELICIT generate kani --crate-path crates/strictly_tictactoe/src --out "$TMP"
+    mv "$TMP/tic_tac_toe.rs" "$OUT/tictactoe_vsm.rs"
+    $ELICIT generate kani --crate-path crates/strictly_blackjack/src --out "$TMP"
+    mv "$TMP/blackjack.rs" "$OUT/blackjack_vsm.rs"
+    $ELICIT generate kani --crate-path crates/strictly_craps/src --out "$TMP"
+    mv "$TMP/craps.rs" "$OUT/craps_vsm.rs"
+    echo "✓ Kani VSM harnesses regenerated in $OUT"
+
+# Regenerate Creusot VSM companion contracts for all three game crates.
+# Output replaces crates/strictly_proofs/src/creusot_proofs/generated/*_vsm.rs
+generate-creusot-vsm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ELICIT="${ELICIT_BIN:-elicitation}"
+    OUT="crates/strictly_proofs/src/creusot_proofs/generated"
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    $ELICIT generate creusot --crate-path crates/strictly_tictactoe/src --out "$TMP"
+    mv "$TMP/tic_tac_toe.rs" "$OUT/tictactoe_vsm.rs"
+    $ELICIT generate creusot --crate-path crates/strictly_blackjack/src --out "$TMP"
+    mv "$TMP/blackjack.rs" "$OUT/blackjack_vsm.rs"
+    $ELICIT generate creusot --crate-path crates/strictly_craps/src --out "$TMP"
+    mv "$TMP/craps.rs" "$OUT/craps_vsm.rs"
+    echo "✓ Creusot VSM companions regenerated in $OUT"
+
+# Regenerate Verus VSM companion contracts for all three game crates.
+# Output replaces crates/strictly_proofs/src/verus_proofs/generated/*_vsm.rs
+generate-verus-vsm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ELICIT="${ELICIT_BIN:-elicitation}"
+    OUT="crates/strictly_proofs/src/verus_proofs/generated"
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    $ELICIT generate verus --crate-path crates/strictly_tictactoe/src --out "$TMP"
+    mv "$TMP/tic_tac_toe.rs" "$OUT/tictactoe_vsm.rs"
+    $ELICIT generate verus --crate-path crates/strictly_blackjack/src --out "$TMP"
+    mv "$TMP/blackjack.rs" "$OUT/blackjack_vsm.rs"
+    $ELICIT generate verus --crate-path crates/strictly_craps/src --out "$TMP"
+    mv "$TMP/craps.rs" "$OUT/craps_vsm.rs"
+    echo "✓ Verus VSM companions regenerated in $OUT"
+
+# Regenerate Kani foundation harnesses (constructibility) for all three game crates.
+# Output replaces/adds crates/strictly_proofs/src/kani_proofs/generated/*_foundation.rs
+generate-foundation:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ELICIT="${ELICIT_BIN:-elicitation}"
+    OUT="crates/strictly_proofs/src/kani_proofs/generated"
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    $ELICIT generate foundation --crate-path crates/strictly_tictactoe/src --out "$TMP"
+    mv "$TMP/foundation.rs" "$OUT/tictactoe_foundation.rs"
+    $ELICIT generate foundation --crate-path crates/strictly_blackjack/src --out "$TMP"
+    mv "$TMP/foundation.rs" "$OUT/blackjack_foundation.rs"
+    $ELICIT generate foundation --crate-path crates/strictly_craps/src --out "$TMP"
+    mv "$TMP/foundation.rs" "$OUT/craps_foundation.rs"
+    echo "✓ Foundation harnesses regenerated in $OUT"
+
+# Regenerate all proof files for all game crates (kani + creusot + verus + foundation).
+generate-all: generate-kani-vsm generate-creusot-vsm generate-verus-vsm generate-foundation
+
 # Run generated kani_proof() foundation harnesses (newtype wrappers and constructibility)
 verify-generated:
     @echo "Verifying generated kani_proof() foundation harnesses..."

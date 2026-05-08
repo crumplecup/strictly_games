@@ -144,7 +144,9 @@ pub fn execute_action(
     credential = BlackjackRulesEvidence,
     kani_invariant_fn = "blackjack_consistent",
     creusot_invariant_fn = "blackjack_consistent",
-    verus_invariant_fn = "blackjack_consistent"
+    creusot_inv_body = "match state { BlackjackState::Setup { .. } => true, BlackjackState::Betting { inner, .. } => inner.bankroll@ > 0, BlackjackState::PlayerTurn { inner, .. } => inner.current_hand_index@ < inner.num_hands@, BlackjackState::DealerTurn { .. } => true, BlackjackState::Finished { inner, .. } => inner.num_hands@ <= MAX_PLAYER_HANDS@, }",
+    verus_invariant_fn = "blackjack_consistent",
+    verus_inv_body = "match *state { BlackjackState::Setup { .. } => true, BlackjackState::Betting { inner, .. } => inner.bankroll@ > 0, BlackjackState::PlayerTurn { inner, .. } => inner.current_hand_index@ < inner.num_hands@, BlackjackState::DealerTurn { .. } => true, BlackjackState::Finished { inner, .. } => inner.num_hands@ <= MAX_PLAYER_HANDS@, }"
 )]
 pub struct BlackjackConsistent;
 
