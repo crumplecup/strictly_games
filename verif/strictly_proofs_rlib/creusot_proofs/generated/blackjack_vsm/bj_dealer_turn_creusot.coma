@@ -2,7 +2,7 @@
 
 let%span svsm_extern_specs = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 112 28 112 32
 let%span svsm_extern_specs'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 111 18 111 58
-let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/typestate.rs" 340 4 340 83
+let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/typestate.rs" 341 4 341 83
 let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
 let%span sblackjack_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 169 31 169 52
 let%span sblackjack_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 159 4 159 9

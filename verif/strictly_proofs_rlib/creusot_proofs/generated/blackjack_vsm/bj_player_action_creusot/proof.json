@@ -15,7 +15,7 @@
               { "prover": "alt-ergo", "time": 0.047 },
               { "prover": "alt-ergo", "time": 0.178 },
               { "prover": "alt-ergo", "time": 0.086 },
-              { "prover": "alt-ergo", "time": 0.058 },
+              { "prover": "alt-ergo", "time": 0.029 },
               { "prover": "alt-ergo", "time": 0.058 },
               { "prover": "alt-ergo", "time": 0.172 },
               { "prover": "alt-ergo", "time": 0.08 },
@@ -40,12 +40,12 @@
                   }
                 ]
               },
-              { "prover": "alt-ergo", "time": 0.055 },
-              { "prover": "alt-ergo", "time": 0.054 },
+              { "prover": "alt-ergo", "time": 0.026 },
+              { "prover": "alt-ergo", "time": 0.024 },
               { "prover": "alt-ergo", "time": 0.056 },
               { "prover": "alt-ergo", "time": 0.065 },
               { "prover": "alt-ergo", "time": 0.073 },
-              { "prover": "alt-ergo", "time": 0.069 }
+              { "prover": "alt-ergo", "time": 0.033 }
             ]
           }
         ]

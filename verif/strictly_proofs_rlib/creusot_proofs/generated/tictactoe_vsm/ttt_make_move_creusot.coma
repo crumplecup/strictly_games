@@ -7,15 +7,15 @@ let%span stictactoe_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_pro
 let%span stictactoe_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 60 4 60 9
 let%span stictactoe_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 62 4 62 16
 let%span stictactoe_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 63 4 63 14
-let%span stictactoe_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 56 11 56 39
+let%span stictactoe_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 56 11 56 41
 let%span stictactoe_vsm'6 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 64 5 64 55
-let%span stictactoe_vsm'7 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 57 10 57 41
+let%span stictactoe_vsm'7 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 57 10 57 43
 let%span stictactoe_vsm'8 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 20 8 22 40
 let%span svsm_extern_specs = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 28 20 28 31
 let%span svsm_extern_specs'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 27 19 27 23
 let%span svsm_extern_specs'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 225 21 225 25
 let%span svsm_extern_specs'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 220 18 224 9
-let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_tictactoe/src/typestate.rs" 90 4 90 73
+let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_tictactoe/src/typestate.rs" 91 4 91 73
 let%span scontracts = "/home/erik/repos/elicitation/crates/elicitation/src/contracts.rs" 499 4 501 27
 let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
 
@@ -260,7 +260,7 @@ axiom inv_axiom'5 [@rewrite]: forall x: t_TicTacToeState [inv_TicTacToeState x].
       | Finished inner display_mode -> inv_GameFinished inner
       end
 
-predicate tictactoe_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 18 0 18 59] (state: t_TicTacToeState) =
+predicate tic_tac_toe_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 18 0 18 61] (state: t_TicTacToeState) =
   [%#stictactoe_vsm'8] match state with
     | Setup _ _ -> true
     | InProgress inner _ -> Seq.length (view_Vec_Move_Global inner.history) <= 9
@@ -285,7 +285,7 @@ let rec ttt_make_move__creusot
   /\ ([@stop_split] [@expl:ttt_make_move__creusot 'proof' type invariant] [%#stictactoe_vsm'2] inv_Established_TicTacToeConsistent proof)
   /\ ([@stop_split] [@expl:ttt_make_move__creusot 'square_proof' type invariant] [%#stictactoe_vsm'3] inv_Established_SquareEmpty square_proof)
   /\ ([@stop_split] [@expl:ttt_make_move__creusot 'turn_proof' type invariant] [%#stictactoe_vsm'4] inv_Established_PlayerTurn turn_proof)
-  /\ ([@stop_split] [@expl:ttt_make_move__creusot requires] [%#stictactoe_vsm'5] tictactoe_consistent state)}
+  /\ ([@stop_split] [@expl:ttt_make_move__creusot requires] [%#stictactoe_vsm'5] tic_tac_toe_consistent state)}
   (! bb0
   [ bb0 = any
     [ br0 (x0: t_GameSetup) (x1: t_TttDisplayMode) -> {state = Setup x0 x1} (! bb1)
@@ -348,5 +348,5 @@ let rec ttt_make_move__creusot
   | & _32: t_TicTacToeState = Any.any_l () ])
   [ return (result: tup2_TicTacToeState_Established_TicTacToeConsistent) ->
   {[@stop_split] [@expl:ttt_make_move__creusot ensures] ([@stop_split] [@expl:ttt_make_move__creusot result type invariant] [%#stictactoe_vsm'6] inv_tup2_TicTacToeState_Established_TicTacToeConsistent result)
-    /\ ([@stop_split] [@expl:ttt_make_move__creusot ensures] [%#stictactoe_vsm'7] tictactoe_consistent result.f0)}
+    /\ ([@stop_split] [@expl:ttt_make_move__creusot ensures] [%#stictactoe_vsm'7] tic_tac_toe_consistent result.f0)}
     (! return {result}) ]

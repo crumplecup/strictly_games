@@ -1,11 +1,11 @@
-(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 29 0 29 69 *)
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 34 0 34 69 *)
 
 let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 116 18 116 48
 let%span svec'0 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
-let%span slevel3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 30 4 30 26
-let%span slevel3'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 26 11 26 61
-let%span slevel3'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 27 10 27 33
-let%span slevel3'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 28 10 28 59
+let%span slevel3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 35 4 35 26
+let%span slevel3'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 31 11 31 61
+let%span slevel3'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 32 10 32 36
+let%span slevel3'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 33 10 33 59
 
 use creusot.prelude.MutBorrow
 use creusot.int.UInt8
@@ -37,7 +37,7 @@ meta "compute_max_steps" 1000000
 meta "select_lsinst" "all"
 
 let rec sgc3_push
-  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 29 0 29 69]
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/gallery/level3.rs" 34 0 34 69]
   (inner: t_MiniInProgress) (mv: UInt8.t) (return (x: t_MiniInProgress)) =
   {[@stop_split] [@expl:sgc3_push requires] [%#slevel3'0] sgc2_invariant inner
   /\ Seq.length (view_Vec_u8_Global inner.history) < 9}
@@ -54,7 +54,8 @@ let rec sgc3_push
   | & _8: () = Any.any_l ()
   | & _9: MutBorrow.t t_Vec_u8_Global = Any.any_l () ])
   [ return (result: t_MiniInProgress) ->
-  {[@stop_split] [@expl:sgc3_push ensures] ([@stop_split] [@expl:sgc3_push ensures #0] [%#slevel3'1] sgc2_invariant result)
+  {[@stop_split] [@expl:sgc3_push ensures] ([@stop_split] [@expl:sgc3_push ensures #0] [%#slevel3'1] Seq.length (view_Vec_u8_Global result.history)
+      <= 9)
     /\ ([@stop_split] [@expl:sgc3_push ensures #1] [%#slevel3'2] Seq.length (view_Vec_u8_Global result.history)
     = Seq.length (view_Vec_u8_Global inner.history) + 1)}
     (! return {result}) ]

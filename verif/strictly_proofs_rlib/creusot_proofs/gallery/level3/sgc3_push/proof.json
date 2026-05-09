@@ -2,16 +2,8 @@
   "profile": [],
   "proofs": {
     "Coma": {
-      "vc_push_u8": { "prover": "alt-ergo", "time": 0.035 },
-      "vc_sgc3_push": {
-        "tactic": "split_vc",
-        "children": [
-          {
-            "tactic": "split_vc",
-            "children": [ null, { "prover": "alt-ergo", "time": 0.04 } ]
-          }
-        ]
-      }
+      "vc_push_u8": { "prover": "alt-ergo", "time": 0.02 },
+      "vc_sgc3_push": { "prover": "alt-ergo", "time": 0.016 }
     }
   }
 }

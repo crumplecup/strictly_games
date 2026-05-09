@@ -10,11 +10,11 @@
             "children": [
               { "prover": "alt-ergo", "time": 0.045 },
               { "prover": "alt-ergo", "time": 0.047 },
-              { "prover": "alt-ergo", "time": 0.12 },
-              { "prover": "alt-ergo", "time": 0.046 },
+              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.023 },
               { "prover": "alt-ergo", "time": 0.057 },
               { "prover": "alt-ergo", "time": 0.06 },
-              { "prover": "alt-ergo", "time": 0.059 },
+              { "prover": "alt-ergo", "time": 0.027 },
               { "prover": "alt-ergo", "time": 0.042 }
             ]
           }

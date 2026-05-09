@@ -4,13 +4,13 @@ let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs"
 let%span stictactoe_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 110 19 110 37
 let%span stictactoe_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 98 4 98 9
 let%span stictactoe_vsm'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 99 4 99 9
-let%span stictactoe_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 95 11 95 39
+let%span stictactoe_vsm'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 95 11 95 41
 let%span stictactoe_vsm'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 100 5 100 55
-let%span stictactoe_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 96 10 96 41
+let%span stictactoe_vsm'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 96 10 96 43
 let%span stictactoe_vsm'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 20 8 22 40
 let%span svsm_extern_specs = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 233 19 233 23
 let%span svsm_extern_specs'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/vsm_extern_specs.rs" 232 19 232 23
-let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_tictactoe/src/typestate.rs" 198 4 198 37
+let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_tictactoe/src/typestate.rs" 199 4 199 37
 
 use creusot.prelude.Any
 use seq.Seq
@@ -104,7 +104,7 @@ function view_Vec_Move_Global (self: t_Vec_Move_Global) : Seq.seq t_Move
 axiom view_Vec_Move_Global_spec: forall self: t_Vec_Move_Global. [%#svec] Seq.length (view_Vec_Move_Global self)
     <= UInt64.t'int const_MAX
 
-predicate tictactoe_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 18 0 18 59] (state: t_TicTacToeState) =
+predicate tic_tac_toe_consistent [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/tictactoe_vsm.rs" 18 0 18 61] (state: t_TicTacToeState) =
   [%#stictactoe_vsm'5] match state with
     | Setup _ _ -> true
     | InProgress inner _ -> Seq.length (view_Vec_Move_Global inner.history) <= 9
@@ -126,7 +126,7 @@ let rec ttt_restart__creusot
   (return (x: tup2_TicTacToeState_Established_TicTacToeConsistent)) =
   {[@stop_split] [@expl:ttt_restart__creusot requires] ([@stop_split] [@expl:ttt_restart__creusot 'state' type invariant] [%#stictactoe_vsm'0] inv_TicTacToeState state)
   /\ ([@stop_split] [@expl:ttt_restart__creusot 'proof' type invariant] [%#stictactoe_vsm'1] inv_Established_TicTacToeConsistent proof)
-  /\ ([@stop_split] [@expl:ttt_restart__creusot requires] [%#stictactoe_vsm'2] tictactoe_consistent state)}
+  /\ ([@stop_split] [@expl:ttt_restart__creusot requires] [%#stictactoe_vsm'2] tic_tac_toe_consistent state)}
   (! bb0
   [ bb0 = any
     [ br0 (x0: t_GameSetup) (x1: t_TttDisplayMode) -> {state = Setup x0 x1} (! bb1)
@@ -151,5 +151,5 @@ let rec ttt_restart__creusot
   | & _13: t_GameSetup = Any.any_l () ])
   [ return (result: tup2_TicTacToeState_Established_TicTacToeConsistent) ->
   {[@stop_split] [@expl:ttt_restart__creusot ensures] ([@stop_split] [@expl:ttt_restart__creusot result type invariant] [%#stictactoe_vsm'3] inv_tup2_TicTacToeState_Established_TicTacToeConsistent result)
-    /\ ([@stop_split] [@expl:ttt_restart__creusot ensures] [%#stictactoe_vsm'4] tictactoe_consistent result.f0)}
+    /\ ([@stop_split] [@expl:ttt_restart__creusot ensures] [%#stictactoe_vsm'4] tic_tac_toe_consistent result.f0)}
     (! return {result}) ]

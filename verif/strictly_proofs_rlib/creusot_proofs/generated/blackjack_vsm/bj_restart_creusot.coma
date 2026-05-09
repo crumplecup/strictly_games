@@ -1,6 +1,6 @@
 (* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 181 0 184 55 *)
 
-let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/typestate.rs" 24 18 24 25
+let%span stypestate = "/home/erik/repos/strictly_games/crates/strictly_blackjack/src/typestate.rs" 25 18 25 25
 let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
 let%span sblackjack_vsm = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 190 19 190 39
 let%span sblackjack_vsm'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot_proofs/generated/blackjack_vsm.rs" 191 26 191 57

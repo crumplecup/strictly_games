@@ -8,16 +8,16 @@
           {
             "tactic": "split_vc",
             "children": [
-              { "prover": "alt-ergo", "time": 0.054 },
-              { "prover": "alt-ergo", "time": 0.061 },
+              { "prover": "alt-ergo", "time": 0.022 },
+              { "prover": "alt-ergo", "time": 0.026 },
               { "prover": "alt-ergo", "time": 0.058 },
               { "prover": "alt-ergo", "time": 0.05 },
               { "prover": "alt-ergo", "time": 0.134 },
-              { "prover": "alt-ergo", "time": 0.051 },
-              { "prover": "alt-ergo", "time": 0.145 },
+              { "prover": "alt-ergo", "time": 0.024 },
+              { "prover": "alt-ergo", "time": 0.06 },
               { "prover": "alt-ergo", "time": 0.042 },
-              { "prover": "alt-ergo", "time": 0.058 },
-              { "prover": "alt-ergo", "time": 0.061 },
+              { "prover": "alt-ergo", "time": 0.027 },
+              { "prover": "alt-ergo", "time": 0.029 },
               { "prover": "alt-ergo", "time": 0.054 }
             ]
           }
