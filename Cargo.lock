@@ -8580,12 +8580,9 @@ dependencies = [
  "creusot-std",
  "elicit_ratatui",
  "elicitation",
- "prettyplease",
- "proc-macro2",
  "strictly_blackjack",
  "strictly_craps",
  "strictly_tictactoe",
- "syn 2.0.114",
  "unicode-width",
 ]
 
