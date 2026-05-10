@@ -106,23 +106,25 @@ pub fn validate_move(
 ///   (`to_move`, other squares) is automatically preserved by Kani's write-set
 ///   inference.
 ///
-/// Note: history recording (`game.history.push`) is gated out under Kani.
-/// Gallery level 15 established that `Vec::push` under DFCC instrumentation
-/// causes a formula explosion (247 s / +20 GB RAM) because CBMC must model the
-/// full reallocation logic of a symbolically-allocated heap buffer.  History is a
-/// runtime audit log; the board-state postcondition is what matters for proofs.
+/// **DFCC note**: `#[kani::modifies(game)]` declares the full game struct as the
+/// write-set, allowing DFCC to verify array-indexed writes inside `Board::set`
+/// (gallery level 15d pattern).  `kani::Arbitrary for GameInProgress` always
+/// constructs an *empty* history Vec so `Vec::push` is a single deterministic
+/// allocation rather than a symbolic-length realloc (which caused a 247 s / 20 GB
+/// formula explosion per gallery level 15b).
+///
+/// The `ensures` postcondition on `to_move` is required because `kani::modifies(game)`
+/// havocs the entire struct under DFCC stubbing.  Without it, the compositional
+/// harness cannot prove that `make_move` correctly flips `to_move` to the opponent.
+#[cfg_attr(kani, kani::modifies(game))]
 #[cfg_attr(kani, kani::requires(game.board().is_empty(mov.position)))]
 #[cfg_attr(kani, kani::requires(mov.player == game.to_move()))]
 #[cfg_attr(kani, kani::ensures(|_| game.board().get(mov.position) == crate::Square::Occupied(mov.player)))]
+#[cfg_attr(kani, kani::ensures(|_| game.to_move == old(game.to_move)))]
 #[cfg_attr(not(kani), instrument(skip(game, _proof)))]
 pub fn execute_move(mov: &Move, game: &mut GameInProgress, _proof: Established<LegalMove>) {
-    // Proof guarantees: square empty AND player's turn
-    // No need to revalidate - the type system enforces it
     game.board
         .set(mov.position, crate::Square::Occupied(mov.player));
-    // History is a runtime log; Vec::push causes CBMC formula explosion under
-    // DFCC instrumentation (gallery level 15b).
-    #[cfg(not(kani))]
     game.history.push(*mov);
 }
 

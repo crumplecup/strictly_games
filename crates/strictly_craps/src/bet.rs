@@ -148,7 +148,7 @@ impl std::fmt::Display for BetType {
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Elicit, schemars::JsonSchema,
 )]
-#[cfg_attr(kani, derive(elicitation::KaniCompose))]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub struct ActiveBet {
     /// What kind of bet.
     bet_type: BetType,

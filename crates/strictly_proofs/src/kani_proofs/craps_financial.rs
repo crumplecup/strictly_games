@@ -19,19 +19,23 @@ use strictly_craps::{
 //  Compositional type verification
 // ─────────────────────────────────────────────────────────────
 
-/// Verifies all craps types through elicitation's compositional legos.
+/// Verifies all craps types through KaniCompose symbolic instantiation.
 ///
-/// Each `kani_proof()` call verifies the type is well-formed and
-/// satisfies its elicitation contracts.
+/// Each `kani::any()` creates a symbolic instance, confirming the type
+/// is constructible under Kani's symbolic execution model.
+///
+/// Note: `Elicitation::kani_proof()` is a *compile-time* code-generation
+/// method (returns `proc_macro2::TokenStream`) — do NOT call it in Kani
+/// harnesses.  Use `kani::any()` or `KaniCompose` methods instead.
 #[cfg(kani)]
 #[kani::proof]
 fn verify_craps_legos() {
-    DieFace::kani_proof();
-    DiceRoll::kani_proof();
-    Point::kani_proof();
-    BetType::kani_proof();
-    ActiveBet::kani_proof();
-    LessonProgress::kani_proof();
+    let _: DieFace = kani::any();
+    let _: DiceRoll = kani::any();
+    let _: Point = kani::any();
+    let _: BetType = kani::any();
+    let _: ActiveBet = kani::any();
+    let _: LessonProgress = kani::any();
 
     assert!(
         true,

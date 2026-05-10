@@ -81,12 +81,15 @@ impl CrapsError {
     /// Creates a new error, capturing the caller's location.
     #[track_caller]
     pub fn new(kind: CrapsErrorKind) -> Self {
-        let loc = std::panic::Location::caller();
-        Self {
-            kind,
-            line: loc.line(),
-            file: loc.file(),
-        }
+        // `Location::caller()` is not supported by Kani (github.com/model-checking/kani/issues/374).
+        #[cfg(not(kani))]
+        let (line, file) = {
+            let loc = std::panic::Location::caller();
+            (loc.line(), loc.file())
+        };
+        #[cfg(kani)]
+        let (line, file) = (0u32, "");
+        Self { kind, line, file }
     }
 }
 
