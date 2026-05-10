@@ -49,7 +49,8 @@ pub fn validate_non_empty_bankrolls(bankrolls: &[u64]) -> Result<Established<Non
     creusot_invariant_fn = "craps_consistent",
     creusot_inv_body = "match state { CrapsState::Setup { inner, .. } => inner.num_seats@ > 0, CrapsState::Betting { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::ComeOut { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::PointPhase { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::Resolved { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), }",
     verus_invariant_fn = "craps_consistent",
-    verus_inv_body = "match *state { CrapsState::Setup { inner, .. } => inner.num_seats@ > 0, CrapsState::Betting { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::ComeOut { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::PointPhase { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::Resolved { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), }"
+    verus_inv_body = "match *state { CrapsState::Setup { num_seats, .. } => num_seats@ > 0, CrapsState::Betting { shooter_idx, bankrolls, .. } => shooter_idx@ < bankrolls@.len(), CrapsState::ComeOut { shooter_idx, bankrolls, .. } => shooter_idx@ < bankrolls@.len(), CrapsState::PointPhase { shooter_idx, bankrolls, .. } => shooter_idx@ < bankrolls@.len(), CrapsState::Resolved { shooter_idx, bankrolls, .. } => shooter_idx@ < bankrolls@.len(), }",
+    verus_state_body = "Setup { num_seats: usize }, Betting { shooter_idx: usize, bankrolls: Vec<u64> }, ComeOut { shooter_idx: usize, bankrolls: Vec<u64> }, PointPhase { shooter_idx: usize, bankrolls: Vec<u64> }, Resolved { shooter_idx: usize, bankrolls: Vec<u64> },"
 )]
 pub struct CrapsConsistent;
 

@@ -146,7 +146,8 @@ pub fn execute_action(
     creusot_invariant_fn = "blackjack_consistent",
     creusot_inv_body = "match state { BlackjackState::Setup { .. } => true, BlackjackState::Betting { inner, .. } => inner.bankroll@ > 0, BlackjackState::PlayerTurn { inner, .. } => inner.current_hand_index@ < inner.num_hands@, BlackjackState::DealerTurn { .. } => true, BlackjackState::Finished { inner, .. } => inner.num_hands@ <= MAX_PLAYER_HANDS@, }",
     verus_invariant_fn = "blackjack_consistent",
-    verus_inv_body = "match *state { BlackjackState::Setup { .. } => true, BlackjackState::Betting { inner, .. } => inner.bankroll@ > 0, BlackjackState::PlayerTurn { inner, .. } => inner.current_hand_index@ < inner.num_hands@, BlackjackState::DealerTurn { .. } => true, BlackjackState::Finished { inner, .. } => inner.num_hands@ <= MAX_PLAYER_HANDS@, }"
+    verus_inv_body = "match *state { BlackjackState::Betting { bankroll, .. } => bankroll@ > 0, BlackjackState::PlayerTurn { current_hand_index, num_hands, .. } => current_hand_index@ < num_hands@, BlackjackState::Finished { num_hands, .. } => num_hands@ <= 4, _ => true, }",
+    verus_state_body = "Betting { bankroll: u64 }, PlayerTurn { current_hand_index: usize, num_hands: usize }, Finished { num_hands: usize }, _Other,"
 )]
 pub struct BlackjackConsistent;
 

@@ -1,2 +1,2 @@
 # Auto-generated Verus proof files live here.
-# Regenerate with: cargo build -p strictly_verus
+# Regenerate with: elicitation generate verus --crate-path crates/<game-crate>

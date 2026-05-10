@@ -133,7 +133,8 @@ pub fn execute_move(mov: &Move, game: &mut GameInProgress, _proof: Established<L
     creusot_invariant_fn = "tic_tac_toe_consistent",
     creusot_inv_body = "match state { TicTacToeState::Setup { .. } => true, TicTacToeState::InProgress { inner, .. } => inner.history@.len() <= 9, TicTacToeState::Finished { inner, .. } => inner.history@.len() >= 5, }",
     verus_invariant_fn = "tic_tac_toe_consistent",
-    verus_inv_body = "match *state { TicTacToeState::Setup { .. } => true, TicTacToeState::InProgress { inner, .. } => inner.history@.len() <= 9, TicTacToeState::Finished { inner, .. } => inner.history@.len() >= 5, }"
+    verus_inv_body = "match *state { TicTacToeState::InProgress { history, .. } => history@.len() <= 9, TicTacToeState::Finished { history, .. } => history@.len() >= 5, _ => true, }",
+    verus_state_body = "InProgress { history: Vec<u8> }, Finished { history: Vec<u8> }, _Other,"
 )]
 pub struct TicTacToeConsistent;
 
