@@ -1,1 +1,5 @@
-module,status,verified,errors,duration_secs,timestamp
+module,harness,status,duration_secs,timestamp
+verus,blackjack,PASS,0,1778425727
+verus,craps,PASS,0,1778425728
+verus,tic_tac_toe,PASS,0,1778425729
+verus,tictactoe,PASS,0,1778425730

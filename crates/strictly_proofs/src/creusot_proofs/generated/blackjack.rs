@@ -12,7 +12,7 @@ use ::creusot_std::prelude::*;
 #[cfg(creusot)]
 use elicitation::Established;
 #[cfg(creusot)]
-use strictly_blackjack::{BankrollPositive, BasicAction, BlackjackConsistent, BlackjackState, NotBust, ValidAction, bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart, bj_start_betting};
+use strictly_blackjack::{BankrollPositive, BasicAction, BlackjackConsistent, BlackjackState, MAX_PLAYER_HANDS, NotBust, ValidAction, bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart, bj_start_betting};
 
 #[cfg(creusot)]
 #[logic]

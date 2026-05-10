@@ -8661,13 +8661,6 @@ dependencies = [
 [[package]]
 name = "strictly_verus"
 version = "0.1.0"
-dependencies = [
- "elicitation",
- "proc-macro2",
- "strictly_blackjack",
- "strictly_craps",
- "strictly_tictactoe",
-]
 
 [[package]]
 name = "stringprep"
