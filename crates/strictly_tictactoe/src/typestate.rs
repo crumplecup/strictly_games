@@ -207,6 +207,7 @@ impl GameFinished {
 
 /// Result of making a move.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub enum GameResult {
     /// Game continues.
     InProgress(GameInProgress),

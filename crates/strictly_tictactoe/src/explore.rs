@@ -29,6 +29,7 @@ use crate::Position;
     derive_more::Display,
     schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub enum TicTacToeAction {
     /// Place your mark at a board position.
     #[display("Play {_0}")]

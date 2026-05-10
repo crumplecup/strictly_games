@@ -10,68 +10,68 @@ fn verify_die_face_constructible() {
     let _: DieFace = DieFace::One;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_dice_roll_newtype_wrapper() {
-    let _: DiceRoll = kani::any();
+fn verify_dice_roll_kani_compose() {
+    let _: DiceRoll = <DiceRoll as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[kani::proof]
 fn verify_point_constructible() {
     let _: Point = Point::Four;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_bet_type_newtype_wrapper() {
-    let _: BetType = kani::any();
+fn verify_bet_type_kani_compose() {
+    let _: BetType = <BetType as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_active_bet_newtype_wrapper() {
-    let _: ActiveBet = kani::any();
+fn verify_active_bet_kani_compose() {
+    let _: ActiveBet = <ActiveBet as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_betting_action_newtype_wrapper() {
-    let _: BettingAction = kani::any();
+fn verify_betting_action_kani_compose() {
+    let _: BettingAction = <BettingAction as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_lesson_progress_newtype_wrapper() {
-    let _: LessonProgress = kani::any();
+fn verify_lesson_progress_kani_compose() {
+    let _: LessonProgress = <LessonProgress as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_bet_deducted_newtype_wrapper() {
-    let _: BetDeducted = kani::any();
+fn verify_bet_deducted_kani_compose() {
+    let _: BetDeducted = <BetDeducted as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_round_settled_newtype_wrapper() {
-    let _: RoundSettled = kani::any();
+fn verify_round_settled_kani_compose() {
+    let _: RoundSettled = <RoundSettled as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_craps_ledger_newtype_wrapper() {
-    let _: CrapsLedger = kani::any();
+fn verify_craps_ledger_kani_compose() {
+    let _: CrapsLedger = <CrapsLedger as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_setup_newtype_wrapper() {
-    let _: GameSetup = kani::any();
+fn verify_game_setup_kani_compose() {
+    let _: GameSetup = <GameSetup as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_betting_newtype_wrapper() {
-    let _: GameBetting = kani::any();
+fn verify_game_betting_kani_compose() {
+    let _: GameBetting = <GameBetting as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_come_out_newtype_wrapper() {
-    let _: GameComeOut = kani::any();
+fn verify_game_come_out_kani_compose() {
+    let _: GameComeOut = <GameComeOut as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_point_phase_newtype_wrapper() {
-    let _: GamePointPhase = kani::any();
+fn verify_game_point_phase_kani_compose() {
+    let _: GamePointPhase = <GamePointPhase as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_resolved_newtype_wrapper() {
-    let _: GameResolved = kani::any();
+fn verify_game_resolved_kani_compose() {
+    let _: GameResolved = <GameResolved as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_craps_seat_newtype_wrapper() {
-    let _: CrapsSeat = kani::any();
+fn verify_craps_seat_kani_compose() {
+    let _: CrapsSeat = <CrapsSeat as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_craps_table_newtype_wrapper() {
-    let _: CrapsTable = kani::any();
+fn verify_craps_table_kani_compose() {
+    let _: CrapsTable = <CrapsTable as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[kani::proof]
 fn verify_agent_personality_constructible() {
@@ -82,8 +82,8 @@ fn verify_craps_action_constructible() {
     let _: CrapsAction = CrapsAction::PlaceBet;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_craps_state_newtype_wrapper() {
-    let _: CrapsState = kani::any();
+fn verify_craps_state_kani_compose() {
+    let _: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[kani::proof]
 fn verify_craps_display_mode_constructible() {

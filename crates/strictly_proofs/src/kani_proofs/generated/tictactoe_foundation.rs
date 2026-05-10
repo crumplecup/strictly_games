@@ -10,8 +10,8 @@ fn verify_player_constructible() {
     let _: Player = Player::X;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_square_newtype_wrapper() {
-    let _: Square = kani::any();
+fn verify_square_kani_compose() {
+    let _: Square = <Square as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
 fn verify_board_newtype_wrapper() {
@@ -22,38 +22,38 @@ fn verify_position_constructible() {
     let _: Position = Position::TopLeft;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_tic_tac_toe_action_newtype_wrapper() {
-    let _: TicTacToeAction = kani::any();
+fn verify_tic_tac_toe_action_kani_compose() {
+    let _: TicTacToeAction = <TicTacToeAction as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_move_newtype_wrapper() {
-    let _: Move = kani::any();
+fn verify_move_kani_compose() {
+    let _: Move = <Move as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_setup_newtype_wrapper() {
-    let _: GameSetup = kani::any();
+fn verify_game_setup_kani_compose() {
+    let _: GameSetup = <GameSetup as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_in_progress_newtype_wrapper() {
-    let _: GameInProgress = kani::any();
+fn verify_game_in_progress_kani_compose() {
+    let _: GameInProgress = <GameInProgress as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_finished_newtype_wrapper() {
-    let _: GameFinished = kani::any();
+fn verify_game_finished_kani_compose() {
+    let _: GameFinished = <GameFinished as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_result_newtype_wrapper() {
-    let _: GameResult = kani::any();
+fn verify_game_result_kani_compose() {
+    let _: GameResult = <GameResult as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_outcome_newtype_wrapper() {
-    let _: Outcome = kani::any();
+fn verify_outcome_kani_compose() {
+    let _: Outcome = <Outcome as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_tic_tac_toe_state_newtype_wrapper() {
-    let _: TicTacToeState = kani::any();
+fn verify_tic_tac_toe_state_kani_compose() {
+    let _: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_ttt_display_mode_newtype_wrapper() {
-    let _: TttDisplayMode = kani::any();
+fn verify_ttt_display_mode_kani_compose() {
+    let _: TttDisplayMode = <TttDisplayMode as ::elicitation::KaniCompose>::kani_depth0();
 }

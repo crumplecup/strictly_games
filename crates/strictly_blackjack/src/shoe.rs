@@ -270,8 +270,24 @@ impl PartialEq for Shoe {
 
 /// Manual `KaniCompose` for `Shoe` — `AtomicUsize` prevents derive.
 ///
-/// TODO: remove once a blanket `KaniCompose` impl covers `AtomicUsize` or
-/// once `Shoe` migrates to a `Cell<usize>` that implements the trait.
+/// `AtomicUsize` is a foreign type; elicitation cannot implement its own
+/// `KaniCompose` trait for it without violating the orphan rule.  A
+/// `KaniCompose` impl for `AtomicUsize` would need to live in the kani crate
+/// or in a newtype defined here.
+///
+/// TODO: replace with `#[cfg_attr(kani, derive(elicitation::KaniCompose))]`
+/// once `Shoe` migrates its position counter to a type that implements
+/// `KaniCompose` (e.g. a plain `usize` with `Cell<usize>` for interior
+/// mutability, or a newtype that derives the trait).
+/// `AtomicUsize` does not implement `kani::Arbitrary`, so the generated foundation
+/// harness (`kani::any::<Shoe>()`) uses this manual impl to delegate to `kani_depth0()`.
+#[cfg(kani)]
+impl kani::Arbitrary for Shoe {
+    fn any() -> Self {
+        <Shoe as elicitation::KaniCompose>::kani_depth0()
+    }
+}
+
 #[cfg(kani)]
 impl elicitation::KaniCompose for Shoe {
     fn kani_depth0() -> Self {

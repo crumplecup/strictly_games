@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
     Elicit,
     schemars::JsonSchema,
 )]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 #[cfg_attr(feature = "shuffle", derive(elicitation_derive::Rand))]
 #[cfg_attr(feature = "shuffle", rand(bounded(1, 10_001)))]
 pub struct BetAmount(pub u64);

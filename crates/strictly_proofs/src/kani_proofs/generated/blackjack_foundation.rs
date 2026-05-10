@@ -6,12 +6,12 @@
 use strictly_blackjack::{HandValue, Hand, Rank, Suit, Card, BasicAction, PlayerAction, GameSetup, GameBetting, GamePlayerTurn, GameDealerTurn, GameFinished, GameResult, Shoe, BlackjackAction, BetAmount, BlackjackState, BlackjackDisplayMode, BetDeducted, PayoutSettled, BankrollLedger, Outcome};
 
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_hand_value_newtype_wrapper() {
-    let _: HandValue = kani::any();
+fn verify_hand_value_kani_compose() {
+    let _: HandValue = <HandValue as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_hand_newtype_wrapper() {
-    let _: Hand = kani::any();
+fn verify_hand_kani_compose() {
+    let _: Hand = <Hand as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[kani::proof]
 fn verify_rank_constructible() {
@@ -22,40 +22,40 @@ fn verify_suit_constructible() {
     let _: Suit = Suit::Hearts;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_card_newtype_wrapper() {
-    let _: Card = kani::any();
+fn verify_card_kani_compose() {
+    let _: Card = <Card as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[kani::proof]
 fn verify_basic_action_constructible() {
     let _: BasicAction = BasicAction::Hit;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_player_action_newtype_wrapper() {
-    let _: PlayerAction = kani::any();
+fn verify_player_action_kani_compose() {
+    let _: PlayerAction = <PlayerAction as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_setup_newtype_wrapper() {
-    let _: GameSetup = kani::any();
+fn verify_game_setup_kani_compose() {
+    let _: GameSetup = <GameSetup as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_betting_newtype_wrapper() {
-    let _: GameBetting = kani::any();
+fn verify_game_betting_kani_compose() {
+    let _: GameBetting = <GameBetting as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_player_turn_newtype_wrapper() {
-    let _: GamePlayerTurn = kani::any();
+fn verify_game_player_turn_kani_compose() {
+    let _: GamePlayerTurn = <GamePlayerTurn as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_dealer_turn_newtype_wrapper() {
-    let _: GameDealerTurn = kani::any();
+fn verify_game_dealer_turn_kani_compose() {
+    let _: GameDealerTurn = <GameDealerTurn as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_finished_newtype_wrapper() {
-    let _: GameFinished = kani::any();
+fn verify_game_finished_kani_compose() {
+    let _: GameFinished = <GameFinished as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_game_result_newtype_wrapper() {
-    let _: GameResult = kani::any();
+fn verify_game_result_kani_compose() {
+    let _: GameResult = <GameResult as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
 fn verify_shoe_newtype_wrapper() {
@@ -66,28 +66,28 @@ fn verify_blackjack_action_constructible() {
     let _: BlackjackAction = BlackjackAction::Hit;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_bet_amount_newtype_wrapper() {
-    let _: BetAmount = kani::any();
+fn verify_bet_amount_kani_compose() {
+    let _: BetAmount = <BetAmount as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_blackjack_state_newtype_wrapper() {
-    let _: BlackjackState = kani::any();
+fn verify_blackjack_state_kani_compose() {
+    let _: BlackjackState = <BlackjackState as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[kani::proof]
 fn verify_blackjack_display_mode_constructible() {
     let _: BlackjackDisplayMode = BlackjackDisplayMode::Table;
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_bet_deducted_newtype_wrapper() {
-    let _: BetDeducted = kani::any();
+fn verify_bet_deducted_kani_compose() {
+    let _: BetDeducted = <BetDeducted as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_payout_settled_newtype_wrapper() {
-    let _: PayoutSettled = kani::any();
+fn verify_payout_settled_kani_compose() {
+    let _: PayoutSettled = <PayoutSettled as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_bankroll_ledger_newtype_wrapper() {
-    let _: BankrollLedger = kani::any();
+fn verify_bankroll_ledger_kani_compose() {
+    let _: BankrollLedger = <BankrollLedger as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[kani::proof]
 fn verify_outcome_constructible() {

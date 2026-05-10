@@ -79,6 +79,7 @@ impl std::fmt::Display for HandValue {
 /// Serializes / deserializes as a variable-length JSON array for wire
 /// compatibility with the original `Vec`-backed representation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct Hand {
     cards: [Card; MAX_HAND_CARDS],
     len: usize,
@@ -253,30 +254,5 @@ impl<'de> Deserialize<'de> for Hand {
     }
 }
 
-/// Manual `KaniCompose` for `Hand` — workaround for the missing `[T; N]: KaniCompose`
-/// blanket impl in elicitation.
-///
-/// TODO: remove once elicitation gains `impl<T: KaniCompose, const N: usize> KaniCompose for [T; N]`.
-#[cfg(kani)]
-impl elicitation::KaniCompose for Hand {
-    fn kani_depth0() -> Self {
-        Self {
-            cards: std::array::from_fn(|_| <Card as elicitation::KaniCompose>::kani_depth0()),
-            len: 0,
-        }
-    }
-
-    fn kani_depth1() -> Self {
-        Self {
-            cards: std::array::from_fn(|_| <Card as elicitation::KaniCompose>::kani_depth1()),
-            len: 1,
-        }
-    }
-
-    fn kani_depth2() -> Self {
-        Self {
-            cards: std::array::from_fn(|_| <Card as elicitation::KaniCompose>::kani_depth2()),
-            len: 2,
-        }
-    }
-}
+// `[T; N]: KaniCompose` blanket impl in elicitation covers array fields.
+// `Hand` uses `#[cfg_attr(kani, derive(elicitation::KaniCompose))]` on the struct.

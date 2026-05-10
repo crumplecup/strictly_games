@@ -216,6 +216,7 @@ impl std::fmt::Display for ActiveBet {
 
 /// Player action during the betting phase.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub enum BettingAction {
     /// Place a new bet of the given type and amount.
     PlaceBet(BetType, u64),

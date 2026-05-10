@@ -36,6 +36,7 @@ use crate::{ActiveBet, BetType, CrapsError, CrapsErrorKind, DiceRoll, Point};
 /// Persists across rounds — tracks bankroll, lesson progress, and
 /// whether this player is the current shooter.
 #[derive(Debug, Clone, Serialize, Deserialize, Getters, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct CrapsSeat {
     /// Player display name.
     name: String,
@@ -177,6 +178,7 @@ impl std::fmt::Display for SeatRoundResult {
 /// Manages seats, shooter rotation, and bet validation. Delegates
 /// phase transitions to the typestate machine.
 #[derive(Debug, Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct CrapsTable {
     /// All players at the table.
     seats: Vec<CrapsSeat>,

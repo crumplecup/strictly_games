@@ -14,6 +14,7 @@ use crate::BetType;
 /// Level 1 starts with just Pass/Don't Pass. Each level unlocks more bet
 /// types, building understanding incrementally.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(kani::Arbitrary, elicitation::KaniCompose))]
 pub struct LessonProgress {
     /// Current lesson level (1–5).
     level: u8,

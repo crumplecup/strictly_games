@@ -190,6 +190,7 @@ impl GameBetting {
 
 /// Game in player turn phase — player takes actions.
 #[derive(Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GamePlayerTurn {
     /// Card shoe — continues to be drawn from on split/hit.
     pub shoe: Shoe,
@@ -302,6 +303,7 @@ impl GamePlayerTurn {
 
 /// Game in dealer turn phase — dealer plays by fixed rules.
 #[derive(Clone, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameDealerTurn {
     /// Card shoe — dealer draws from this.
     pub shoe: Shoe,
@@ -404,6 +406,7 @@ impl GameDealerTurn {
 
 /// Game finished — outcomes determined.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub struct GameFinished {
     /// Final player hands (only `[..num_hands]` are active).
     pub player_hands: [Hand; MAX_PLAYER_HANDS],
@@ -452,6 +455,7 @@ impl GameFinished {
 
 /// Result of a game transition — carries the game to the next phase.
 #[derive(Debug, Serialize, Deserialize, Elicit, schemars::JsonSchema)]
+#[cfg_attr(kani, derive(elicitation::KaniCompose))]
 pub enum GameResult {
     /// Game in player turn phase.
     PlayerTurn(GamePlayerTurn),
@@ -500,152 +504,9 @@ impl PartialEq for GameDealerTurn {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  KaniCompose for phase structs (array + AtomicUsize workarounds)
+//  KaniCompose for phase structs
 // ─────────────────────────────────────────────────────────────
-
-/// Manual `KaniCompose` for `GamePlayerTurn` — workarounds for:
-///   1. `[T; N]: KaniCompose` missing blanket impl.
-///   2. `Established<P>: KaniCompose` missing impl (use `Established::assert()`).
-///   3. `Shoe`: `AtomicUsize` field prevents auto-derive.
-///
-/// TODO: remove once elicitation patches all three gaps.
-#[cfg(kani)]
-impl elicitation::KaniCompose for GamePlayerTurn {
-    fn kani_depth0() -> Self {
-        Self {
-            shoe: <Shoe as elicitation::KaniCompose>::kani_depth0(),
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth0()
-            }),
-            num_hands: kani::any::<usize>(),
-            current_hand_index: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth0(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            ledger: <BankrollLedger as elicitation::KaniCompose>::kani_depth0(),
-            bet_deducted: Established::assert(),
-        }
-    }
-
-    fn kani_depth1() -> Self {
-        Self {
-            shoe: <Shoe as elicitation::KaniCompose>::kani_depth1(),
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth1()
-            }),
-            num_hands: kani::any::<usize>(),
-            current_hand_index: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth1(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            ledger: <BankrollLedger as elicitation::KaniCompose>::kani_depth1(),
-            bet_deducted: Established::assert(),
-        }
-    }
-
-    fn kani_depth2() -> Self {
-        Self {
-            shoe: <Shoe as elicitation::KaniCompose>::kani_depth2(),
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth2()
-            }),
-            num_hands: kani::any::<usize>(),
-            current_hand_index: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth2(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            ledger: <BankrollLedger as elicitation::KaniCompose>::kani_depth2(),
-            bet_deducted: Established::assert(),
-        }
-    }
-}
-
-/// Manual `KaniCompose` for `GameDealerTurn` — same workarounds as
-/// `GamePlayerTurn`.
-#[cfg(kani)]
-impl elicitation::KaniCompose for GameDealerTurn {
-    fn kani_depth0() -> Self {
-        Self {
-            shoe: <Shoe as elicitation::KaniCompose>::kani_depth0(),
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth0()
-            }),
-            num_hands: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth0(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            ledger: <BankrollLedger as elicitation::KaniCompose>::kani_depth0(),
-            bet_deducted: Established::assert(),
-        }
-    }
-
-    fn kani_depth1() -> Self {
-        Self {
-            shoe: <Shoe as elicitation::KaniCompose>::kani_depth1(),
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth1()
-            }),
-            num_hands: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth1(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            ledger: <BankrollLedger as elicitation::KaniCompose>::kani_depth1(),
-            bet_deducted: Established::assert(),
-        }
-    }
-
-    fn kani_depth2() -> Self {
-        Self {
-            shoe: <Shoe as elicitation::KaniCompose>::kani_depth2(),
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth2()
-            }),
-            num_hands: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth2(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            ledger: <BankrollLedger as elicitation::KaniCompose>::kani_depth2(),
-            bet_deducted: Established::assert(),
-        }
-    }
-}
-
-/// Manual `KaniCompose` for `GameFinished` — workaround for missing
-/// `[T; N]: KaniCompose` blanket impl.
-///
-/// TODO: remove once elicitation gains `impl<T: KaniCompose, const N: usize> KaniCompose for [T; N]`.
-#[cfg(kani)]
-impl elicitation::KaniCompose for GameFinished {
-    fn kani_depth0() -> Self {
-        Self {
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth0()
-            }),
-            num_hands: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth0(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            outcomes: std::array::from_fn(|_| <Outcome as elicitation::KaniCompose>::kani_depth0()),
-            bankroll: kani::any::<u64>(),
-        }
-    }
-
-    fn kani_depth1() -> Self {
-        Self {
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth1()
-            }),
-            num_hands: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth1(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            outcomes: std::array::from_fn(|_| <Outcome as elicitation::KaniCompose>::kani_depth1()),
-            bankroll: kani::any::<u64>(),
-        }
-    }
-
-    fn kani_depth2() -> Self {
-        Self {
-            player_hands: std::array::from_fn(|_| {
-                <Hand as elicitation::KaniCompose>::kani_depth2()
-            }),
-            num_hands: kani::any::<usize>(),
-            dealer_hand: <Hand as elicitation::KaniCompose>::kani_depth2(),
-            bets: std::array::from_fn(|_| kani::any::<u64>()),
-            outcomes: std::array::from_fn(|_| <Outcome as elicitation::KaniCompose>::kani_depth2()),
-            bankroll: kani::any::<u64>(),
-        }
-    }
-}
+// `GamePlayerTurn` and `GameDealerTurn` use `#[cfg_attr(kani, derive(elicitation::KaniCompose))]`.
+// `Shoe` still has a manual impl due to its `AtomicUsize` field (see shoe.rs).
+// `GameFinished` uses #[derive(elicitation::KaniCompose)] — the [T; N] blanket
+// impl in elicitation covers all its array fields.
