@@ -1,5 +1,16 @@
 /target
 *.log
+
+# Local environment — never commit secrets
 .env
 *.env
+
+# Verification artifacts (elicitation prove --csv output)
+*.csv
+prove_kani.log
+prove_creusot.log
+prove_verus.log
+
+# Database runtime files
 strictly_games.db
+strictly_games.db-journal
