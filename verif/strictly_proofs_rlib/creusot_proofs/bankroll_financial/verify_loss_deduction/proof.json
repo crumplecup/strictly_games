@@ -2,8 +2,11 @@
   "profile": [],
   "proofs": {
     "Coma": {
-      "vc_inline_gross_return": { "prover": "alt-ergo", "time": 0.027 },
-      "vc_verify_loss_deduction": { "prover": "alt-ergo", "time": 0.056 }
+      "vc_inline_gross_return": { "prover": "alt-ergo@2.6.2", "time": 0.02 },
+      "vc_verify_loss_deduction": {
+        "prover": "alt-ergo@2.6.2",
+        "time": 0.048
+      }
     }
   }
 }

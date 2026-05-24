@@ -2,8 +2,8 @@
   "profile": [],
   "proofs": {
     "Coma": {
-      "vc_label_contained": { "prover": "alt-ergo", "time": 0.021 },
-      "vc_saturating_sub": { "prover": "alt-ergo", "time": 0.019 }
+      "vc_label_contained": { "prover": "alt-ergo@2.6.2", "time": 0.022 },
+      "vc_saturating_sub": { "prover": "alt-ergo@2.6.2", "time": 0.019 }
     }
   }
 }

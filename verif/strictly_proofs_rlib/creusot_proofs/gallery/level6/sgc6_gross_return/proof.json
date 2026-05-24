@@ -2,26 +2,7 @@
   "profile": [],
   "proofs": {
     "Coma": {
-      "vc_sgc6_gross_return": {
-        "tactic": "compute_specified",
-        "children": [
-          {
-            "tactic": "split_vc",
-            "children": [
-              { "prover": "alt-ergo", "time": 0.033 },
-              { "prover": "alt-ergo", "time": 0.044 },
-              { "prover": "alt-ergo", "time": 0.031 },
-              { "prover": "alt-ergo", "time": 0.031 },
-              { "prover": "alt-ergo", "time": 0.048 },
-              { "prover": "alt-ergo", "time": 0.053 },
-              { "prover": "alt-ergo", "time": 0.039 },
-              { "prover": "alt-ergo", "time": 0.039 },
-              { "prover": "alt-ergo", "time": 0.028 },
-              { "prover": "alt-ergo", "time": 0.05 }
-            ]
-          }
-        ]
-      }
+      "vc_sgc6_gross_return": { "prover": "alt-ergo@2.6.2", "time": 0.047 }
     }
   }
 }

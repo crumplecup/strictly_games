@@ -2,8 +2,8 @@
   "profile": [],
   "proofs": {
     "Coma": {
-      "vc_new_u8": { "prover": "alt-ergo", "time": 0.033 },
-      "vc_sgc2_new": { "prover": "alt-ergo", "time": 0.031 }
+      "vc_new_u8": { "prover": "alt-ergo@2.6.2", "time": 0.023 },
+      "vc_sgc2_new": { "prover": "alt-ergo@2.6.2", "time": 0.028 }
     }
   }
 }

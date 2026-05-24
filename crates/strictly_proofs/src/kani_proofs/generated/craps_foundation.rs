@@ -3,20 +3,13 @@
 // Kani constructibility harnesses for all #[derive(Elicit)] types.
 // Regenerate: elicitation generate foundation --crate-path <root>
 
-use strictly_craps::{DieFace, DiceRoll, Point, BetType, ActiveBet, BettingAction, LessonProgress, BetDeducted, RoundSettled, CrapsLedger, GameSetup, GameBetting, GameComeOut, GamePointPhase, GameResolved, CrapsSeat, CrapsTable, AgentPersonality, CrapsAction, CrapsState, CrapsDisplayMode};
+use strictly_craps::{
+    ActiveBet, AgentPersonality, BetDeducted, BetType, BettingAction, CrapsAction,
+    CrapsDisplayMode, CrapsLedger, CrapsSeat, CrapsState, CrapsTable, DiceRoll, DieFace,
+    GameBetting, GameComeOut, GamePointPhase, GameResolved, GameSetup, LessonProgress, Point,
+    RoundSettled,
+};
 
-#[kani::proof]
-fn verify_die_face_constructible() {
-    let _: DieFace = DieFace::One;
-}
-#[cfg_attr(kani, ::kani::proof)]
-fn verify_dice_roll_kani_compose() {
-    let _: DiceRoll = <DiceRoll as ::elicitation::KaniCompose>::kani_depth0();
-}
-#[kani::proof]
-fn verify_point_constructible() {
-    let _: Point = Point::Four;
-}
 #[cfg_attr(kani, ::kani::proof)]
 fn verify_bet_type_kani_compose() {
     let _: BetType = <BetType as ::elicitation::KaniCompose>::kani_depth0();
@@ -29,9 +22,21 @@ fn verify_active_bet_kani_compose() {
 fn verify_betting_action_kani_compose() {
     let _: BettingAction = <BettingAction as ::elicitation::KaniCompose>::kani_depth0();
 }
+#[kani::proof]
+fn verify_die_face_constructible() {
+    let _: DieFace = DieFace::One;
+}
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_lesson_progress_kani_compose() {
-    let _: LessonProgress = <LessonProgress as ::elicitation::KaniCompose>::kani_depth0();
+fn verify_dice_roll_kani_compose() {
+    let _: DiceRoll = <DiceRoll as ::elicitation::KaniCompose>::kani_depth0();
+}
+#[kani::proof]
+fn verify_craps_display_mode_constructible() {
+    let _: CrapsDisplayMode = CrapsDisplayMode::Table;
+}
+#[kani::proof]
+fn verify_craps_action_constructible() {
+    let _: CrapsAction = CrapsAction::PlaceBet;
 }
 #[cfg_attr(kani, ::kani::proof)]
 fn verify_bet_deducted_kani_compose() {
@@ -44,6 +49,26 @@ fn verify_round_settled_kani_compose() {
 #[cfg_attr(kani, ::kani::proof)]
 fn verify_craps_ledger_kani_compose() {
     let _: CrapsLedger = <CrapsLedger as ::elicitation::KaniCompose>::kani_depth0();
+}
+#[cfg_attr(kani, ::kani::proof)]
+fn verify_lesson_progress_kani_compose() {
+    let _: LessonProgress = <LessonProgress as ::elicitation::KaniCompose>::kani_depth0();
+}
+#[kani::proof]
+fn verify_agent_personality_constructible() {
+    let _: AgentPersonality = AgentPersonality::Conservative;
+}
+#[kani::proof]
+fn verify_point_constructible() {
+    let _: Point = Point::Four;
+}
+#[cfg_attr(kani, ::kani::proof)]
+fn verify_craps_seat_kani_compose() {
+    let _: CrapsSeat = <CrapsSeat as ::elicitation::KaniCompose>::kani_depth0();
+}
+#[cfg_attr(kani, ::kani::proof)]
+fn verify_craps_table_kani_compose() {
+    let _: CrapsTable = <CrapsTable as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
 fn verify_game_setup_kani_compose() {
@@ -66,26 +91,6 @@ fn verify_game_resolved_kani_compose() {
     let _: GameResolved = <GameResolved as ::elicitation::KaniCompose>::kani_depth0();
 }
 #[cfg_attr(kani, ::kani::proof)]
-fn verify_craps_seat_kani_compose() {
-    let _: CrapsSeat = <CrapsSeat as ::elicitation::KaniCompose>::kani_depth0();
-}
-#[cfg_attr(kani, ::kani::proof)]
-fn verify_craps_table_kani_compose() {
-    let _: CrapsTable = <CrapsTable as ::elicitation::KaniCompose>::kani_depth0();
-}
-#[kani::proof]
-fn verify_agent_personality_constructible() {
-    let _: AgentPersonality = AgentPersonality::Conservative;
-}
-#[kani::proof]
-fn verify_craps_action_constructible() {
-    let _: CrapsAction = CrapsAction::PlaceBet;
-}
-#[cfg_attr(kani, ::kani::proof)]
 fn verify_craps_state_kani_compose() {
     let _: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth0();
-}
-#[kani::proof]
-fn verify_craps_display_mode_constructible() {
-    let _: CrapsDisplayMode = CrapsDisplayMode::Table;
 }
