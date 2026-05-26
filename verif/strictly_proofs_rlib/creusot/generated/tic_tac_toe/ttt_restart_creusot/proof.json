@@ -1,0 +1,9 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_ttt_restart": { "prover": "alt-ergo@2.6.2", "time": 0.024 },
+      "vc_ttt_restart_creusot": { "prover": "alt-ergo@2.6.2", "time": 0.02 }
+    }
+  }
+}

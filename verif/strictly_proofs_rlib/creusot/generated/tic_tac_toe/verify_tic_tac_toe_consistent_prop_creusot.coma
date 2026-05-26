@@ -1,0 +1,19 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 29 0 29 59 *)
+
+let%span stic_tac_toe = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 30 4 30 8
+let%span stic_tac_toe'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 27 11 27 15
+let%span stic_tac_toe'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 28 10 28 16
+
+use creusot.prelude.Any
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec verify_tic_tac_toe_consistent_prop_creusot
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 29 0 29 59]
+  (return (x: bool)) = (! bb0
+  [ bb0 = s0 [ s0 = [ &_ret <- [%#stic_tac_toe] true ] s1 | s1 = return {_ret} ] ] [ & _ret: bool = Any.any_l () ])
+  [ return (result: bool) ->
+  {[@stop_split] [@expl:verify_tic_tac_toe_consistent_prop_creusot ensures] [%#stic_tac_toe'1] result}
+    (! return {result}) ]

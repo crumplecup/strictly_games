@@ -1,0 +1,278 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 46 0 51 47 *)
+
+let%span svsm = "/home/erik/repos/strictly_games/crates/strictly_craps/src/vsm.rs" 129 0 134 47
+let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
+let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
+let%span scraps = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 52 4 52 65
+let%span scraps'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 47 4 47 9
+let%span scraps'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 48 4 48 9
+let%span scraps'2 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 50 4 50 19
+let%span scraps'3 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 42 11 42 49
+let%span scraps'4 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 43 11 43 31
+let%span scraps'5 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 51 5 51 47
+let%span scraps'6 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 44 10 44 51
+let%span scraps'7 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 38 27 38 32
+let%span scraps'8 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 38 46 38 51
+let%span scraps'9 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 38 104 38 119
+let%span scraps'10 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 35 15 35 53
+let%span scraps'11 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 36 15 36 35
+let%span scraps'12 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 37 14 37 55
+let%span scraps'13 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 23 16 23 420
+let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
+let%span svec'0 = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 87 20 87 30
+
+use creusot.int.UInt64
+use creusot.int.UInt8
+use seq.Seq
+use creusot.prelude.Any
+use int.Int
+
+type t_GameSetup = { num_seats: UInt64.t; max_odds: UInt8.t }
+
+type t_CrapsDisplayMode = Table | Stats
+
+type t_Vec_u64_Global
+
+type t_GameBetting = { bankrolls'0: t_Vec_u64_Global; max_odds'0: UInt8.t; shooter_idx'0: UInt64.t }
+
+type t_Vec_Vec_ActiveBet_Global_Global
+
+type t_GameComeOut = {
+  bankrolls'1: t_Vec_u64_Global;
+  seat_bets'1: t_Vec_Vec_ActiveBet_Global_Global;
+  max_odds'1: UInt8.t;
+  shooter_idx'1: UInt64.t }
+
+type t_Point = Four | Five | Six | Eight | Nine | Ten
+
+type t_Vec_DiceRoll_Global
+
+type t_GamePointPhase = {
+  bankrolls'2: t_Vec_u64_Global;
+  seat_bets'2: t_Vec_Vec_ActiveBet_Global_Global;
+  point'2: t_Point;
+  roll_history'2: t_Vec_DiceRoll_Global;
+  max_odds'2: UInt8.t;
+  shooter_idx'2: UInt64.t }
+
+type t_Option_Point = None | Some t_Point
+
+type t_GameResolved = {
+  bankrolls'3: t_Vec_u64_Global;
+  seat_bets'3: t_Vec_Vec_ActiveBet_Global_Global;
+  point'3: t_Option_Point;
+  roll_history'3: t_Vec_DiceRoll_Global;
+  shooter_idx'3: UInt64.t;
+  max_odds'3: UInt8.t }
+
+type t_CrapsState =
+  | Setup t_GameSetup t_CrapsDisplayMode
+  | Betting t_GameBetting t_CrapsDisplayMode
+  | ComeOut t_GameComeOut t_CrapsDisplayMode
+  | PointPhase t_GamePointPhase t_CrapsDisplayMode
+  | Resolved t_GameResolved t_CrapsDisplayMode
+
+type t_Established_CrapsConsistent
+
+type t_Established_NonEmptyBankrolls
+
+type tup2_CrapsState_Established_CrapsConsistent = { f0: t_CrapsState; f1: t_Established_CrapsConsistent }
+
+type t_Vec_ActiveBet_Global
+
+type t_ActiveBet
+
+predicate inv_ActiveBet (_1: t_ActiveBet)
+
+predicate invariant_ref_ActiveBet [@inline:trivial] (self: t_ActiveBet) = [%#sinvariant] inv_ActiveBet self
+
+meta "rewrite_def" predicate invariant_ref_ActiveBet
+
+predicate inv_ref_ActiveBet [@inline:trivial] (_1: t_ActiveBet) = invariant_ref_ActiveBet _1
+
+meta "rewrite_def" predicate inv_ref_ActiveBet
+
+predicate invariant_Seq_ActiveBet [@inline:trivial] (self: Seq.seq t_ActiveBet) =
+  [%#sseq] forall i: int. 0 <= i /\ i < Seq.length self -> inv_ref_ActiveBet (Seq.get self i)
+
+meta "rewrite_def" predicate invariant_Seq_ActiveBet
+
+predicate inv_Seq_ActiveBet [@inline:trivial] (_1: Seq.seq t_ActiveBet) = invariant_Seq_ActiveBet _1
+
+meta "rewrite_def" predicate inv_Seq_ActiveBet
+
+constant const_MAX: UInt64.t = (18446744073709551615: UInt64.t)
+
+function view_Vec_ActiveBet_Global (self: t_Vec_ActiveBet_Global) : Seq.seq t_ActiveBet
+
+axiom view_Vec_ActiveBet_Global_spec:
+  forall self: t_Vec_ActiveBet_Global. [%#svec] Seq.length (view_Vec_ActiveBet_Global self) <= UInt64.t'int const_MAX
+
+predicate invariant_Vec_ActiveBet_Global (self: t_Vec_ActiveBet_Global) =
+  [%#svec'0] inv_Seq_ActiveBet (view_Vec_ActiveBet_Global self)
+
+predicate inv_Vec_ActiveBet_Global (_1: t_Vec_ActiveBet_Global)
+
+axiom inv_axiom: forall x: t_Vec_ActiveBet_Global [inv_Vec_ActiveBet_Global x]. inv_Vec_ActiveBet_Global x
+    -> invariant_Vec_ActiveBet_Global x
+
+predicate invariant_ref_Vec_ActiveBet_Global [@inline:trivial] (self: t_Vec_ActiveBet_Global) =
+  [%#sinvariant] inv_Vec_ActiveBet_Global self
+
+meta "rewrite_def" predicate invariant_ref_Vec_ActiveBet_Global
+
+predicate inv_ref_Vec_ActiveBet_Global [@inline:trivial] (_1: t_Vec_ActiveBet_Global) =
+  invariant_ref_Vec_ActiveBet_Global _1
+
+meta "rewrite_def" predicate inv_ref_Vec_ActiveBet_Global
+
+predicate invariant_Seq_Vec_ActiveBet_Global [@inline:trivial] (self: Seq.seq t_Vec_ActiveBet_Global) =
+  [%#sseq] forall i: int. 0 <= i /\ i < Seq.length self -> inv_ref_Vec_ActiveBet_Global (Seq.get self i)
+
+meta "rewrite_def" predicate invariant_Seq_Vec_ActiveBet_Global
+
+predicate inv_Seq_Vec_ActiveBet_Global [@inline:trivial] (_1: Seq.seq t_Vec_ActiveBet_Global) =
+  invariant_Seq_Vec_ActiveBet_Global _1
+
+meta "rewrite_def" predicate inv_Seq_Vec_ActiveBet_Global
+
+function view_Vec_Vec_ActiveBet_Global_Global (self: t_Vec_Vec_ActiveBet_Global_Global) : Seq.seq t_Vec_ActiveBet_Global
+
+axiom view_Vec_Vec_ActiveBet_Global_Global_spec:
+  forall self: t_Vec_Vec_ActiveBet_Global_Global. [%#svec] Seq.length (view_Vec_Vec_ActiveBet_Global_Global self)
+    <= UInt64.t'int const_MAX
+
+predicate invariant_Vec_Vec_ActiveBet_Global_Global (self: t_Vec_Vec_ActiveBet_Global_Global) =
+  [%#svec'0] inv_Seq_Vec_ActiveBet_Global (view_Vec_Vec_ActiveBet_Global_Global self)
+
+predicate inv_Vec_Vec_ActiveBet_Global_Global (_1: t_Vec_Vec_ActiveBet_Global_Global)
+
+axiom inv_axiom'0:
+  forall x: t_Vec_Vec_ActiveBet_Global_Global [inv_Vec_Vec_ActiveBet_Global_Global x]. inv_Vec_Vec_ActiveBet_Global_Global x
+    -> invariant_Vec_Vec_ActiveBet_Global_Global x
+
+predicate inv_GameComeOut (_1: t_GameComeOut)
+
+axiom inv_axiom'1 [@rewrite]: forall x: t_GameComeOut [inv_GameComeOut x]. inv_GameComeOut x
+    = inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'1
+
+type t_DiceRoll
+
+predicate inv_DiceRoll (_1: t_DiceRoll)
+
+predicate invariant_ref_DiceRoll [@inline:trivial] (self: t_DiceRoll) = [%#sinvariant] inv_DiceRoll self
+
+meta "rewrite_def" predicate invariant_ref_DiceRoll
+
+predicate inv_ref_DiceRoll [@inline:trivial] (_1: t_DiceRoll) = invariant_ref_DiceRoll _1
+
+meta "rewrite_def" predicate inv_ref_DiceRoll
+
+predicate invariant_Seq_DiceRoll [@inline:trivial] (self: Seq.seq t_DiceRoll) =
+  [%#sseq] forall i: int. 0 <= i /\ i < Seq.length self -> inv_ref_DiceRoll (Seq.get self i)
+
+meta "rewrite_def" predicate invariant_Seq_DiceRoll
+
+predicate inv_Seq_DiceRoll [@inline:trivial] (_1: Seq.seq t_DiceRoll) = invariant_Seq_DiceRoll _1
+
+meta "rewrite_def" predicate inv_Seq_DiceRoll
+
+function view_Vec_DiceRoll_Global (self: t_Vec_DiceRoll_Global) : Seq.seq t_DiceRoll
+
+axiom view_Vec_DiceRoll_Global_spec:
+  forall self: t_Vec_DiceRoll_Global. [%#svec] Seq.length (view_Vec_DiceRoll_Global self) <= UInt64.t'int const_MAX
+
+predicate invariant_Vec_DiceRoll_Global (self: t_Vec_DiceRoll_Global) =
+  [%#svec'0] inv_Seq_DiceRoll (view_Vec_DiceRoll_Global self)
+
+predicate inv_Vec_DiceRoll_Global (_1: t_Vec_DiceRoll_Global)
+
+axiom inv_axiom'2: forall x: t_Vec_DiceRoll_Global [inv_Vec_DiceRoll_Global x]. inv_Vec_DiceRoll_Global x
+    -> invariant_Vec_DiceRoll_Global x
+
+predicate inv_GamePointPhase (_1: t_GamePointPhase)
+
+axiom inv_axiom'3 [@rewrite]: forall x: t_GamePointPhase [inv_GamePointPhase x]. inv_GamePointPhase x
+    = (inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'2 /\ inv_Vec_DiceRoll_Global x.roll_history'2)
+
+predicate inv_GameResolved (_1: t_GameResolved)
+
+axiom inv_axiom'4 [@rewrite]: forall x: t_GameResolved [inv_GameResolved x]. inv_GameResolved x
+    = (inv_Vec_Vec_ActiveBet_Global_Global x.seat_bets'3 /\ inv_Vec_DiceRoll_Global x.roll_history'3)
+
+predicate inv_CrapsState (_1: t_CrapsState)
+
+axiom inv_axiom'5 [@rewrite]: forall x: t_CrapsState [inv_CrapsState x]. inv_CrapsState x
+    = match x with
+      | Setup inner display_mode -> true
+      | Betting inner display_mode -> true
+      | ComeOut inner display_mode -> inv_GameComeOut inner
+      | PointPhase inner display_mode -> inv_GamePointPhase inner
+      | Resolved inner display_mode -> inv_GameResolved inner
+      end
+
+predicate inv_Established_CrapsConsistent (_1: t_Established_CrapsConsistent)
+
+predicate inv_Established_NonEmptyBankrolls (_1: t_Established_NonEmptyBankrolls)
+
+function view_Vec_u64_Global (self: t_Vec_u64_Global) : Seq.seq UInt64.t
+
+axiom view_Vec_u64_Global_spec: forall self: t_Vec_u64_Global. [%#svec] Seq.length (view_Vec_u64_Global self)
+    <= UInt64.t'int const_MAX
+
+predicate craps_consistent_creusot [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 22 0 22 65] (state: t_CrapsState) =
+  [%#scraps'13] match state with
+    | Setup inner _ -> UInt64.t'int inner.num_seats > 0
+    | Betting inner _ -> UInt64.t'int inner.shooter_idx'0 < Seq.length (view_Vec_u64_Global inner.bankrolls'0)
+    | ComeOut inner _ -> UInt64.t'int inner.shooter_idx'1 < Seq.length (view_Vec_u64_Global inner.bankrolls'1)
+    | PointPhase inner _ -> UInt64.t'int inner.shooter_idx'2 < Seq.length (view_Vec_u64_Global inner.bankrolls'2)
+    | Resolved inner _ -> UInt64.t'int inner.shooter_idx'3 < Seq.length (view_Vec_u64_Global inner.bankrolls'3)
+    end
+
+predicate inv_tup2_CrapsState_Established_CrapsConsistent [@inline:trivial] (_1: tup2_CrapsState_Established_CrapsConsistent) =
+  inv_CrapsState _1.f0 /\ inv_Established_CrapsConsistent _1.f1
+
+meta "rewrite_def" predicate inv_tup2_CrapsState_Established_CrapsConsistent
+
+let rec craps_start_betting (state: t_CrapsState) (proof: t_Established_CrapsConsistent) (bankrolls: t_Vec_u64_Global)
+  (bankrolls_proof: t_Established_NonEmptyBankrolls) (return (x: tup2_CrapsState_Established_CrapsConsistent)) =
+  {[@stop_split] [@expl:craps_start_betting requires] ([@stop_split] [@expl:craps_start_betting 'state' type invariant] [%#scraps'7] inv_CrapsState state)
+  /\ ([@stop_split] [@expl:craps_start_betting 'proof' type invariant] [%#scraps'8] inv_Established_CrapsConsistent proof)
+  /\ ([@stop_split] [@expl:craps_start_betting 'bankrolls_proof' type invariant] [%#scraps'9] inv_Established_NonEmptyBankrolls bankrolls_proof)
+  /\ ([@stop_split] [@expl:craps_start_betting requires #0] [%#scraps'10] craps_consistent_creusot state)
+  /\ ([@stop_split] [@expl:craps_start_betting requires #1] [%#scraps'11] Seq.length (view_Vec_u64_Global bankrolls)
+  > 0)}
+  any
+  [ return (result: tup2_CrapsState_Established_CrapsConsistent) ->
+  {[@stop_split] [@expl:craps_start_betting ensures] ([@stop_split] [@expl:craps_start_betting result type invariant] [%#svsm] inv_tup2_CrapsState_Established_CrapsConsistent result)
+    /\ ([@stop_split] [@expl:craps_start_betting ensures] [%#scraps'12] craps_consistent_creusot result.f0)}
+    (! return {result}) ]
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec craps_start_betting_creusot
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 46 0 51 47]
+  (state: t_CrapsState) (proof: t_Established_CrapsConsistent) (bankrolls: t_Vec_u64_Global)
+  (bankrolls_proof: t_Established_NonEmptyBankrolls) (return (x: tup2_CrapsState_Established_CrapsConsistent)) =
+  {[@stop_split] [@expl:craps_start_betting_creusot requires] ([@stop_split] [@expl:craps_start_betting_creusot 'state' type invariant] [%#scraps'0] inv_CrapsState state)
+  /\ ([@stop_split] [@expl:craps_start_betting_creusot 'proof' type invariant] [%#scraps'1] inv_Established_CrapsConsistent proof)
+  /\ ([@stop_split] [@expl:craps_start_betting_creusot 'bankrolls_proof' type invariant] [%#scraps'2] inv_Established_NonEmptyBankrolls bankrolls_proof)
+  /\ ([@stop_split] [@expl:craps_start_betting_creusot requires #0] [%#scraps'3] craps_consistent_creusot state)
+  /\ ([@stop_split] [@expl:craps_start_betting_creusot requires #1] [%#scraps'4] Seq.length (view_Vec_u64_Global bankrolls)
+  > 0)}
+  (! bb0
+  [ bb0 = s0
+    [ s0 = craps_start_betting [%#scraps] {state} {proof} {bankrolls} {bankrolls_proof}
+        (fun (_x: tup2_CrapsState_Established_CrapsConsistent) -> [ &_ret <- _x ] s1)
+    | s1 = return {_ret} ] ]
+  [ & _ret: tup2_CrapsState_Established_CrapsConsistent = Any.any_l ()
+  | & state: t_CrapsState = state
+  | & proof: t_Established_CrapsConsistent = proof
+  | & bankrolls: t_Vec_u64_Global = bankrolls
+  | & bankrolls_proof: t_Established_NonEmptyBankrolls = bankrolls_proof ])
+  [ return (result: tup2_CrapsState_Established_CrapsConsistent) ->
+  {[@stop_split] [@expl:craps_start_betting_creusot ensures] ([@stop_split] [@expl:craps_start_betting_creusot result type invariant] [%#scraps'5] inv_tup2_CrapsState_Established_CrapsConsistent result)
+    /\ ([@stop_split] [@expl:craps_start_betting_creusot ensures] [%#scraps'6] craps_consistent_creusot result.f0)}
+    (! return {result}) ]

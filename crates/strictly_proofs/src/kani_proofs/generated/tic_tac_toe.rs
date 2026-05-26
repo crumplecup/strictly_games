@@ -8,7 +8,10 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_tictactoe::{Move, Player, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeState, tic_tac_toe_consistent, ttt_make_move, ttt_restart, ttt_start_game};
+use strictly_tictactoe::{
+    tic_tac_toe_consistent, ttt_make_move, ttt_restart, ttt_start_game, Move, Player, PlayerTurn,
+    SquareEmpty, TicTacToeConsistent, TicTacToeState,
+};
 
 #[cfg(kani)]
 #[kani::proof]

@@ -8,7 +8,11 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_blackjack::{BankrollPositive, BasicAction, BlackjackConsistent, BlackjackState, NotBust, ValidAction, bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart, bj_start_betting, blackjack_consistent};
+use strictly_blackjack::{
+    bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart, bj_start_betting,
+    blackjack_consistent, BankrollPositive, BasicAction, BlackjackConsistent, BlackjackState,
+    NotBust, ValidAction,
+};
 
 #[cfg(kani)]
 #[kani::proof]

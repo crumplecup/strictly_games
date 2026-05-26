@@ -1,0 +1,19 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/blackjack.rs" 29 0 29 57 *)
+
+let%span sblackjack = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/blackjack.rs" 30 4 30 8
+let%span sblackjack'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/blackjack.rs" 27 11 27 15
+let%span sblackjack'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/blackjack.rs" 28 10 28 16
+
+use creusot.prelude.Any
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec verify_blackjack_consistent_prop_creusot
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/blackjack.rs" 29 0 29 57]
+  (return (x: bool)) = (! bb0
+  [ bb0 = s0 [ s0 = [ &_ret <- [%#sblackjack] true ] s1 | s1 = return {_ret} ] ] [ & _ret: bool = Any.any_l () ])
+  [ return (result: bool) ->
+  {[@stop_split] [@expl:verify_blackjack_consistent_prop_creusot ensures] [%#sblackjack'1] result}
+    (! return {result}) ]

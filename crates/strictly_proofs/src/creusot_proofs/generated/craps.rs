@@ -12,47 +12,121 @@ use ::creusot_std::prelude::*;
 #[cfg(creusot)]
 use elicitation::Established;
 #[cfg(creusot)]
-use strictly_craps::{ActiveBet, BetsPlaced, CrapsConsistent, CrapsState, DiceRoll, NonEmptyBankrolls, craps_comeout_roll, craps_next_round, craps_place_bets, craps_point_roll, craps_start_betting};
+use strictly_craps::{
+    craps_comeout_roll, craps_next_round, craps_place_bets, craps_point_roll, craps_start_betting,
+    ActiveBet, BetsPlaced, CrapsConsistent, CrapsState, DiceRoll, NonEmptyBankrolls,
+};
 
 #[cfg(creusot)]
 #[logic]
-pub fn craps_consistent(state: &CrapsState) -> bool {
+pub fn craps_consistent_creusot_logic(state: &CrapsState) -> bool {
     pearlite! { match state { CrapsState::Setup { inner, .. } => inner.num_seats@ > 0, CrapsState::Betting { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::ComeOut { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::PointPhase { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), CrapsState::Resolved { inner, .. } => inner.shooter_idx@ < inner.bankrolls@.len(), } }
 }
 
 #[cfg(creusot)]
 #[requires(true)]
 #[ensures(result)]
-#[trusted]
-pub fn verify_craps_consistent_prop_creusot() -> bool { true }
+pub fn verify_craps_consistent_prop_creusot() -> bool {
+    true
+}
 
 #[cfg(creusot)]
-#[requires(craps_consistent(&state))]
-#[ensures(craps_consistent(&result.0))]
-#[trusted]
-pub fn craps_start_betting_creusot(state: CrapsState, proof: Established<CrapsConsistent>, bankrolls: Vec<u64>, bankrolls_proof: Established<NonEmptyBankrolls>) -> (CrapsState, Established<CrapsConsistent>) { craps_start_betting(state, proof, bankrolls, bankrolls_proof) }
+extern_spec! {
+    #[requires(craps_consistent_creusot_logic(&state))]
+    #[requires(bankrolls@.len() > 0)]
+    #[ensures(craps_consistent_creusot_logic(&result.0))]
+    fn craps_start_betting(state: CrapsState, proof: Established<CrapsConsistent>, bankrolls: Vec<u64>, bankrolls_proof: Established<NonEmptyBankrolls>) -> (CrapsState, Established<CrapsConsistent>);
+}
 
 #[cfg(creusot)]
-#[requires(craps_consistent(&state))]
-#[ensures(craps_consistent(&result.0))]
-#[trusted]
-pub fn craps_place_bets_creusot(state: CrapsState, proof: Established<CrapsConsistent>, seat_bets: Vec<Vec<ActiveBet>>, bets_proof: Established<BetsPlaced>) -> (CrapsState, Established<CrapsConsistent>) { craps_place_bets(state, proof, seat_bets, bets_proof) }
+#[requires(craps_consistent_creusot_logic(&state))]
+#[requires(bankrolls@.len() > 0)]
+#[ensures(craps_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn craps_start_betting_creusot(
+    state: CrapsState,
+    proof: Established<CrapsConsistent>,
+    bankrolls: Vec<u64>,
+    bankrolls_proof: Established<NonEmptyBankrolls>,
+) -> (CrapsState, Established<CrapsConsistent>) {
+    craps_start_betting(state, proof, bankrolls, bankrolls_proof)
+}
 
 #[cfg(creusot)]
-#[requires(craps_consistent(&state))]
-#[ensures(craps_consistent(&result.0))]
-#[trusted]
-pub fn craps_comeout_roll_creusot(state: CrapsState, proof: Established<CrapsConsistent>, dice: DiceRoll) -> (CrapsState, Established<CrapsConsistent>) { craps_comeout_roll(state, proof, dice) }
+extern_spec! {
+    #[requires(craps_consistent_creusot_logic(&state))]
+    #[ensures(craps_consistent_creusot_logic(&result.0))]
+    fn craps_place_bets(state: CrapsState, proof: Established<CrapsConsistent>, seat_bets: Vec<Vec<ActiveBet>>, bets_proof: Established<BetsPlaced>) -> (CrapsState, Established<CrapsConsistent>);
+}
 
 #[cfg(creusot)]
-#[requires(craps_consistent(&state))]
-#[ensures(craps_consistent(&result.0))]
-#[trusted]
-pub fn craps_point_roll_creusot(state: CrapsState, proof: Established<CrapsConsistent>, dice: DiceRoll) -> (CrapsState, Established<CrapsConsistent>) { craps_point_roll(state, proof, dice) }
+#[requires(craps_consistent_creusot_logic(&state))]
+#[ensures(craps_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn craps_place_bets_creusot(
+    state: CrapsState,
+    proof: Established<CrapsConsistent>,
+    seat_bets: Vec<Vec<ActiveBet>>,
+    bets_proof: Established<BetsPlaced>,
+) -> (CrapsState, Established<CrapsConsistent>) {
+    craps_place_bets(state, proof, seat_bets, bets_proof)
+}
 
 #[cfg(creusot)]
-#[requires(craps_consistent(&state))]
-#[ensures(craps_consistent(&result.0))]
-#[trusted]
-pub fn craps_next_round_creusot(state: CrapsState, proof: Established<CrapsConsistent>, updated_bankrolls: Vec<u64>) -> (CrapsState, Established<CrapsConsistent>) { craps_next_round(state, proof, updated_bankrolls) }
+extern_spec! {
+    #[requires(craps_consistent_creusot_logic(&state))]
+    #[ensures(craps_consistent_creusot_logic(&result.0))]
+    fn craps_comeout_roll(state: CrapsState, proof: Established<CrapsConsistent>, dice: DiceRoll) -> (CrapsState, Established<CrapsConsistent>);
+}
 
+#[cfg(creusot)]
+#[requires(craps_consistent_creusot_logic(&state))]
+#[ensures(craps_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn craps_comeout_roll_creusot(
+    state: CrapsState,
+    proof: Established<CrapsConsistent>,
+    dice: DiceRoll,
+) -> (CrapsState, Established<CrapsConsistent>) {
+    craps_comeout_roll(state, proof, dice)
+}
+
+#[cfg(creusot)]
+extern_spec! {
+    #[requires(craps_consistent_creusot_logic(&state))]
+    #[ensures(craps_consistent_creusot_logic(&result.0))]
+    fn craps_point_roll(state: CrapsState, proof: Established<CrapsConsistent>, dice: DiceRoll) -> (CrapsState, Established<CrapsConsistent>);
+}
+
+#[cfg(creusot)]
+#[requires(craps_consistent_creusot_logic(&state))]
+#[ensures(craps_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn craps_point_roll_creusot(
+    state: CrapsState,
+    proof: Established<CrapsConsistent>,
+    dice: DiceRoll,
+) -> (CrapsState, Established<CrapsConsistent>) {
+    craps_point_roll(state, proof, dice)
+}
+
+#[cfg(creusot)]
+extern_spec! {
+    #[requires(craps_consistent_creusot_logic(&state))]
+    #[requires(updated_bankrolls@.len() > 0)]
+    #[ensures(craps_consistent_creusot_logic(&result.0))]
+    fn craps_next_round(state: CrapsState, proof: Established<CrapsConsistent>, updated_bankrolls: Vec<u64>) -> (CrapsState, Established<CrapsConsistent>);
+}
+
+#[cfg(creusot)]
+#[requires(craps_consistent_creusot_logic(&state))]
+#[requires(updated_bankrolls@.len() > 0)]
+#[ensures(craps_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn craps_next_round_creusot(
+    state: CrapsState,
+    proof: Established<CrapsConsistent>,
+    updated_bankrolls: Vec<u64>,
+) -> (CrapsState, Established<CrapsConsistent>) {
+    craps_next_round(state, proof, updated_bankrolls)
+}

@@ -1,2 +1,4 @@
 module,harness,status,duration_secs,timestamp
-verus,crates/strictly_verus/src/generated/tic_tac_toe.rs,PASS,1,1779591492
+verus,blackjack,PASS,1,1779754895
+verus,craps,PASS,1,1779754896
+verus,tic_tac_toe,PASS,1,1779754897

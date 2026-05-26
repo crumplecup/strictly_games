@@ -8326,12 +8326,13 @@ name = "strictly_proofs"
 version = "0.1.0"
 dependencies = [
  "creusot-std",
- "elicit_ratatui",
  "elicitation",
+ "schemars",
+ "serde",
  "strictly_blackjack",
  "strictly_craps",
  "strictly_tictactoe",
- "unicode-width",
+ "tracing",
 ]
 
 [[package]]

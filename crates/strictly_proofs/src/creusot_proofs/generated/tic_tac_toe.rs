@@ -12,35 +12,78 @@ use ::creusot_std::prelude::*;
 #[cfg(creusot)]
 use elicitation::Established;
 #[cfg(creusot)]
-use strictly_tictactoe::{Move, Player, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeState, ttt_make_move, ttt_restart, ttt_start_game};
+use strictly_tictactoe::{
+    ttt_make_move, ttt_restart, ttt_start_game, Move, Player, PlayerTurn, SquareEmpty,
+    TicTacToeConsistent, TicTacToeState,
+};
 
 #[cfg(creusot)]
 #[logic]
-pub fn tic_tac_toe_consistent(state: &TicTacToeState) -> bool {
+pub fn tic_tac_toe_consistent_creusot_logic(state: &TicTacToeState) -> bool {
     pearlite! { match state { TicTacToeState::Setup { .. } => true, TicTacToeState::InProgress { inner, .. } => inner.history@.len() <= 9, TicTacToeState::Finished { inner, .. } => inner.history@.len() >= 5, } }
 }
 
 #[cfg(creusot)]
 #[requires(true)]
 #[ensures(result)]
-#[trusted]
-pub fn verify_tic_tac_toe_consistent_prop_creusot() -> bool { true }
+pub fn verify_tic_tac_toe_consistent_prop_creusot() -> bool {
+    true
+}
 
 #[cfg(creusot)]
-#[requires(tic_tac_toe_consistent(&state))]
-#[ensures(tic_tac_toe_consistent(&result.0))]
-#[trusted]
-pub fn ttt_start_game_creusot(state: TicTacToeState, proof: Established<TicTacToeConsistent>, first_player: Player) -> (TicTacToeState, Established<TicTacToeConsistent>) { ttt_start_game(state, proof, first_player) }
+extern_spec! {
+    #[requires(tic_tac_toe_consistent_creusot_logic(&state))]
+    #[ensures(tic_tac_toe_consistent_creusot_logic(&result.0))]
+    fn ttt_start_game(state: TicTacToeState, proof: Established<TicTacToeConsistent>, first_player: Player) -> (TicTacToeState, Established<TicTacToeConsistent>);
+}
 
 #[cfg(creusot)]
-#[requires(tic_tac_toe_consistent(&state))]
-#[ensures(tic_tac_toe_consistent(&result.0))]
-#[trusted]
-pub fn ttt_make_move_creusot(state: TicTacToeState, proof: Established<TicTacToeConsistent>, mov: Move, square_proof: Established<SquareEmpty>, turn_proof: Established<PlayerTurn>) -> (TicTacToeState, Established<TicTacToeConsistent>) { ttt_make_move(state, proof, mov, square_proof, turn_proof) }
+#[requires(tic_tac_toe_consistent_creusot_logic(&state))]
+#[ensures(tic_tac_toe_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn ttt_start_game_creusot(
+    state: TicTacToeState,
+    proof: Established<TicTacToeConsistent>,
+    first_player: Player,
+) -> (TicTacToeState, Established<TicTacToeConsistent>) {
+    ttt_start_game(state, proof, first_player)
+}
 
 #[cfg(creusot)]
-#[requires(tic_tac_toe_consistent(&state))]
-#[ensures(tic_tac_toe_consistent(&result.0))]
-#[trusted]
-pub fn ttt_restart_creusot(state: TicTacToeState, proof: Established<TicTacToeConsistent>) -> (TicTacToeState, Established<TicTacToeConsistent>) { ttt_restart(state, proof) }
+extern_spec! {
+    #[requires(tic_tac_toe_consistent_creusot_logic(&state))]
+    #[ensures(tic_tac_toe_consistent_creusot_logic(&result.0))]
+    fn ttt_make_move(state: TicTacToeState, proof: Established<TicTacToeConsistent>, mov: Move, square_proof: Established<SquareEmpty>, turn_proof: Established<PlayerTurn>) -> (TicTacToeState, Established<TicTacToeConsistent>);
+}
 
+#[cfg(creusot)]
+#[requires(tic_tac_toe_consistent_creusot_logic(&state))]
+#[ensures(tic_tac_toe_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn ttt_make_move_creusot(
+    state: TicTacToeState,
+    proof: Established<TicTacToeConsistent>,
+    mov: Move,
+    square_proof: Established<SquareEmpty>,
+    turn_proof: Established<PlayerTurn>,
+) -> (TicTacToeState, Established<TicTacToeConsistent>) {
+    ttt_make_move(state, proof, mov, square_proof, turn_proof)
+}
+
+#[cfg(creusot)]
+extern_spec! {
+    #[requires(tic_tac_toe_consistent_creusot_logic(&state))]
+    #[ensures(tic_tac_toe_consistent_creusot_logic(&result.0))]
+    fn ttt_restart(state: TicTacToeState, proof: Established<TicTacToeConsistent>) -> (TicTacToeState, Established<TicTacToeConsistent>);
+}
+
+#[cfg(creusot)]
+#[requires(tic_tac_toe_consistent_creusot_logic(&state))]
+#[ensures(tic_tac_toe_consistent_creusot_logic(&result.0))]
+#[cfg(creusot)]
+pub fn ttt_restart_creusot(
+    state: TicTacToeState,
+    proof: Established<TicTacToeConsistent>,
+) -> (TicTacToeState, Established<TicTacToeConsistent>) {
+    ttt_restart(state, proof)
+}

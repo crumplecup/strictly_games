@@ -1,0 +1,11 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_verify_craps_consistent_prop_creusot": {
+        "prover": "alt-ergo@2.6.2",
+        "time": 0.02
+      }
+    }
+  }
+}

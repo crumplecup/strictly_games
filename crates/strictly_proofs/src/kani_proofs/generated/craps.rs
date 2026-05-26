@@ -8,7 +8,11 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_craps::{ActiveBet, BetsPlaced, CrapsConsistent, CrapsState, DiceRoll, NonEmptyBankrolls, craps_comeout_roll, craps_consistent, craps_next_round, craps_place_bets, craps_point_roll, craps_start_betting};
+use strictly_craps::{
+    craps_comeout_roll, craps_consistent, craps_next_round, craps_place_bets, craps_point_roll,
+    craps_start_betting, ActiveBet, BetsPlaced, CrapsConsistent, CrapsState, DiceRoll,
+    NonEmptyBankrolls,
+};
 
 #[cfg(kani)]
 #[kani::proof]

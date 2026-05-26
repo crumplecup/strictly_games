@@ -1,0 +1,12 @@
+{
+  "profile": [],
+  "proofs": {
+    "Coma": {
+      "vc_bj_place_bet": { "prover": "alt-ergo@2.6.2", "time": 0.028 },
+      "vc_bj_place_bet_creusot": {
+        "prover": "alt-ergo@2.6.2",
+        "time": 0.025
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+(* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 29 0 29 53 *)
+
+let%span scraps = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 30 4 30 8
+let%span scraps'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 27 11 27 15
+let%span scraps'1 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 28 10 28 16
+
+use creusot.prelude.Any
+
+meta "compute_max_steps" 1000000
+
+meta "select_lsinst" "all"
+
+let rec verify_craps_consistent_prop_creusot
+  [#"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 29 0 29 53]
+  (return (x: bool)) = (! bb0
+  [ bb0 = s0 [ s0 = [ &_ret <- [%#scraps] true ] s1 | s1 = return {_ret} ] ] [ & _ret: bool = Any.any_l () ])
+  [ return (result: bool) -> {[@stop_split] [@expl:verify_craps_consistent_prop_creusot ensures] [%#scraps'1] result}
+    (! return {result}) ]
