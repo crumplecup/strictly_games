@@ -33,9 +33,6 @@ use elicitation::contracts::Established;
 use elicitation::{Elicit, KaniCompose, KaniVariantState, VerifiedStateMachine, formal_method};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-#[cfg(not(kani))]
-use tracing::instrument;
-
 // ── BlackjackState ────────────────────────────────────────────────────────────
 
 /// State enum for the blackjack verified state machine.

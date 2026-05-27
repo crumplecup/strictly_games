@@ -40,9 +40,6 @@ use elicitation::contracts::Established;
 use elicitation::{Elicit, KaniCompose, KaniVariantState, VerifiedStateMachine, formal_method};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-#[cfg(not(kani))]
-use tracing::instrument;
-
 // ── CrapsState ────────────────────────────────────────────────────────────────
 
 /// State enum for the craps verified state machine.

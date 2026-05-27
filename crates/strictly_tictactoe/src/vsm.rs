@@ -19,9 +19,6 @@ use elicitation::contracts::Established;
 use elicitation::{Elicit, KaniCompose, KaniVariantState, VerifiedStateMachine, formal_method};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-#[cfg(not(kani))]
-use tracing::instrument;
-
 // ── TicTacToeState ────────────────────────────────────────────────────────────
 
 /// State enum for the tic-tac-toe verified state machine.
