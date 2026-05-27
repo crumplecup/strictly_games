@@ -1,6 +1,6 @@
 (* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 105 0 109 47 *)
 
-let%span svsm = "/home/erik/repos/strictly_games/crates/strictly_craps/src/vsm.rs" 234 0 238 47
+let%span svsm = "/home/erik/repos/strictly_games/crates/strictly_craps/src/vsm.rs" 232 0 232 47
 let%span sseq = "/home/erik/repos/elicitation/vendor/creusot-std/src/logic/seq.rs" 921 20 921 91
 let%span sinvariant = "/home/erik/repos/elicitation/vendor/creusot-std/src/invariant.rs" 85 8 85 18
 let%span scraps = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/craps.rs" 110 4 110 40

@@ -8,6 +8,16 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
+use strictly_craps::vsm::craps_comeout_roll_kani_contracted;
+#[cfg(kani)]
+use strictly_craps::vsm::craps_next_round_kani_contracted;
+#[cfg(kani)]
+use strictly_craps::vsm::craps_place_bets_kani_contracted;
+#[cfg(kani)]
+use strictly_craps::vsm::craps_point_roll_kani_contracted;
+#[cfg(kani)]
+use strictly_craps::vsm::craps_start_betting_kani_contracted;
+#[cfg(kani)]
 use strictly_craps::{
     ActiveBet, BetsPlaced, CrapsConsistent, CrapsState, DiceRoll, NonEmptyBankrolls,
     craps_comeout_roll, craps_consistent, craps_next_round, craps_place_bets, craps_point_roll,
@@ -22,7 +32,7 @@ fn verify_craps_consistent_prop_marker() {
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(craps_start_betting)]
+#[::kani::proof_for_contract(craps_start_betting_kani_contracted)]
 fn craps_start_betting_kani_closure() {
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
@@ -37,12 +47,12 @@ fn craps_start_betting_kani_closure() {
         let _cred = NonEmptyBankrolls::kani_proof_credential();
         ::elicitation::Established::prove(&_cred)
     };
-    let _result = craps_start_betting(state, proof, bankrolls, bankrolls_proof);
+    let _result = craps_start_betting_kani_contracted(state, proof, bankrolls, bankrolls_proof);
     ::std::mem::forget(_result);
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(craps_place_bets)]
+#[::kani::proof_for_contract(craps_place_bets_kani_contracted)]
 fn craps_place_bets_kani_closure() {
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
@@ -57,12 +67,12 @@ fn craps_place_bets_kani_closure() {
         let _cred = BetsPlaced::kani_proof_credential();
         ::elicitation::Established::prove(&_cred)
     };
-    let _result = craps_place_bets(state, proof, seat_bets, bets_proof);
+    let _result = craps_place_bets_kani_contracted(state, proof, seat_bets, bets_proof);
     ::std::mem::forget(_result);
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(craps_comeout_roll)]
+#[::kani::proof_for_contract(craps_comeout_roll_kani_contracted)]
 fn craps_comeout_roll_kani_closure() {
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
@@ -73,12 +83,12 @@ fn craps_comeout_roll_kani_closure() {
         ::elicitation::Established::prove(&_cred)
     };
     let dice: DiceRoll = <DiceRoll as ::elicitation::KaniCompose>::kani_depth0();
-    let _result = craps_comeout_roll(state, proof, dice);
+    let _result = craps_comeout_roll_kani_contracted(state, proof, dice);
     ::std::mem::forget(_result);
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(craps_point_roll)]
+#[::kani::proof_for_contract(craps_point_roll_kani_contracted)]
 fn craps_point_roll_kani_closure() {
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
@@ -89,12 +99,12 @@ fn craps_point_roll_kani_closure() {
         ::elicitation::Established::prove(&_cred)
     };
     let dice: DiceRoll = <DiceRoll as ::elicitation::KaniCompose>::kani_depth0();
-    let _result = craps_point_roll(state, proof, dice);
+    let _result = craps_point_roll_kani_contracted(state, proof, dice);
     ::std::mem::forget(_result);
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(craps_next_round)]
+#[::kani::proof_for_contract(craps_next_round_kani_contracted)]
 fn craps_next_round_kani_closure() {
     let state: CrapsState = <CrapsState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(craps_consistent(&state));
@@ -105,6 +115,6 @@ fn craps_next_round_kani_closure() {
         ::elicitation::Established::prove(&_cred)
     };
     let updated_bankrolls: Vec<u64> = ::std::vec::Vec::new();
-    let _result = craps_next_round(state, proof, updated_bankrolls);
+    let _result = craps_next_round_kani_contracted(state, proof, updated_bankrolls);
     ::std::mem::forget(_result);
 }

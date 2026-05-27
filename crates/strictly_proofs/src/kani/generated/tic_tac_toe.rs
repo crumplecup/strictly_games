@@ -8,6 +8,12 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
+use strictly_tictactoe::vsm::ttt_make_move_kani_contracted;
+#[cfg(kani)]
+use strictly_tictactoe::vsm::ttt_restart_kani_contracted;
+#[cfg(kani)]
+use strictly_tictactoe::vsm::ttt_start_game_kani_contracted;
+#[cfg(kani)]
 use strictly_tictactoe::{
     Move, Player, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeState,
     tic_tac_toe_consistent, ttt_make_move, ttt_restart, ttt_start_game,
@@ -21,7 +27,7 @@ fn verify_tic_tac_toe_consistent_prop_marker() {
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(ttt_start_game)]
+#[::kani::proof_for_contract(ttt_start_game_kani_contracted)]
 fn ttt_start_game_kani_closure() {
     let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(tic_tac_toe_consistent(&state));
@@ -32,12 +38,12 @@ fn ttt_start_game_kani_closure() {
         ::elicitation::Established::prove(&_cred)
     };
     let first_player: Player = <Player as ::elicitation::KaniCompose>::kani_depth0();
-    let _result = ttt_start_game(state, proof, first_player);
+    let _result = ttt_start_game_kani_contracted(state, proof, first_player);
     ::std::mem::forget(_result);
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(ttt_make_move)]
+#[::kani::proof_for_contract(ttt_make_move_kani_contracted)]
 fn ttt_make_move_kani_closure() {
     let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(tic_tac_toe_consistent(&state));
@@ -56,12 +62,12 @@ fn ttt_make_move_kani_closure() {
         let _cred = PlayerTurn::kani_proof_credential();
         ::elicitation::Established::prove(&_cred)
     };
-    let _result = ttt_make_move(state, proof, mov, square_proof, turn_proof);
+    let _result = ttt_make_move_kani_contracted(state, proof, mov, square_proof, turn_proof);
     ::std::mem::forget(_result);
 }
 
 #[cfg(kani)]
-#[::kani::proof_for_contract(ttt_restart)]
+#[::kani::proof_for_contract(ttt_restart_kani_contracted)]
 fn ttt_restart_kani_closure() {
     let state: TicTacToeState = <TicTacToeState as ::elicitation::KaniCompose>::kani_depth2();
     ::kani::assume(tic_tac_toe_consistent(&state));
@@ -71,6 +77,6 @@ fn ttt_restart_kani_closure() {
         let _cred = TicTacToeConsistent::kani_proof_credential();
         ::elicitation::Established::prove(&_cred)
     };
-    let _result = ttt_restart(state, proof);
+    let _result = ttt_restart_kani_contracted(state, proof);
     ::std::mem::forget(_result);
 }
