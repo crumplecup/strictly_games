@@ -307,7 +307,7 @@ async fn run_lobby(
 
     // Setup services
     info!(db_path = %db_path, "Initializing game repository");
-    let repository = GameRepository::new(db_path)?;
+    let repository = GameRepository::open(&db_path)?;
     let profile_service = ProfileService::new(repository.clone());
 
     info!(agents_dir = ?agents_dir, "Loading agent library");
