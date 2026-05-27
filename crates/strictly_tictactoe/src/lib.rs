@@ -31,8 +31,9 @@ pub mod vsm;
 // Re-export core types
 pub use action::{Move, MoveError};
 pub use contracts::{
-    LegalMove, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeRulesEvidence, execute_move,
-    validate_move, validate_player_turn, validate_square_empty,
+    BoardColumnsAligned, LegalMove, PlayerTurn, SquareEmpty, TicTacToeConsistent,
+    TicTacToeRulesEvidence, execute_move, validate_move, validate_player_turn,
+    validate_square_empty,
 };
 pub use display::TttDisplayMode;
 pub use explore::TicTacToeAction;

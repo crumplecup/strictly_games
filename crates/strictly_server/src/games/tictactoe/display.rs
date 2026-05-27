@@ -2,13 +2,63 @@
 
 use accesskit::Role as AkRole;
 use elicit_accesskit::{NodeId, NodeJson, Role};
-use strictly_tictactoe::{Board, Player, Position, Square, TttDisplayMode};
+use elicitation::contracts::Established;
+use strictly_tictactoe::{
+    Board, BoardColumnsAligned, Player, Position, Square, TttDisplayMode,
+};
 use tracing::instrument;
+use unicode_width::UnicodeWidthStr;
 
 use crate::games::display::GameDisplay;
 use crate::games::tictactoe::AnyGame;
 
-// ── Board rendering helpers ───────────────────────────────────────────────────
+// ── Cell width constant ───────────────────────────────────────────────────────
+
+/// Display-column width guaranteed for every board cell.
+const CELL_WIDTH: usize = 3;
+
+/// Separator row — `┼` characters fall at the same display columns as `│` in
+/// cell rows, proving [`BoardColumnsAligned`] by construction.
+const SEPARATOR: &str = "───┼───┼───";
+
+// ── AlignedBoardLines ─────────────────────────────────────────────────────────
+
+/// Five visual lines of the board whose column positions are guaranteed to
+/// align.
+///
+/// This type is the proof carrier for [`BoardColumnsAligned`].  It is
+/// intentionally opaque — the only way to obtain an instance is through
+/// [`AlignedBoardLines::new`], which pads every cell to exactly
+/// [`CELL_WIDTH`] display columns using [`unicode_width`].  The returned
+/// [`Established<BoardColumnsAligned>`] witnesses that the `│`/`┼`
+/// separators occupy identical terminal columns in all five rows.
+pub struct AlignedBoardLines([String; 5]);
+
+impl AlignedBoardLines {
+    /// Construct the five display lines from `board`, proving
+    /// [`BoardColumnsAligned`] by construction.
+    ///
+    /// Every cell is padded to exactly [`CELL_WIDTH`] display columns so that
+    /// vertical separators never shift when marks are placed on the board.
+    pub fn new(board: &Board) -> (Self, Established<BoardColumnsAligned>) {
+        use Position::*;
+        let lines = [
+            cell_row(board, TopLeft, TopCenter, TopRight),
+            SEPARATOR.to_string(),
+            cell_row(board, MiddleLeft, Center, MiddleRight),
+            SEPARATOR.to_string(),
+            cell_row(board, BottomLeft, BottomCenter, BottomRight),
+        ];
+        (AlignedBoardLines(lines), Established::assert())
+    }
+
+    /// The underlying five strings, in top-to-bottom order.
+    pub fn lines(&self) -> &[String; 5] {
+        &self.0
+    }
+}
+
+// ── Cell helpers ──────────────────────────────────────────────────────────────
 
 fn cell_text(sq: Square) -> &'static str {
     match sq {
@@ -18,25 +68,26 @@ fn cell_text(sq: Square) -> &'static str {
     }
 }
 
-fn board_row_label(board: &Board, left: Position, mid: Position, right: Position) -> String {
+/// Pad `s` to exactly `width` display columns (unicode-aware).
+fn pad_cell(s: &str, width: usize) -> String {
+    let w = UnicodeWidthStr::width(s);
+    if w >= width {
+        s.to_string()
+    } else {
+        format!("{}{}", s, " ".repeat(width - w))
+    }
+}
+
+fn cell_row(board: &Board, left: Position, mid: Position, right: Position) -> String {
     format!(
         "{}│{}│{}",
-        cell_text(board.get(left)),
-        cell_text(board.get(mid)),
-        cell_text(board.get(right)),
+        pad_cell(cell_text(board.get(left)), CELL_WIDTH),
+        pad_cell(cell_text(board.get(mid)), CELL_WIDTH),
+        pad_cell(cell_text(board.get(right)), CELL_WIDTH),
     )
 }
 
-fn board_visual_lines(board: &Board) -> [String; 5] {
-    use Position::*;
-    [
-        board_row_label(board, TopLeft, TopCenter, TopRight),
-        "───┼───┼───".to_string(),
-        board_row_label(board, MiddleLeft, Center, MiddleRight),
-        "───┼───┼───".to_string(),
-        board_row_label(board, BottomLeft, BottomCenter, BottomRight),
-    ]
-}
+// ── Accessible description ────────────────────────────────────────────────────
 
 fn board_accessible_desc(board: &Board) -> String {
     use Position::*;
@@ -114,14 +165,15 @@ impl GameDisplay for AnyGame {
                 } else {
                     None
                 };
-                // Board article: 5 paragraph children (3 rows + 2 separators).
-                // The cursor row (if any) is marked with is_selected so the
-                // ratatui bridge applies a highlight style.
+                // Build the five board lines with compile-time alignment proof.
+                // AlignedBoardLines::new is the sole constructor; obtaining
+                // Established<BoardColumnsAligned> here guarantees that the │/┼
+                // separators occupy the same terminal columns in all five rows.
                 let board = self.board();
-                let lines = board_visual_lines(board);
+                let (aligned, _proof) = AlignedBoardLines::new(board);
                 let cursor_row = cursor.map(cursor_row_index);
                 let mut para_ids: Vec<NodeId> = Vec::with_capacity(5);
-                for (i, line) in lines.iter().enumerate() {
+                for (i, line) in aligned.lines().iter().enumerate() {
                     let pid = NodeId::from(ctr);
                     ctr += 1;
                     para_ids.push(pid);
@@ -192,7 +244,7 @@ impl GameDisplay for AnyGame {
             }
         }
 
-        let _ = ctr; // suppress unused warning after last use
+        let _ = ctr;
         (root_id, nodes)
     }
 }

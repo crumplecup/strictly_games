@@ -11,7 +11,6 @@ use crate::typestate::GameInProgress;
 use elicitation::VerifiedWorkflow;
 use elicitation::contracts::{And, Established, ProvableFrom, both};
 #[cfg(not(kani))]
-#[cfg(not(kani))]
 use tracing::instrument;
 
 // ─────────────────────────────────────────────────────────────
@@ -31,6 +30,19 @@ impl VerifiedWorkflow for PlayerTurn {}
 /// Composite proposition: A move is legal (square empty AND player's turn).
 /// `And<SquareEmpty, PlayerTurn>: VerifiedWorkflow` via blanket impl — proof composition is automatic.
 pub type LegalMove = And<SquareEmpty, PlayerTurn>;
+
+/// Proposition: all five visual lines of the tic-tac-toe board have their
+/// vertical separator characters (`│` / `┼`) at identical display-column
+/// positions across every row.
+///
+/// This is a *rendering* contract — it crosses the IR → frontend barrier —
+/// and is proven by construction inside [`AlignedBoardLines::new`].  Any
+/// function that receives [`Established<BoardColumnsAligned>`] knows, at
+/// compile time, that the board strings it is about to render are free of
+/// column-shift artefacts regardless of which marks have been placed.
+#[derive(elicitation::Prop)]
+pub struct BoardColumnsAligned;
+impl VerifiedWorkflow for BoardColumnsAligned {}
 
 // ─────────────────────────────────────────────────────────────
 //  Validation Functions (Establish Proofs)
