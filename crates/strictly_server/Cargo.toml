@@ -17,8 +17,9 @@ strictly_craps = { workspace = true }
 elicitation = { workspace = true }
 
 # Database
-diesel = { workspace = true }
-diesel_migrations = { workspace = true }
+elicit_db = { workspace = true }
+elicit_redb = { workspace = true }
+uuid = { workspace = true }
 chrono = { workspace = true }
 
 # Async runtime

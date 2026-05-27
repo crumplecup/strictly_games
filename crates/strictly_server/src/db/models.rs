@@ -1,41 +1,30 @@
 //! Database models and domain types.
 
-use chrono::NaiveDateTime;
 use derive_getters::Getters;
 use derive_new::new;
-use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::db::{DbError, schema};
+use elicit_db::{DbError, DbErrorKind};
 
 /// User profile database model.
-#[derive(Debug, Clone, Queryable, Identifiable, Selectable, Getters)]
-#[diesel(table_name = schema::users)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters, derive_new::new)]
 pub struct User {
-    id: i32,
+    id: String,
     display_name: String,
-    created_at: NaiveDateTime,
-    updated_at: NaiveDateTime,
-}
-
-/// Insertable user model for creating new users.
-#[derive(Debug, Clone, Insertable, new)]
-#[diesel(table_name = schema::users)]
-pub struct NewUser {
-    display_name: String,
+    created_at: String,
+    updated_at: String,
 }
 
 /// Game statistics database model.
-#[derive(Debug, Clone, Queryable, Identifiable, Associations, Selectable, Getters)]
-#[diesel(table_name = schema::game_stats)]
-#[diesel(belongs_to(User))]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters, derive_new::new)]
 pub struct GameStat {
-    id: i32,
-    user_id: i32,
+    id: String,
+    user_id: String,
     opponent_name: String,
     game_type: String,
     outcome: String,
-    played_at: NaiveDateTime,
+    played_at: String,
     moves_count: i32,
     session_id: String,
 }
@@ -48,11 +37,10 @@ impl GameStat {
     }
 }
 
-/// Insertable game stat model for recording new game results.
-#[derive(Debug, Clone, Insertable, new, Getters)]
-#[diesel(table_name = schema::game_stats)]
+/// Input model for recording a new game result.
+#[derive(Debug, Clone, new, Getters)]
 pub struct NewGameStat {
-    user_id: i32,
+    user_id: String,
     opponent_name: String,
     game_type: String,
     outcome: String,
@@ -93,7 +81,9 @@ impl GameOutcome {
             "win" => Ok(Self::Win),
             "loss" => Ok(Self::Loss),
             "draw" => Ok(Self::Draw),
-            _ => Err(DbError::new(format!("Invalid outcome: '{}'", s))),
+            _ => Err(DbError::new(DbErrorKind::QueryFailed(format!(
+                "Invalid outcome: '{s}'"
+            )))),
         }
     }
 }
