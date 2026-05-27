@@ -2891,53 +2891,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "diesel"
-version = "2.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9b6c2fc184a6fb6ebcf5f9a5e3bbfa84d8fd268cdfcce4ed508979a6259494d"
-dependencies = [
- "chrono",
- "diesel_derives",
- "downcast-rs 2.0.2",
- "libsqlite3-sys",
- "sqlite-wasm-rs",
- "time",
-]
-
-[[package]]
-name = "diesel_derives"
-version = "2.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47618bf0fac06bb670c036e48404c26a865e6a71af4114dfd97dfe89936e404e"
-dependencies = [
- "diesel_table_macro_syntax",
- "dsl_auto_type",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
-]
-
-[[package]]
-name = "diesel_migrations"
-version = "2.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "745fd255645f0f1135f9ec55c7b00e0882192af9683ab4731e4bba3da82b8f9c"
-dependencies = [
- "diesel",
- "migrations_internals",
- "migrations_macros",
-]
-
-[[package]]
-name = "diesel_table_macro_syntax"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe2444076b48641147115697648dc743c2c00b61adade0f01ce67133c7babe8c"
-dependencies = [
- "syn 2.0.114",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3027,20 +2980,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "dsl_auto_type"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd122633e4bef06db27737f21d3738fb89c8f6d5360d6d9d7635dda142a7757e"
-dependencies = [
- "darling 0.21.3",
- "either",
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
 ]
 
 [[package]]
@@ -3180,6 +3119,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "elicit_db"
+version = "0.11.0"
+dependencies = [
+ "derive_more",
+ "elicitation",
+ "elicitation_derive",
+ "futures",
+ "proc-macro2",
+ "quote",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "strum 0.28.0",
+ "tracing",
+]
+
+[[package]]
 name = "elicit_egui"
 version = "0.11.0"
 dependencies = [
@@ -3236,6 +3193,28 @@ dependencies = [
  "inventory",
  "quote",
  "ratatui",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "elicit_redb"
+version = "0.11.0"
+dependencies = [
+ "derive_more",
+ "elicit_db",
+ "elicitation",
+ "elicitation_derive",
+ "futures",
+ "hex",
+ "inventory",
+ "paste",
+ "redb",
  "rmcp",
  "schemars",
  "serde",
@@ -3318,7 +3297,7 @@ dependencies = [
  "tiff 0.9.1",
  "time",
  "tokio",
- "toml 1.0.1+spec-1.1.0",
+ "toml",
  "toml_datetime 1.1.1+spec-1.1.0",
  "tower",
  "tower-http",
@@ -3339,7 +3318,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
- "toml 1.0.1+spec-1.1.0",
+ "toml",
 ]
 
 [[package]]
@@ -5248,27 +5227,6 @@ dependencies = [
  "log",
  "objc",
  "paste",
-]
-
-[[package]]
-name = "migrations_internals"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36c791ecdf977c99f45f23280405d7723727470f6689a5e6dbf513ac547ae10d"
-dependencies = [
- "serde",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "migrations_macros"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36fc5ac76be324cfd2d3f2cf0fdf5d5d3c4f14ed8aaebadb09e304ba42282703"
-dependencies = [
- "migrations_internals",
- "proc-macro2",
- "quote",
 ]
 
 [[package]]
@@ -7301,16 +7259,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsqlite-vfs"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8a1f2315036ef6b1fbacd1972e8ee7688030b0a2121edfc2a6550febd41574d"
-dependencies = [
- "hashbrown 0.16.1",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "rstar"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8012,18 +7960,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlite-wasm-rs"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f4206ed3a67690b9c29b77d728f6acc3ce78f16bf846d83c94f76400320181b"
-dependencies = [
- "cc",
- "js-sys",
- "rsqlite-vfs",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "sqlx"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8304,8 +8240,6 @@ dependencies = [
  "axum",
  "clap",
  "crossterm 0.29.0",
- "diesel",
- "diesel_migrations",
  "dotenvy",
  "http-body-util",
  "hyper",
@@ -8350,16 +8284,16 @@ dependencies = [
  "derive-new",
  "derive_more",
  "derive_setters",
- "diesel",
- "diesel_migrations",
  "dotenvy",
  "egui",
  "egui-wgpu",
  "egui-winit",
  "elicit_accesskit",
+ "elicit_db",
  "elicit_egui",
  "elicit_leptos",
  "elicit_ratatui",
+ "elicit_redb",
  "elicit_ui",
  "elicitation",
  "elicitation_rand",
@@ -8381,11 +8315,12 @@ dependencies = [
  "strum 0.28.0",
  "tempfile",
  "tokio",
- "toml 1.0.1+spec-1.1.0",
+ "toml",
  "tower",
  "tracing",
  "tracing-subscriber",
  "unicode-width",
+ "uuid",
  "wgpu 29.0.1",
  "winit",
 ]
@@ -8914,19 +8849,6 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
-]
-
-[[package]]
-name = "toml"
-version = "0.9.12+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf92845e79fc2e2def6a5d828f0801e29a2f8acc037becc5ab08595c7d5e9863"
-dependencies = [
- "serde_core",
- "serde_spanned",
- "toml_datetime 0.7.5+spec-1.1.0",
- "toml_parser",
- "winnow",
 ]
 
 [[package]]

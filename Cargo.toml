@@ -39,6 +39,8 @@ elicit_egui = { path = "../elicitation/crates/elicit_egui/" }
 elicit_leptos = { path = "../elicitation/crates/elicit_leptos/" }
 elicit_ui = { path = "../elicitation/crates/elicit_ui/" }
 elicit_accesskit = { path = "../elicitation/crates/elicit_accesskit/" }
+elicit_db = { path = "../elicitation/crates/elicit_db/" }
+elicit_redb = { path = "../elicitation/crates/elicit_redb/" }
 accesskit = { version = "0.24", features = ["serde", "schemars"] }
 
 # GUI (egui frontend)
@@ -58,13 +60,8 @@ futures = "0.3"
 creusot-std = { path = "/home/erik/repos/elicitation/vendor/creusot-std", version = "0.10.0" }
 kani-verifier = { version = "0.67" }
 
-# Database
-diesel = { version = "2", features = [
-  "sqlite",
-  "chrono",
-  "returning_clauses_for_sqlite_3_35",
-] }
-diesel_migrations = "2"
+# Database (uuid and chrono added for redb layer)
+uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Async runtime
