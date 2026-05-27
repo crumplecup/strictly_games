@@ -12,7 +12,7 @@ use tracing::{debug, info, instrument};
 
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::lobby::settings::GameType;
-use crate::{ProfileService, User};
+use crate::{AggregatedStats, ProfileService, User};
 
 /// Menu options available in the main lobby.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,19 +57,32 @@ pub struct MainLobbyScreen {
     current_user: User,
     selected_game: GameType,
     list_state: ListState,
+    /// Cached aggregated stats, loaded once in the constructor.
+    stats: Option<AggregatedStats>,
 }
 
 impl MainLobbyScreen {
     /// Creates a main lobby screen for the given user and game selection.
-    #[instrument(skip(current_user))]
-    pub fn with_game(current_user: User, selected_game: GameType) -> Self {
-        debug!(user_id = current_user.id(), game = %selected_game.label(), "Initializing MainLobbyScreen");
+    ///
+    /// Loads aggregated stats in the constructor via `block_in_place` so
+    /// that `render` remains a sync method.
+    #[instrument(skip(current_user, profile_service))]
+    pub fn with_game(
+        current_user: User,
+        selected_game: GameType,
+        profile_service: &ProfileService,
+    ) -> Self {
+        debug!(user_id = %current_user.id(), game = %selected_game.label(), "Initializing MainLobbyScreen");
+        let user_id = current_user.id().clone();
+        let handle = tokio::runtime::Handle::current();
+        let stats = tokio::task::block_in_place(|| handle.block_on(profile_service.get_stats(&user_id))).ok();
         let mut state = ListState::default();
         state.select(Some(0));
         Self {
             current_user,
             selected_game,
             list_state: state,
+            stats,
         }
     }
 
@@ -105,8 +118,8 @@ impl MainLobbyScreen {
 }
 
 impl Screen for MainLobbyScreen {
-    #[instrument(skip(self, frame, profile_service))]
-    fn render(&self, frame: &mut Frame, profile_service: &ProfileService) {
+    #[instrument(skip(self, frame, _profile_service))]
+    fn render(&self, frame: &mut Frame, _profile_service: &ProfileService) {
         let area = frame.area();
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -128,8 +141,8 @@ impl Screen for MainLobbyScreen {
             .block(Block::default().borders(Borders::ALL));
         frame.render_widget(title, chunks[0]);
 
-        let stats_text = match profile_service.get_stats(*self.current_user.id()) {
-            Ok(stats) => format!(
+        let stats_text = match &self.stats {
+            Some(stats) => format!(
                 "Player: {}   W:{} / L:{} / D:{}   Win rate: {:.1}%",
                 self.current_user.display_name(),
                 stats.wins(),
@@ -137,7 +150,7 @@ impl Screen for MainLobbyScreen {
                 stats.draws(),
                 stats.win_rate()
             ),
-            Err(_) => format!("Player: {}", self.current_user.display_name()),
+            None => format!("Player: {}", self.current_user.display_name()),
         };
         let profile_bar = Paragraph::new(stats_text)
             .style(Style::default().fg(Color::Green))

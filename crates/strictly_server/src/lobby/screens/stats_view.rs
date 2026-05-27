@@ -25,11 +25,18 @@ impl StatsViewScreen {
     /// Creates a new stats view screen for the given user, loading data immediately.
     #[instrument(skip(current_user, profile_service))]
     pub fn new(current_user: User, profile_service: &ProfileService) -> Self {
-        let user_id = *current_user.id();
-        debug!(user_id, "Initializing StatsViewScreen");
+        let user_id = current_user.id().clone();
+        debug!(user_id = %user_id, "Initializing StatsViewScreen");
 
-        let aggregated = profile_service.get_stats(user_id).ok();
-        let recent_games = profile_service.get_history(user_id).unwrap_or_default();
+        let handle = tokio::runtime::Handle::current();
+        let aggregated = tokio::task::block_in_place(|| {
+            handle.block_on(profile_service.get_stats(&user_id))
+        })
+        .ok();
+        let recent_games = tokio::task::block_in_place(|| {
+            handle.block_on(profile_service.get_history(&user_id))
+        })
+        .unwrap_or_default();
 
         info!(
             user_id,

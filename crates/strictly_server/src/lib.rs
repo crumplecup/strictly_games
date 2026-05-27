@@ -54,9 +54,7 @@ pub use agent_library::AgentLibrary;
 pub use agent_handler::GameAgent;
 
 // Public API exports - Database
-pub use db::{
-    AggregatedStats, DbError, GameOutcome, GameRepository, GameStat, NewGameStat, NewUser, User,
-};
+pub use db::{AggregatedStats, DbError, GameOutcome, GameRepository, GameStat, NewGameStat, User};
 
 // Public API exports - Lobby
 pub use lobby::{

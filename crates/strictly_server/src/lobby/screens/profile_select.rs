@@ -23,7 +23,7 @@ pub struct ProfileSelectScreen {
     new_name_input: String,
     input_mode: bool,
     error_message: Option<String>,
-    selected_user_id: Option<i32>,
+    selected_user_id: Option<String>,
 }
 
 impl ProfileSelectScreen {
@@ -31,10 +31,11 @@ impl ProfileSelectScreen {
     #[instrument(skip(profile_service))]
     pub fn new(profile_service: &ProfileService) -> Self {
         debug!("Initializing ProfileSelectScreen");
-        let users = profile_service
-            .repository()
-            .list_users()
-            .unwrap_or_default();
+        let handle = tokio::runtime::Handle::current();
+        let users = tokio::task::block_in_place(|| {
+            handle.block_on(profile_service.repository().list_users())
+        })
+        .unwrap_or_default();
         info!(user_count = users.len(), "ProfileSelectScreen initialized");
         let mut state = ListState::default();
         if !users.is_empty() {
@@ -78,13 +79,13 @@ impl ProfileSelectScreen {
 
     /// Confirms the selected profile and returns the selected user id.
     #[instrument(skip(self))]
-    fn confirm_selection(&mut self) -> Option<i32> {
+    fn confirm_selection(&mut self) -> Option<String> {
         if let Some(idx) = self.list_state.selected()
             && let Some(user) = self.users.get(idx)
         {
-            let id = *user.id();
-            info!(user_id = id, display_name = %user.display_name(), "Profile selected");
-            self.selected_user_id = Some(id);
+            let id = user.id().clone();
+            info!(user_id = %id, display_name = %user.display_name(), "Profile selected");
+            self.selected_user_id = Some(id.clone());
             return Some(id);
         }
         None
@@ -92,35 +93,38 @@ impl ProfileSelectScreen {
 
     /// Creates a new user profile from the current input.
     #[instrument(skip(self, profile_service))]
-    fn create_profile(&mut self, profile_service: &ProfileService) -> Option<i32> {
+    fn create_profile(&mut self, profile_service: &ProfileService) -> Option<String> {
         let name = self.new_name_input.trim().to_string();
         if name.is_empty() {
             self.error_message = Some("Name cannot be empty".to_string());
             return None;
         }
 
-        match profile_service.get_or_create_user(name.clone()) {
+        let handle = tokio::runtime::Handle::current();
+        match tokio::task::block_in_place(|| {
+            handle.block_on(profile_service.get_or_create_user(name.clone()))
+        }) {
             Ok(user) => {
-                info!(user_id = user.id(), display_name = %name, "Profile created");
-                let id = *user.id();
-                self.users = profile_service
-                    .repository()
-                    .list_users()
-                    .unwrap_or_default();
-                let pos = self
-                    .users
+                info!(user_id = %user.id(), display_name = %name, "Profile created");
+                let id = user.id().clone();
+                let new_users = tokio::task::block_in_place(|| {
+                    handle.block_on(profile_service.repository().list_users())
+                })
+                .unwrap_or_default();
+                let pos = new_users
                     .iter()
-                    .position(|u| u.id() == user.id())
+                    .position(|u| u.id() == &id)
                     .unwrap_or(0);
+                self.users = new_users;
                 self.list_state.select(Some(pos));
                 self.new_name_input.clear();
                 self.input_mode = false;
                 self.error_message = None;
-                self.selected_user_id = Some(id);
+                self.selected_user_id = Some(id.clone());
                 Some(id)
             }
             Err(e) => {
-                self.error_message = Some(format!("Failed to create profile: {}", e.message));
+                self.error_message = Some(format!("Failed to create profile: {e}"));
                 None
             }
         }

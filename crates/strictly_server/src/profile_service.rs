@@ -29,23 +29,23 @@ impl ProfileService {
 
     /// Returns an existing user by name or creates one if not found.
     #[instrument(skip(self))]
-    pub fn get_or_create_user(&self, display_name: String) -> Result<User, DbError> {
+    pub async fn get_or_create_user(&self, display_name: String) -> Result<User, DbError> {
         debug!(display_name = %display_name, "Getting or creating user");
 
-        if let Some(user) = self.repository.get_user_by_name(&display_name)? {
-            info!(user_id = user.id(), "Existing user found");
+        if let Some(user) = self.repository.get_user_by_name(&display_name).await? {
+            info!(user_id = %user.id(), "Existing user found");
             return Ok(user);
         }
 
         info!(display_name = %display_name, "Creating new user");
-        self.repository.create_user(display_name)
+        self.repository.create_user(display_name).await
     }
 
     /// Records a completed game result for a user.
     #[instrument(skip(self))]
-    pub fn record_game_result(
+    pub async fn record_game_result(
         &self,
-        user_id: i32,
+        user_id: &str,
         opponent_name: String,
         game_type: String,
         outcome: GameOutcome,
@@ -53,7 +53,7 @@ impl ProfileService {
         session_id: String,
     ) -> Result<GameStat, DbError> {
         debug!(
-            user_id = %user_id,
+            user_id,
             opponent = %opponent_name,
             game_type = %game_type,
             outcome = ?outcome,
@@ -61,7 +61,7 @@ impl ProfileService {
         );
 
         let stat = NewGameStat::new(
-            user_id,
+            user_id.to_string(),
             opponent_name,
             game_type,
             outcome.to_db_string().to_string(),
@@ -69,34 +69,35 @@ impl ProfileService {
             session_id,
         );
 
-        let recorded = self.repository.record_game(stat)?;
-        info!(stat_id = recorded.id(), "Game result recorded");
+        let recorded = self.repository.record_game(stat).await?;
+        info!(stat_id = %recorded.id(), "Game result recorded");
         Ok(recorded)
     }
 
     /// Returns aggregated stats (wins/losses/draws) for a user.
     #[instrument(skip(self))]
-    pub fn get_stats(&self, user_id: i32) -> Result<AggregatedStats, DbError> {
-        debug!(user_id = %user_id, "Getting aggregated stats");
-        self.repository.get_aggregated_stats(user_id)
+    pub async fn get_stats(&self, user_id: &str) -> Result<AggregatedStats, DbError> {
+        debug!(user_id, "Getting aggregated stats");
+        self.repository.get_aggregated_stats(user_id).await
     }
 
     /// Returns all game stats for a user, most recent first.
     #[instrument(skip(self))]
-    pub fn get_history(&self, user_id: i32) -> Result<Vec<GameStat>, DbError> {
-        debug!(user_id = %user_id, "Getting game history");
-        self.repository.get_user_stats(user_id)
+    pub async fn get_history(&self, user_id: &str) -> Result<Vec<GameStat>, DbError> {
+        debug!(user_id, "Getting game history");
+        self.repository.get_user_stats(user_id).await
     }
 
     /// Returns game stats against a specific opponent, most recent first.
     #[instrument(skip(self))]
-    pub fn get_history_vs(
+    pub async fn get_history_vs(
         &self,
-        user_id: i32,
+        user_id: &str,
         opponent_name: &str,
     ) -> Result<Vec<GameStat>, DbError> {
-        debug!(user_id = %user_id, opponent = %opponent_name, "Getting opponent history");
+        debug!(user_id, opponent = %opponent_name, "Getting opponent history");
         self.repository
             .get_stats_by_opponent(user_id, opponent_name)
+            .await
     }
 }
