@@ -10,13 +10,14 @@
 //! # TTT node layout
 //!
 //! ```text
-//! Window (0)     [vertical]
-//!   Banner (1)   [horizontal — title text]
-//!   Row (2)      [horizontal — equal-fill columns]
-//!     Main (4+)  — board + status (GameDisplay::to_ak_nodes)
-//!     List       — event log (story column)
-//!     List       — dialogue chat (optional)
-//!     Tree       — typestate graph (optional)
+//! Window (0)        [vertical]
+//!   Banner (1)      [horizontal — title text]
+//!   Row (2)         [horizontal — equal-fill columns]
+//!     Spacer (9999) — blank left margin (keeps board off the terminal edge)
+//!     Main (4+)     — board + status (GameDisplay::to_ak_nodes)
+//!     List          — event log (story column)
+//!     List          — dialogue chat (optional)
+//!     Tree          — typestate graph (optional)
 //!   Status (10_000) — status text
 //! ```
 //!
@@ -324,6 +325,14 @@ pub fn ttt_to_verified_tree(
     }
 
     let mut nodes = convert_nodes(all_pairs);
+
+    // Spacer column (id=9_999): an empty GenericContainer that the ratatui
+    // bridge renders as blank space.  Placing it before the board keeps the
+    // board out of the far-left edge where some terminals distort box-drawing
+    // characters.
+    let spacer_id = AkNodeId::from(9_999u64);
+    nodes.insert(spacer_id, AkNode::new(AkRole::GenericContainer));
+    col_roots.insert(0, spacer_id);
 
     // Row (id=2) — horizontal content container
     let row_id = AkNodeId::from(2u64);
