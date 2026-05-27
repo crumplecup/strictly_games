@@ -143,7 +143,7 @@ pub async fn spawn_agent(port: u16, agent_config: PathBuf, mode: GameMode) -> Re
 
     let agent = cmd
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .context("Failed to spawn agent process")?;
 
