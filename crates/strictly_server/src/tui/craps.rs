@@ -8,8 +8,9 @@
 //! `execute_place_bets` → `execute_comeout_roll` → `execute_point_roll`.
 //! The compiler enforces correct phase ordering via `Established<P>` contracts.
 
-use crate::tui::observable_communicator::ObservableCommunicator;
-use crate::tui::tui_communicator::TuiCommunicator;
+use elicitation::middleware::{ChatMessage, ContextualCommunicator, ObservableCommunicator,
+    Participant, knowledge_cache};
+use elicit_ratatui::TuiCommunicator;
 use crate::tui::typestate_widget::{GameEvent, craps_active, craps_edges, craps_nodes};
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
@@ -797,7 +798,6 @@ impl elicitation::style::ElicitationStyle for CrapsBetStyle {
 //  Multi-player support
 // ─────────────────────────────────────────────────────────────
 
-use crate::tui::chat_widget::{Participant, chat_channel};
 use crate::tui::mcp_communicator::LlmElicitCommunicator;
 use crate::{PlayerKind, PlayerSlot};
 use strictly_craps::AgentPersonality;
@@ -861,8 +861,6 @@ async fn elicit_agent_craps_bet<C: elicitation::ElicitCommunicator + Clone>(
     seat_name: &str,
     event_log: &mut Vec<GameEvent>,
 ) -> Option<u64> {
-    use crate::tui::contextual_communicator::{ContextualCommunicator, knowledge_cache};
-
     let knowledge = knowledge_cache();
     let ctx_comm = ContextualCommunicator::new(comm.clone(), knowledge.clone());
 
@@ -925,7 +923,7 @@ where
 {
     info!("Starting multi-player craps session");
 
-    let (chat_tx, mut chat_rx) = chat_channel();
+    let (chat_tx, mut chat_rx) = tokio::sync::mpsc::unbounded_channel::<ChatMessage>();
     let (prompt_tx, _) = watch::channel(None::<String>);
     let nodes = craps_nodes();
     let edges = craps_edges();
@@ -944,7 +942,7 @@ where
 
     // Seat 0: human
     let human_comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx)
-        .with_chat(chat_tx.clone(), Participant::Human);
+        .with_chat(chat_tx.clone(), Participant::Human, ChatMessage::new);
     seat_comms.push(CrapsSeatComm::Human { comm: human_comm });
     seat_names.push(player_name.clone());
 
@@ -955,9 +953,9 @@ where
             PlayerKind::Agent(config) => match LlmElicitCommunicator::new(config) {
                 Ok(base) => {
                     let base = base.with_system_prompt(cp.personality.system_prompt());
-                    let participant = Participant::Agent(cp.slot.name.clone());
+                    let participant = Participant::Agent(Some(cp.slot.name.clone()));
                     let comm = ObservableCommunicator::new(base, agent_prompt_tx)
-                        .with_chat(chat_tx.clone(), participant);
+                        .with_chat(chat_tx.clone(), participant, ChatMessage::new);
                     seat_comms.push(CrapsSeatComm::Agent {
                         comm,
                         personality: cp.personality,
@@ -1022,8 +1020,8 @@ where
         // Drain any pending chat messages into the dialogue log.
         while let Ok(msg) = chat_rx.try_recv() {
             dialogue.push(DialogueEntry {
-                role: msg.participant.display_name().to_string(),
-                text: msg.text,
+                role: msg.sender.to_string(),
+                text: msg.content,
             });
         }
 

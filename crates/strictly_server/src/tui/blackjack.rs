@@ -333,9 +333,9 @@ where
                     if let Some(Some(tool)) = idx.map(|i| available_tools.get(i)) {
                         let name = tool.name.clone();
                         let args = if name.ends_with("__place") {
-                            use crate::tui::tui_communicator::TuiCommunicator;
+                            use elicit_ratatui::TuiCommunicator;
                             use elicitation::ElicitCommunicator as _;
-                            let comm = TuiCommunicator::new();
+                            let comm = TuiCommunicator::with_prompt_rows(PROMPT_PANE_HEIGHT);
                             let styled = comm.with_style::<u64, BlackjackBetStyle>(
                                 BlackjackBetStyle::new(1, human_state.bankroll),
                             );

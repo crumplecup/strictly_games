@@ -3,17 +3,13 @@
 #![warn(missing_docs)]
 
 pub mod blackjack;
-pub mod chat_widget;
-pub mod contextual_communicator;
 pub mod contracts;
 pub mod craps;
 pub mod game_ir;
 mod input; // Cursor movement
 pub mod mcp_communicator;
-pub mod observable_communicator;
 mod rest_client; // Type-safe REST client
 mod standalone;
-pub mod tui_communicator;
 mod typestate_widget;
 
 pub use blackjack::{BlackjackSessionOutcome, run_blackjack_mcp_session};
