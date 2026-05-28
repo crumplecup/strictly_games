@@ -6,7 +6,7 @@ use elicitation::contracts::Established;
 use strictly_tictactoe::{
     Board, BoardColumnsAligned, Player, Position, Square, TttDisplayMode,
 };
-use tracing::instrument;
+use tracing::{debug, instrument};
 use unicode_width::UnicodeWidthStr;
 
 use crate::games::display::GameDisplay;
@@ -49,6 +49,7 @@ impl AlignedBoardLines {
             SEPARATOR.to_string(),
             cell_row(board, BottomLeft, BottomCenter, BottomRight),
         ];
+        log_separator_positions(&lines);
         (AlignedBoardLines(lines), Established::assert())
     }
 
@@ -87,7 +88,40 @@ fn cell_row(board: &Board, left: Position, mid: Position, right: Position) -> St
     )
 }
 
-// ── Accessible description ────────────────────────────────────────────────────
+/// Log the display-column positions of every `│` / `┼` separator character
+/// in the five board lines.  Call this whenever the board changes so the
+/// log file records the exact column layout for post-mortem analysis.
+///
+/// Example log output (all positions should be identical across all rows):
+/// ```text
+/// board_col_positions row=0 line="   │   │   " sep_cols=[3,7]
+/// board_col_positions row=1 line="───┼───┼───" sep_cols=[3,7]
+/// ```
+#[instrument]
+fn log_separator_positions(lines: &[String; 5]) {
+    for (row, line) in lines.iter().enumerate() {
+        let sep_cols: Vec<usize> = sep_display_cols(line);
+        debug!(
+            row,
+            line = %line,
+            sep_cols = ?sep_cols,
+            "board_col_positions",
+        );
+    }
+}
+
+/// Returns the display-column offsets of every `│` or `┼` character in `s`.
+fn sep_display_cols(s: &str) -> Vec<usize> {
+    let mut cols = Vec::new();
+    let mut col: usize = 0;
+    for ch in s.chars() {
+        if ch == '│' || ch == '┼' {
+            cols.push(col);
+        }
+        col += UnicodeWidthStr::width(ch.encode_utf8(&mut [0u8; 4]));
+    }
+    cols
+}
 
 fn board_accessible_desc(board: &Board) -> String {
     use Position::*;
