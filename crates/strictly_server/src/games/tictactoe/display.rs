@@ -17,9 +17,9 @@ use crate::games::tictactoe::AnyGame;
 /// Display-column width guaranteed for every board cell.
 const CELL_WIDTH: usize = 3;
 
-/// Separator row — `┼` characters fall at the same display columns as `│` in
+/// Separator row — `+` characters fall at the same display columns as `|` in
 /// cell rows, proving [`BoardColumnsAligned`] by construction.
-const SEPARATOR: &str = "───┼───┼───";
+const SEPARATOR: &str = "---+---+---";
 
 // ── AlignedBoardLines ─────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ fn pad_cell(s: &str, width: usize) -> String {
 
 fn cell_row(board: &Board, left: Position, mid: Position, right: Position) -> String {
     format!(
-        "{}│{}│{}",
+        "{}|{}|{}",
         pad_cell(cell_text(board.get(left)), CELL_WIDTH),
         pad_cell(cell_text(board.get(mid)), CELL_WIDTH),
         pad_cell(cell_text(board.get(right)), CELL_WIDTH),
@@ -110,12 +110,12 @@ fn log_separator_positions(lines: &[String; 5]) {
     }
 }
 
-/// Returns the display-column offsets of every `│` or `┼` character in `s`.
+/// Returns the display-column offsets of every `|` or `+` character in `s`.
 fn sep_display_cols(s: &str) -> Vec<usize> {
     let mut cols = Vec::new();
     let mut col: usize = 0;
     for ch in s.chars() {
-        if ch == '│' || ch == '┼' {
+        if ch == '|' || ch == '+' {
             cols.push(col);
         }
         col += UnicodeWidthStr::width(ch.encode_utf8(&mut [0u8; 4]));
