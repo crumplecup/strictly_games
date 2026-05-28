@@ -3,12 +3,11 @@
 use accesskit::Role as AkRole;
 use elicit_accesskit::{NodeId, NodeJson, Role};
 use elicitation::contracts::Established;
-use strictly_tictactoe::{
-    Board, BoardColumnsAligned, Player, Position, Square, TttDisplayMode,
-};
+use strictly_tictactoe::{Board, Player, Position, Square, TttDisplayMode};
 use tracing::{debug, instrument};
 use unicode_width::UnicodeWidthStr;
 
+use crate::{BoardColumnsAligned};
 use crate::games::display::GameDisplay;
 use crate::games::tictactoe::AnyGame;
 

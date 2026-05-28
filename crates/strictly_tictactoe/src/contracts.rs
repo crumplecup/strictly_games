@@ -35,14 +35,10 @@ pub type LegalMove = And<SquareEmpty, PlayerTurn>;
 /// vertical separator characters (`│` / `┼`) at identical display-column
 /// positions across every row.
 ///
-/// This is a *rendering* contract — it crosses the IR → frontend barrier —
-/// and is proven by construction inside [`AlignedBoardLines::new`].  Any
-/// function that receives [`Established<BoardColumnsAligned>`] knows, at
-/// compile time, that the board strings it is about to render are free of
-/// column-shift artefacts regardless of which marks have been placed.
-#[derive(elicitation::Prop)]
-pub struct BoardColumnsAligned;
-impl VerifiedWorkflow for BoardColumnsAligned {}
+/// This is a *rendering* contract — it lives in the display layer of
+/// `strictly_server`, not here.  The type has been moved; this comment is
+/// intentionally left as a navigation aid only.
+// BoardColumnsAligned → strictly_server::games::tictactoe::contracts
 
 // ─────────────────────────────────────────────────────────────
 //  Validation Functions (Establish Proofs)

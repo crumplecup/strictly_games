@@ -10,10 +10,13 @@ pub use strictly_tictactoe::{
 };
 
 // Server-specific modules
+pub mod contracts;
 pub mod display;
 pub mod factory;
+mod render_verify;
 pub mod wrapper;
 
+pub use contracts::BoardColumnsAligned;
 pub use factory::{TttGameContext, register_await_turn_tool, register_move_tools};
 pub use wrapper::AnyGame;
 
