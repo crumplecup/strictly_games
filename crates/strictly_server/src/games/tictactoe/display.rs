@@ -2,12 +2,13 @@
 
 use accesskit::Role as AkRole;
 use elicit_accesskit::{NodeId, NodeJson, Role};
+use elicit_ui::{ParagraphText, RichText, TextLine, TextModifier, TextSpan, TextStyle};
 use elicitation::contracts::Established;
 use strictly_tictactoe::{Board, Player, Position, Square, TttDisplayMode};
 use tracing::{debug, instrument};
 use unicode_width::UnicodeWidthStr;
 
-use crate::{BoardColumnsAligned};
+use crate::BoardColumnsAligned;
 use crate::games::display::GameDisplay;
 use crate::games::tictactoe::AnyGame;
 
@@ -166,7 +167,7 @@ fn game_status_text(game: &AnyGame) -> String {
 }
 
 /// Maps a board position to the visual row index (0, 2, or 4) in the 5-line
-/// board rendering (lines 1 and 3 are `───┼───┼───` separators).
+/// board rendering (lines 1 and 3 are `---+---+---` separators).
 fn cursor_row_index(pos: Position) -> usize {
     use Position::*;
     match pos {
@@ -174,6 +175,70 @@ fn cursor_row_index(pos: Position) -> usize {
         MiddleLeft | Center | MiddleRight => 2,
         BottomLeft | BottomCenter | BottomRight => 4,
     }
+}
+
+/// Maps a board position to its cell column (0=left, 1=center, 2=right).
+fn cursor_col_index(pos: Position) -> usize {
+    use Position::*;
+    match pos {
+        TopLeft | MiddleLeft | BottomLeft => 0,
+        TopCenter | Center | BottomCenter => 1,
+        TopRight | MiddleRight | BottomRight => 2,
+    }
+}
+
+/// Maps visual row index (0, 2, 4) to the three board positions in that row.
+///
+/// Row indices 1 and 3 are separator rows — callers should never pass those.
+fn row_positions(row: usize) -> (Position, Position, Position) {
+    use Position::*;
+    match row {
+        0 => (TopLeft, TopCenter, TopRight),
+        2 => (MiddleLeft, Center, MiddleRight),
+        _ => (BottomLeft, BottomCenter, BottomRight),
+    }
+}
+
+/// Highlight style for the cursor cell.
+fn cursor_style() -> TextStyle {
+    TextStyle {
+        modifiers: vec![TextModifier::Reversed, TextModifier::Bold],
+        ..Default::default()
+    }
+}
+
+/// Build a `ParagraphText` for a cell row, highlighting only the cell at
+/// `cursor_col` (0, 1, or 2) when provided.
+fn cell_row_text(board: &Board, left: Position, mid: Position, right: Position, cursor_col: Option<usize>) -> ParagraphText {
+    let cells = [
+        pad_cell(cell_text(board.get(left)), CELL_WIDTH),
+        pad_cell(cell_text(board.get(mid)), CELL_WIDTH),
+        pad_cell(cell_text(board.get(right)), CELL_WIDTH),
+    ];
+    let sep = TextSpan { content: "|".to_string(), style: None };
+
+    let spans: Vec<TextSpan> = vec![
+        TextSpan {
+            content: cells[0].clone(),
+            style: if cursor_col == Some(0) { Some(cursor_style()) } else { None },
+        },
+        sep.clone(),
+        TextSpan {
+            content: cells[1].clone(),
+            style: if cursor_col == Some(1) { Some(cursor_style()) } else { None },
+        },
+        sep.clone(),
+        TextSpan {
+            content: cells[2].clone(),
+            style: if cursor_col == Some(2) { Some(cursor_style()) } else { None },
+        },
+    ];
+
+    ParagraphText::Rich(RichText {
+        lines: vec![TextLine { spans, style: None, alignment: None }],
+        style: None,
+        alignment: None,
+    })
 }
 
 // ── GameDisplay impl ──────────────────────────────────────────────────────────
@@ -205,6 +270,7 @@ impl GameDisplay for AnyGame {
                 let board = self.board();
                 let (aligned, _proof) = AlignedBoardLines::new(board);
                 let cursor_row = cursor.map(cursor_row_index);
+                let cursor_col = cursor.map(cursor_col_index);
                 let mut para_ids: Vec<NodeId> = Vec::with_capacity(5);
                 for (i, line) in aligned.lines().iter().enumerate() {
                     let pid = NodeId::from(ctr);
@@ -212,7 +278,10 @@ impl GameDisplay for AnyGame {
                     para_ids.push(pid);
                     let mut node = NodeJson::new(Role(AkRole::Paragraph)).with_label(line.clone());
                     if cursor_row == Some(i) {
-                        node = node.with_selected(true);
+                        let (left, mid, right) = row_positions(i);
+                        let pt = cell_row_text(board, left, mid, right, cursor_col);
+                        let v = serde_json::to_value(&pt).expect("ParagraphText serializable");
+                        node = node.with_rich_text_value(v);
                     }
                     nodes.push((pid, node));
                 }
