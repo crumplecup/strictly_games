@@ -41,7 +41,9 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
+                    "info,strictly_server::games::tictactoe::display=debug",
+                )),
         )
         .with_writer(std::sync::Arc::new(log_file))
         .with_ansi(false)
