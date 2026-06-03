@@ -2,7 +2,7 @@
 
 use accesskit::Role as AkRole;
 use elicit_accesskit::{NodeId, NodeJson, Role};
-use elicit_ui::{ParagraphText, RichText, TextLine, TextModifier, TextSpan, TextStyle};
+use elicit_ui::{ParagraphText, RichText, TextAlign, TextLine, TextModifier, TextSpan, TextStyle};
 use elicitation::contracts::Established;
 use strictly_tictactoe::{Board, Player, Position, Square, TttDisplayMode};
 use tracing::{debug, instrument};
@@ -199,6 +199,20 @@ fn row_positions(row: usize) -> (Position, Position, Position) {
     }
 }
 
+/// Wrap a plain string in a center-aligned `ParagraphText::Rich` so the
+/// ratatui bridge renders it horizontally centered within its column.
+fn centered_plain(text: &str) -> ParagraphText {
+    ParagraphText::Rich(RichText {
+        lines: vec![TextLine {
+            spans: vec![TextSpan { content: text.to_string(), style: None }],
+            style: None,
+            alignment: None,
+        }],
+        style: None,
+        alignment: Some(TextAlign::Center),
+    })
+}
+
 /// Highlight style for the cursor cell.
 fn cursor_style() -> TextStyle {
     TextStyle {
@@ -237,7 +251,7 @@ fn cell_row_text(board: &Board, left: Position, mid: Position, right: Position, 
     ParagraphText::Rich(RichText {
         lines: vec![TextLine { spans, style: None, alignment: None }],
         style: None,
-        alignment: None,
+        alignment: Some(TextAlign::Center),
     })
 }
 
@@ -276,13 +290,16 @@ impl GameDisplay for AnyGame {
                     let pid = NodeId::from(ctr);
                     ctr += 1;
                     para_ids.push(pid);
-                    let mut node = NodeJson::new(Role(AkRole::Paragraph)).with_label(line.clone());
-                    if cursor_row == Some(i) {
+                    let pt = if cursor_row == Some(i) {
                         let (left, mid, right) = row_positions(i);
-                        let pt = cell_row_text(board, left, mid, right, cursor_col);
-                        let v = serde_json::to_value(&pt).expect("ParagraphText serializable");
-                        node = node.with_rich_text_value(v);
-                    }
+                        cell_row_text(board, left, mid, right, cursor_col)
+                    } else {
+                        centered_plain(line)
+                    };
+                    let v = serde_json::to_value(&pt).expect("ParagraphText serializable");
+                    let node = NodeJson::new(Role(AkRole::Paragraph))
+                        .with_label(line.clone())
+                        .with_rich_text_value(v);
                     nodes.push((pid, node));
                 }
                 let board_id = NodeId::from(ctr);
