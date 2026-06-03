@@ -308,7 +308,9 @@ pub fn ttt_to_verified_tree(
     let (story_root, story_pairs) = event_log_nodes(log.events, story_base);
     all_pairs.extend(story_pairs);
 
-    let mut col_roots = vec![board_root.0, story_root.0];
+    // Story goes left of the board so it acts as a natural left sidebar
+    // rather than leaving dead space on the left edge.
+    let mut col_roots = vec![story_root.0, board_root.0];
 
     if !log.dialogue.is_empty() {
         let chat_base = next_after(&all_pairs, story_base + 1);
@@ -325,14 +327,6 @@ pub fn ttt_to_verified_tree(
     }
 
     let mut nodes = convert_nodes(all_pairs);
-
-    // Spacer column (id=9_999): an empty GenericContainer that the ratatui
-    // bridge renders as blank space.  Placing it before the board keeps the
-    // board out of the far-left edge where some terminals distort box-drawing
-    // characters.
-    let spacer_id = AkNodeId::from(9_999u64);
-    nodes.insert(spacer_id, AkNode::new(AkRole::GenericContainer));
-    col_roots.insert(0, spacer_id);
 
     // Row (id=2) — horizontal content container
     let row_id = AkNodeId::from(2u64);
