@@ -22,3 +22,28 @@ use elicitation::VerifiedWorkflow;
 pub struct BoardColumnsAligned;
 
 impl VerifiedWorkflow for BoardColumnsAligned {}
+
+/// Proposition: all five visual board rows were constructed with horizontal
+/// centre alignment requested on their `ParagraphText`.
+///
+/// This is a *construction-time* contract proven inside
+/// [`super::display::AnyGame::to_ak_nodes`] for the board modes.  Any caller
+/// that receives [`elicitation::contracts::Established<BoardCentered>`] knows,
+/// at compile time, that the alignment instruction was issued to the renderer.
+///
+/// At runtime, [`super::render_verify`] re-checks that centering actually took
+/// effect by inspecting the live ratatui buffer.
+#[derive(elicitation::Prop)]
+pub struct BoardCentered;
+
+impl VerifiedWorkflow for BoardCentered {}
+
+elicitation::proof_credential! {
+    /// Witness that all five board rows were constructed via `centered_plain`
+    /// or `cell_row_text`, both of which set `alignment: Some(TextAlign::Center)`
+    /// on the `ParagraphText::Rich` payload.
+    ///
+    /// Only [`super::display`] can produce this credential, keeping the proof
+    /// boundary tight.
+    pub(super) CenteredBoardRowsBuilt => BoardCentered;
+}
