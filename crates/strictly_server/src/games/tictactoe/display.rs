@@ -8,7 +8,8 @@ use strictly_tictactoe::{Board, Player, Position, Square, TttDisplayMode};
 use tracing::{debug, instrument};
 use unicode_width::UnicodeWidthStr;
 
-use crate::BoardColumnsAligned;
+use crate::games::tictactoe::contracts::CenteredBoardRowsBuilt;
+use crate::{BoardCentered, BoardColumnsAligned};
 use crate::games::display::GameDisplay;
 use crate::games::tictactoe::AnyGame;
 
@@ -255,6 +256,83 @@ fn cell_row_text(board: &Board, left: Position, mid: Position, right: Position, 
     })
 }
 
+// ── TttBoardDisplay trait ─────────────────────────────────────────────────────
+
+/// Extension of [`GameDisplay`] for TTT board modes.
+///
+/// Separates the board-section construction — which carries a compile-time
+/// centering proof — from the generic `to_ak_nodes` path used for non-board
+/// modes such as `BoardHistory`.  Blackjack and Craps are entirely unaffected.
+///
+/// The canonical way to obtain [`Established<BoardCentered>`] is to call this
+/// method; the proof token witnesses that every board paragraph was constructed
+/// via [`centered_plain`] or [`cell_row_text`], both of which set
+/// `alignment: Some(TextAlign::Center)` on their `ParagraphText::Rich` payload.
+pub trait TttBoardDisplay {
+    /// Build the board `Article` node and all five board-row `Paragraph` nodes,
+    /// returning the board root id, all produced pairs, and a compile-time proof
+    /// that center alignment was requested on every row.
+    ///
+    /// `cursor` is `Some(pos)` when the cursor is active, `None` for plain board.
+    /// `id_base` is the first `u64` available for `NodeId` allocation.
+    fn create_board_with_proof(
+        &self,
+        cursor: Option<Position>,
+        id_base: u64,
+    ) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<BoardCentered>);
+}
+
+// ── TttBoardDisplay impl ──────────────────────────────────────────────────────
+
+impl TttBoardDisplay for AnyGame {
+    #[instrument(skip(self))]
+    fn create_board_with_proof(
+        &self,
+        cursor: Option<Position>,
+        id_base: u64,
+    ) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<BoardCentered>) {
+        let mut nodes: Vec<(NodeId, NodeJson)> = Vec::new();
+        let mut ctr = id_base;
+
+        let board = self.board();
+        let (aligned, _columns_proof) = AlignedBoardLines::new(board);
+        let cursor_row = cursor.map(cursor_row_index);
+        let cursor_col = cursor.map(cursor_col_index);
+
+        let mut para_ids: Vec<NodeId> = Vec::with_capacity(5);
+        for (i, line) in aligned.lines().iter().enumerate() {
+            let pid = NodeId::from(ctr);
+            ctr += 1;
+            para_ids.push(pid);
+            let pt = if cursor_row == Some(i) {
+                let (left, mid, right) = row_positions(i);
+                cell_row_text(board, left, mid, right, cursor_col)
+            } else {
+                centered_plain(line)
+            };
+            let v = serde_json::to_value(&pt).expect("ParagraphText serializable");
+            let node = NodeJson::new(Role(AkRole::Paragraph))
+                .with_label(line.clone())
+                .with_rich_text_value(v);
+            nodes.push((pid, node));
+        }
+
+        let board_id = NodeId::from(ctr);
+        nodes.push((
+            board_id,
+            NodeJson::new(Role(AkRole::Article))
+                .with_label("Board".to_string())
+                .with_description(board_accessible_desc(board))
+                .with_children(para_ids),
+        ));
+
+        // Every row above was built via centered_plain or cell_row_text,
+        // both of which set alignment: Some(TextAlign::Center).
+        let centered_proof = Established::prove(&CenteredBoardRowsBuilt);
+        (board_id, nodes, centered_proof)
+    }
+}
+
 // ── GameDisplay impl ──────────────────────────────────────────────────────────
 
 impl GameDisplay for AnyGame {
@@ -277,40 +355,10 @@ impl GameDisplay for AnyGame {
                 } else {
                     None
                 };
-                // Build the five board lines with compile-time alignment proof.
-                // AlignedBoardLines::new is the sole constructor; obtaining
-                // Established<BoardColumnsAligned> here guarantees that the │/┼
-                // separators occupy the same terminal columns in all five rows.
-                let board = self.board();
-                let (aligned, _proof) = AlignedBoardLines::new(board);
-                let cursor_row = cursor.map(cursor_row_index);
-                let cursor_col = cursor.map(cursor_col_index);
-                let mut para_ids: Vec<NodeId> = Vec::with_capacity(5);
-                for (i, line) in aligned.lines().iter().enumerate() {
-                    let pid = NodeId::from(ctr);
-                    ctr += 1;
-                    para_ids.push(pid);
-                    let pt = if cursor_row == Some(i) {
-                        let (left, mid, right) = row_positions(i);
-                        cell_row_text(board, left, mid, right, cursor_col)
-                    } else {
-                        centered_plain(line)
-                    };
-                    let v = serde_json::to_value(&pt).expect("ParagraphText serializable");
-                    let node = NodeJson::new(Role(AkRole::Paragraph))
-                        .with_label(line.clone())
-                        .with_rich_text_value(v);
-                    nodes.push((pid, node));
-                }
-                let board_id = NodeId::from(ctr);
-                ctr += 1;
-                nodes.push((
-                    board_id,
-                    NodeJson::new(Role(AkRole::Article))
-                        .with_label("Board".to_string())
-                        .with_description(board_accessible_desc(board))
-                        .with_children(para_ids),
-                ));
+                let (board_id, board_pairs, _centered_proof) =
+                    self.create_board_with_proof(cursor, ctr);
+                ctr += board_pairs.len() as u64;
+                nodes.extend(board_pairs);
 
                 // Status paragraph.
                 let status_id = NodeId::from(ctr);

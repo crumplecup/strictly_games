@@ -99,7 +99,8 @@ pub use games::tictactoe::{
 };
 
 // Public API exports - TicTacToe contract propositions
-pub use games::tictactoe::{BoardColumnsAligned, PlayerTurn, SquareEmpty};
+pub use games::tictactoe::{BoardCentered, BoardColumnsAligned, PlayerTurn, SquareEmpty};
+pub use games::tictactoe::TttBoardDisplay;
 
 // Public API exports - Blackjack types (game logic from strictly_blackjack, workflow from server)
 pub use games::blackjack::{BlackjackStateView, BlackjackWorkflow, HandResult};

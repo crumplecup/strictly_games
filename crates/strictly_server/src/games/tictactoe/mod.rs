@@ -16,7 +16,8 @@ pub mod factory;
 mod render_verify;
 pub mod wrapper;
 
-pub use contracts::BoardColumnsAligned;
+pub use contracts::{BoardCentered, BoardColumnsAligned};
+pub use display::TttBoardDisplay;
 pub use factory::{TttGameContext, register_await_turn_tool, register_move_tools};
 pub use wrapper::AnyGame;
 
