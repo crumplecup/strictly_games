@@ -10,9 +10,6 @@ members = [
   "crates/strictly_verus",
 ]
 
-[workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(creusot)', 'cfg(verus)'] }
-
 [workspace.package]
 edition = "2024"
 authors = ["Erik Rose <erik.w.rose@gmail.com>"]
@@ -27,20 +24,16 @@ strictly_craps = { path = "crates/strictly_craps" }
 strictly_server = { path = "crates/strictly_server" }
 
 # Elicitation framework (local dev)
-elicitation = { path = "../elicitation/crates/elicitation/", features = [
-  "rand",
-] }
-elicitation_derive = { path = "../elicitation/crates/elicitation_derive/" }
-elicitation_rand = { path = "../elicitation/crates/elicitation_rand/" }
-elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui/", features = [
-  "runtime",
-] }
-elicit_egui = { path = "../elicitation/crates/elicit_egui/" }
-elicit_leptos = { path = "../elicitation/crates/elicit_leptos/" }
-elicit_ui = { path = "../elicitation/crates/elicit_ui/" }
-elicit_accesskit = { path = "../elicitation/crates/elicit_accesskit/" }
-elicit_db = { path = "../elicitation/crates/elicit_db/" }
-elicit_redb = { path = "../elicitation/crates/elicit_redb/" }
+elicitation = { version = "0.11.1", features = ["rand"] }
+elicitation_derive = { version = "0.11.1" }
+elicitation_rand = { version = "0.11.1" }
+elicit_ratatui = { version = "0.11.1", features = ["runtime"] }
+elicit_egui = { version = "0.11.1" }
+elicit_leptos = { version = "0.11.1" }
+elicit_ui = { version = "0.11.1" }
+elicit_accesskit = { version = "0.11.1" }
+elicit_db = { version = "0.11.1" }
+elicit_redb = { version = "0.11.1" }
 accesskit = { version = "0.24", features = ["serde", "schemars"] }
 
 # GUI (egui frontend)
@@ -57,7 +50,7 @@ winit = { version = "0.30", features = ["serde"] }
 futures = "0.3"
 
 # Verification
-creusot-std = { path = "/home/erik/repos/elicitation/vendor/creusot-std", version = "0.10.0" }
+creusot-std = { version = "0.11.0" }
 kani-verifier = { version = "0.67" }
 
 # Database (uuid and chrono added for redb layer)
@@ -102,7 +95,7 @@ rmcp = { version = "1", features = [
 schemars = { version = "1", features = ["derive"] }
 
 # LLM clients
-async-openai = { version = "0.34", features = ["chat-completion"] }
+async-openai = { version = "0.40", features = ["chat-completion"] }
 
 # Config
 dotenvy = "0.15"
@@ -125,9 +118,3 @@ unicode-width = "0.2"
 opt-level = 3
 lto = true
 codegen-units = 1
-
-[patch.crates-io]
-# creusot-std 0.10.0 on crates.io depends on pearlite-syn 0.10.0 which conflicts
-# with pearlite-syn 0.11 now on crates.io. Patch both to elicitation's vendor copies.
-creusot-std = { path = "/home/erik/repos/elicitation/vendor/creusot-std" }
-pearlite-syn = { path = "/home/erik/repos/elicitation/vendor/pearlite-syn" }
