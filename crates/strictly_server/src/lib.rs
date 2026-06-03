@@ -41,7 +41,7 @@ mod lobby;
 mod profile_service;
 mod server;
 mod session;
-mod tui;
+pub mod tui;
 mod verify;
 
 // Public API exports - Agent configuration

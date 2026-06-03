@@ -280,15 +280,31 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
         TuiNode::Widget { widget } => {
             if let WidgetJson::Paragraph {
                 text: ParagraphText::Rich(text),
+                block,
                 ..
             } = widget.as_ref()
             {
-                let available = area.height.saturating_sub(2) as usize;
+                // Subtract 2 only when a block border is present (top + bottom row).
+                // Board cell paragraphs have no block, so available == area.height.
+                let border_overhead: u16 = if block.is_some() { 2 } else { 0 };
+                let available = area.height.saturating_sub(border_overhead) as usize;
                 let needed = text.lines.len();
+                tracing::debug!(
+                    area_x = area.x, area_y = area.y,
+                    area_w = area.width, area_h = area.height,
+                    needed, available,
+                    "check_area: Rich paragraph"
+                );
                 // Only fail if content has lines AND the cell is too short to
                 // show even one line — a fully collapsed pane is a terminal
                 // sizing problem, not a content problem.
                 if needed > 0 && available == 0 {
+                    tracing::warn!(
+                        area_x = area.x, area_y = area.y,
+                        area_w = area.width, area_h = area.height,
+                        needed, available,
+                        "check_area: AreaInsufficient"
+                    );
                     return Err(LayoutError::AreaInsufficient { needed, available });
                 }
             }
@@ -313,6 +329,12 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
             };
             let ratatui_constraints: Vec<Constraint> =
                 constraints.iter().copied().map(Constraint::from).collect();
+            tracing::debug!(
+                ?direction, ?constraints,
+                inner_w = inner.width, inner_h = inner.height,
+                n_children = children.len(),
+                "check_area: Layout split"
+            );
             let areas = Layout::default()
                 .direction(ratatui_dir)
                 .constraints(ratatui_constraints)
