@@ -17,3 +17,4 @@ prove_verus.log
 # Database runtime files
 strictly_games.db
 strictly_games.db-journal
+.why3find/
