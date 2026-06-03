@@ -2,11 +2,8 @@
   "profile": [],
   "proofs": {
     "Coma": {
-      "vc_craps_place_bets": { "prover": "alt-ergo@2.6.2", "time": 0.027 },
-      "vc_craps_place_bets_creusot": {
-        "prover": "alt-ergo@2.6.2",
-        "time": 0.031
-      }
+      "vc_craps_place_bets": { "prover": "alt-ergo", "time": 0.027 },
+      "vc_craps_place_bets_creusot": { "prover": "alt-ergo", "time": 0.031 }
     }
   }
 }

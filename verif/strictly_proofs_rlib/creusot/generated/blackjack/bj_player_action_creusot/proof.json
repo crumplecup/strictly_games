@@ -2,11 +2,8 @@
   "profile": [],
   "proofs": {
     "Coma": {
-      "vc_bj_player_action": { "prover": "alt-ergo@2.6.2", "time": 0.027 },
-      "vc_bj_player_action_creusot": {
-        "prover": "alt-ergo@2.6.2",
-        "time": 0.031
-      }
+      "vc_bj_player_action": { "prover": "alt-ergo", "time": 0.02 },
+      "vc_bj_player_action_creusot": { "prover": "alt-ergo", "time": 0.017 }
     }
   }
 }

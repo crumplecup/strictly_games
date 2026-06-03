@@ -1,6 +1,6 @@
 (* #"/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 63 0 69 55 *)
 
-let%span svsm = "/home/erik/repos/strictly_games/crates/strictly_tictactoe/src/vsm.rs" 116 0 116 51
+let%span svsm = "/home/erik/repos/strictly_games/crates/strictly_tictactoe/src/vsm.rs" 113 0 113 51
 let%span svec = "/home/erik/repos/elicitation/vendor/creusot-std/src/std/vec.rs" 16 14 16 41
 let%span stic_tac_toe = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 70 4 70 62
 let%span stic_tac_toe'0 = "/home/erik/repos/strictly_games/crates/strictly_proofs/src/creusot/generated/tic_tac_toe.rs" 64 4 64 9
