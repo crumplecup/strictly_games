@@ -24,16 +24,16 @@ strictly_craps = { path = "crates/strictly_craps" }
 strictly_server = { path = "crates/strictly_server" }
 
 # Elicitation framework (local dev)
-elicitation = { version = "0.11.1", features = ["rand"] }
-elicitation_derive = { version = "0.11.1" }
-elicitation_rand = { version = "0.11.1" }
-elicit_ratatui = { version = "0.11.1", features = ["runtime"] }
-elicit_egui = { version = "0.11.1" }
-elicit_leptos = { version = "0.11.1" }
-elicit_ui = { version = "0.11.1" }
-elicit_accesskit = { version = "0.11.1" }
-elicit_db = { version = "0.11.1" }
-elicit_redb = { version = "0.11.1" }
+elicitation = { path = "../elicitation/crates/elicitation", features = ["rand"] }
+elicitation_derive = { path = "../elicitation/crates/elicitation_derive" }
+elicitation_rand = { path = "../elicitation/crates/elicitation_rand" }
+elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui", features = ["runtime"] }
+elicit_egui = { path = "../elicitation/crates/elicit_egui" }
+elicit_leptos = { path = "../elicitation/crates/elicit_leptos" }
+elicit_ui = { path = "../elicitation/crates/elicit_ui" }
+elicit_accesskit = { path = "../elicitation/crates/elicit_accesskit" }
+elicit_db = { path = "../elicitation/crates/elicit_db" }
+elicit_redb = { path = "../elicitation/crates/elicit_redb" }
 accesskit = { version = "0.24", features = ["serde", "schemars"] }
 
 # GUI (egui frontend)
@@ -118,3 +118,5 @@ unicode-width = "0.2"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+
