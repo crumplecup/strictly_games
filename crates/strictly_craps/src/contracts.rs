@@ -26,7 +26,9 @@ impl VerifiedWorkflow for NonEmptyBankrolls {}
 /// This is the single point of trust for the `NonEmptyBankrolls` invariant,
 /// satisfying the craps invariant `shooter_idx@ < bankrolls@.len()` (shooter
 /// starts at 0, so `bankrolls.len() >= 1` is required).
-pub fn validate_non_empty_bankrolls(bankrolls: &[u64]) -> Result<Established<NonEmptyBankrolls>, CrapsError> {
+pub fn validate_non_empty_bankrolls(
+    bankrolls: &[u64],
+) -> Result<Established<NonEmptyBankrolls>, CrapsError> {
     if !bankrolls.is_empty() {
         Ok(Established::assert())
     } else {

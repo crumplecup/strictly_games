@@ -29,7 +29,9 @@ impl VerifiedWorkflow for BankrollPositive {}
 /// This is the single point of trust for the `BankrollPositive` invariant.
 /// Only code that holds `Established<BankrollPositive>` may start the betting phase.
 #[cfg_attr(not(kani), instrument)]
-pub fn validate_bankroll_positive(amount: u64) -> Result<Established<BankrollPositive>, ActionError> {
+pub fn validate_bankroll_positive(
+    amount: u64,
+) -> Result<Established<BankrollPositive>, ActionError> {
     if amount > 0 {
         Ok(Established::assert())
     } else {

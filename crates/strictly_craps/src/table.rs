@@ -194,7 +194,10 @@ pub struct CrapsTable {
 
 impl CrapsTable {
     /// Creates a new table with the given odds limit and bet range.
-    #[cfg_attr(not(kani), instrument(skip_all, fields(max_odds, table_min, table_max)))]
+    #[cfg_attr(
+        not(kani),
+        instrument(skip_all, fields(max_odds, table_min, table_max))
+    )]
     pub fn new(max_odds: u8, table_min: u64, table_max: u64) -> Self {
         Self {
             seats: Vec::new(),

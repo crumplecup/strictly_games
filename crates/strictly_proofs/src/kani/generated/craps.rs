@@ -8,20 +8,21 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_craps::vsm::craps_comeout_roll_kani_contracted;
+use strictly_craps::craps_comeout_roll_kani_contracted;
 #[cfg(kani)]
-use strictly_craps::vsm::craps_next_round_kani_contracted;
+use strictly_craps::craps_consistent;
 #[cfg(kani)]
-use strictly_craps::vsm::craps_place_bets_kani_contracted;
+use strictly_craps::craps_next_round_kani_contracted;
 #[cfg(kani)]
-use strictly_craps::vsm::craps_point_roll_kani_contracted;
+use strictly_craps::craps_place_bets_kani_contracted;
 #[cfg(kani)]
-use strictly_craps::vsm::craps_start_betting_kani_contracted;
+use strictly_craps::craps_point_roll_kani_contracted;
+#[cfg(kani)]
+use strictly_craps::craps_start_betting_kani_contracted;
 #[cfg(kani)]
 use strictly_craps::{
     ActiveBet, BetsPlaced, CrapsConsistent, CrapsState, DiceRoll, NonEmptyBankrolls,
-    craps_comeout_roll, craps_consistent, craps_next_round, craps_place_bets, craps_point_roll,
-    craps_start_betting,
+    craps_comeout_roll, craps_next_round, craps_place_bets, craps_point_roll, craps_start_betting,
 };
 
 #[cfg(kani)]

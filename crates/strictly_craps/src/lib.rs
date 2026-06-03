@@ -60,9 +60,16 @@ pub use contracts::{
     validate_non_empty_bankrolls,
 };
 pub use traits::CrapsRuleEnforcer;
+#[cfg(kani)]
+pub use vsm::craps_consistent;
 pub use vsm::{
     CrapsMachine, CrapsState, craps_comeout_roll, craps_next_round, craps_place_bets,
     craps_point_roll, craps_start_betting,
 };
-#[cfg(kani)]
-pub use vsm::craps_consistent;
+// BEGIN ELICITATION KANI REEXPORTS — DO NOT EDIT
+pub use vsm::craps_comeout_roll_kani_contracted;
+pub use vsm::craps_next_round_kani_contracted;
+pub use vsm::craps_place_bets_kani_contracted;
+pub use vsm::craps_point_roll_kani_contracted;
+pub use vsm::craps_start_betting_kani_contracted;
+// END ELICITATION KANI REEXPORTS

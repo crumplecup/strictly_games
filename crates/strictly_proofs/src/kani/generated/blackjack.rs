@@ -8,20 +8,21 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_blackjack::vsm::bj_dealer_turn_kani_contracted;
+use strictly_blackjack::bj_dealer_turn_kani_contracted;
 #[cfg(kani)]
-use strictly_blackjack::vsm::bj_place_bet_kani_contracted;
+use strictly_blackjack::bj_place_bet_kani_contracted;
 #[cfg(kani)]
-use strictly_blackjack::vsm::bj_player_action_kani_contracted;
+use strictly_blackjack::bj_player_action_kani_contracted;
 #[cfg(kani)]
-use strictly_blackjack::vsm::bj_restart_kani_contracted;
+use strictly_blackjack::bj_restart_kani_contracted;
 #[cfg(kani)]
-use strictly_blackjack::vsm::bj_start_betting_kani_contracted;
+use strictly_blackjack::bj_start_betting_kani_contracted;
+#[cfg(kani)]
+use strictly_blackjack::blackjack_consistent;
 #[cfg(kani)]
 use strictly_blackjack::{
     BankrollPositive, BasicAction, BlackjackConsistent, BlackjackState, NotBust, ValidAction,
     bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart, bj_start_betting,
-    blackjack_consistent,
 };
 
 #[cfg(kani)]

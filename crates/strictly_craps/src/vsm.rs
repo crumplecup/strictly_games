@@ -31,7 +31,9 @@
 //!                                       Betting
 //! ```
 
-use crate::contracts::{CrapsConsistent, CrapsBettingEvidence, CrapsRulesEvidence, NonEmptyBankrolls};
+use crate::contracts::{
+    CrapsBettingEvidence, CrapsConsistent, CrapsRulesEvidence, NonEmptyBankrolls,
+};
 use crate::display::CrapsDisplayMode;
 use crate::typestate::{ComeOutResult, GameSetup, PointRollResult};
 use crate::workflow::BetsPlaced;

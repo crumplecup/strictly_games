@@ -21,4 +21,3 @@ elicitation = { workspace = true }
 creusot-std = { workspace = true, optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
-tracing = { workspace = true }

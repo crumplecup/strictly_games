@@ -31,8 +31,8 @@ pub mod vsm;
 // Re-export core types
 pub use action::{Move, MoveError};
 pub use contracts::{
-    LegalMove, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeRulesEvidence,
-    execute_move, validate_move, validate_player_turn, validate_square_empty,
+    LegalMove, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeRulesEvidence, execute_move,
+    validate_move, validate_player_turn, validate_square_empty,
 };
 pub use display::TttDisplayMode;
 pub use explore::TicTacToeAction;
@@ -42,6 +42,11 @@ pub use traits::TicTacToeRuleEnforcer;
 pub use types::{Board, Player, Square};
 pub use typestate::{GameFinished, GameInProgress, GameResult, GameSetup};
 pub use view::TicTacToeView;
-pub use vsm::{TicTacToeMachine, TicTacToeState, ttt_make_move, ttt_restart, ttt_start_game};
 #[cfg(kani)]
 pub use vsm::tic_tac_toe_consistent;
+pub use vsm::{TicTacToeMachine, TicTacToeState, ttt_make_move, ttt_restart, ttt_start_game};
+// BEGIN ELICITATION KANI REEXPORTS — DO NOT EDIT
+pub use vsm::ttt_make_move_kani_contracted;
+pub use vsm::ttt_restart_kani_contracted;
+pub use vsm::ttt_start_game_kani_contracted;
+// END ELICITATION KANI REEXPORTS

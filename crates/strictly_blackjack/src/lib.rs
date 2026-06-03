@@ -39,7 +39,8 @@ pub use bet_amount::BetAmount;
 pub use card::{Card, Rank, Suit};
 pub use contracts::{LegalAction, NotBust, ValidAction, execute_action, validate_action};
 pub use display::BlackjackDisplayMode;
-pub use error::ActionError;pub use explore::BlackjackAction;
+pub use error::ActionError;
+pub use explore::BlackjackAction;
 pub use hand::{Hand, HandValue, MAX_HAND_CARDS, MAX_PLAYER_HANDS};
 pub use ledger::{BankrollLedger, BetDeducted, PayoutSettled};
 pub use multi_player::{MAX_SEATS, MultiRound, SeatBet, SeatPlay, SeatResult};
@@ -60,9 +61,16 @@ pub use contracts::{
     validate_bankroll_positive,
 };
 pub use traits::BlackjackRuleEnforcer;
+#[cfg(kani)]
+pub use vsm::blackjack_consistent;
 pub use vsm::{
     BlackjackMachine, BlackjackState, bj_dealer_turn, bj_place_bet, bj_player_action, bj_restart,
     bj_start_betting,
 };
-#[cfg(kani)]
-pub use vsm::blackjack_consistent;
+// BEGIN ELICITATION KANI REEXPORTS — DO NOT EDIT
+pub use vsm::bj_dealer_turn_kani_contracted;
+pub use vsm::bj_place_bet_kani_contracted;
+pub use vsm::bj_player_action_kani_contracted;
+pub use vsm::bj_restart_kani_contracted;
+pub use vsm::bj_start_betting_kani_contracted;
+// END ELICITATION KANI REEXPORTS

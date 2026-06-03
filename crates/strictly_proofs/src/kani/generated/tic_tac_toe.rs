@@ -8,15 +8,17 @@
 #[cfg(kani)]
 use elicitation::Established;
 #[cfg(kani)]
-use strictly_tictactoe::vsm::ttt_make_move_kani_contracted;
+use strictly_tictactoe::tic_tac_toe_consistent;
 #[cfg(kani)]
-use strictly_tictactoe::vsm::ttt_restart_kani_contracted;
+use strictly_tictactoe::ttt_make_move_kani_contracted;
 #[cfg(kani)]
-use strictly_tictactoe::vsm::ttt_start_game_kani_contracted;
+use strictly_tictactoe::ttt_restart_kani_contracted;
+#[cfg(kani)]
+use strictly_tictactoe::ttt_start_game_kani_contracted;
 #[cfg(kani)]
 use strictly_tictactoe::{
-    Move, Player, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeState,
-    tic_tac_toe_consistent, ttt_make_move, ttt_restart, ttt_start_game,
+    Move, Player, PlayerTurn, SquareEmpty, TicTacToeConsistent, TicTacToeState, ttt_make_move,
+    ttt_restart, ttt_start_game,
 };
 
 #[cfg(kani)]
