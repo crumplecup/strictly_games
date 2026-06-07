@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use strictly_blackjack::{GameBetting, GamePlayerTurn};
+use strictly_blackjack::{GameBetting, GamePlayerTurn, Rank, Suit};
 use tokio::sync::Mutex;
 
 /// The current phase of a single agent's blackjack session.
@@ -41,6 +41,15 @@ pub struct BlackjackStateView {
     pub description: String,
     /// True when the session has ended (agent cashed out).
     pub is_terminal: bool,
+
+    /// Player hands — outer vec is hands (>1 only after a split), inner is
+    /// cards in deal order.  Empty when not in `player_turn` phase.
+    pub player_hands: Vec<Vec<(Rank, Suit)>>,
+
+    /// Dealer's cards in deal order.  The hole card (index 1) is `None`
+    /// during `player_turn` (face-down); all cards are revealed in
+    /// `finished`.  Empty when not in an active hand.
+    pub dealer_hand: Vec<Option<(Rank, Suit)>>,
 }
 
 impl BlackjackStateView {
@@ -52,6 +61,8 @@ impl BlackjackStateView {
                 bankroll: 0,
                 description: "No active session.".to_string(),
                 is_terminal: true,
+                player_hands: vec![],
+                dealer_hand: vec![],
             },
             BlackjackPhase::Betting(game) => {
                 let bankroll = game.bankroll();
@@ -60,15 +71,38 @@ impl BlackjackStateView {
                     bankroll,
                     description: format!("💰 Bankroll: ${bankroll}\n\nWaiting for bet..."),
                     is_terminal: false,
+                    player_hands: vec![],
+                    dealer_hand: vec![],
                 }
             }
             BlackjackPhase::PlayerTurn(game) => {
                 let bankroll = game.bankroll();
+                // Collect all active player hands.
+                let player_hands = game
+                    .player_hands()
+                    .iter()
+                    .map(|h| h.cards().iter().map(|c| (c.rank(), c.suit())).collect())
+                    .collect();
+                // Dealer: first card visible, hole card hidden.
+                let dealer_cards = game.dealer_hand().cards();
+                let dealer_hand = dealer_cards
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        if i == 1 {
+                            None // hole card face-down
+                        } else {
+                            Some((c.rank(), c.suit()))
+                        }
+                    })
+                    .collect();
                 Self {
                     phase: "player_turn".to_string(),
                     bankroll,
                     description: describe_player_turn(game),
                     is_terminal: false,
+                    player_hands,
+                    dealer_hand,
                 }
             }
             BlackjackPhase::Finished => Self {
@@ -76,6 +110,8 @@ impl BlackjackStateView {
                 bankroll: 0,
                 description: "Hand complete. Awaiting next decision...".to_string(),
                 is_terminal: false,
+                player_hands: vec![],
+                dealer_hand: vec![],
             },
         }
     }

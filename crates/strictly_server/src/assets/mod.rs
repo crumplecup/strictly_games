@@ -237,6 +237,64 @@ pub fn card_svg_path(card: Card) -> &'static Path {
     })
 }
 
+// ── Blackjack card conversion ─────────────────────────────────────────────────
+
+/// Convert a [`strictly_blackjack::Rank`] to the asset [`Rank`].
+pub fn bj_rank(rank: strictly_blackjack::Rank) -> Rank {
+    use strictly_blackjack::Rank as B;
+    match rank {
+        B::Ace => Rank::Ace,
+        B::Two => Rank::Two,
+        B::Three => Rank::Three,
+        B::Four => Rank::Four,
+        B::Five => Rank::Five,
+        B::Six => Rank::Six,
+        B::Seven => Rank::Seven,
+        B::Eight => Rank::Eight,
+        B::Nine => Rank::Nine,
+        B::Ten => Rank::Ten,
+        B::Jack => Rank::Jack,
+        B::Queen => Rank::Queen,
+        B::King => Rank::King,
+    }
+}
+
+/// Convert a [`strictly_blackjack::Suit`] to the asset [`Suit`].
+pub fn bj_suit(suit: strictly_blackjack::Suit) -> Suit {
+    use strictly_blackjack::Suit as B;
+    match suit {
+        B::Hearts => Suit::Hearts,
+        B::Diamonds => Suit::Diamonds,
+        B::Clubs => Suit::Clubs,
+        B::Spades => Suit::Spades,
+    }
+}
+
+/// ASCII art for a blackjack card, or a placeholder when face-down.
+pub fn bj_card_ascii(card: Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>) -> &'static str {
+    match card {
+        Some((rank, suit)) => card_ascii(Card::Playing(bj_rank(rank), bj_suit(suit))),
+        None => CARD_BACK,
+    }
+}
+
+/// ASCII art placeholder for a face-down card.
+///
+/// Used for the dealer's hole card during player turn.  Rendered as a uniform
+/// block so it has the same visual weight as a revealed card.
+pub const CARD_BACK: &str = "\
+############\n\
+#          #\n\
+# -------- #\n\
+# |      | #\n\
+# |  ??  | #\n\
+# |      | #\n\
+# |  ??  | #\n\
+# |      | #\n\
+# -------- #\n\
+#          #\n\
+############\n";
+
 // ── Die lookups ───────────────────────────────────────────────────────────────
 
 /// Return the pre-generated ASCII art for a die face.

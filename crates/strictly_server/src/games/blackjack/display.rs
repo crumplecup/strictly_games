@@ -5,6 +5,7 @@ use elicit_accesskit::{NodeId, NodeJson, Role};
 use strictly_blackjack::BlackjackDisplayMode;
 use tracing::instrument;
 
+use crate::assets::{bj_card_ascii, CARD_BACK};
 use crate::games::blackjack::BlackjackStateView;
 use crate::games::display::GameDisplay;
 
@@ -25,37 +26,81 @@ impl GameDisplay for BlackjackStateView {
 
         match mode {
             BlackjackDisplayMode::Table => {
-                // Phase paragraph.
-                let phase_id = NodeId::from(ctr);
+                // ── Status bar: phase + bankroll ─────────────────────────────
+                let status_id = NodeId::from(ctr);
                 ctr += 1;
                 nodes.push((
-                    phase_id,
+                    status_id,
+                    NodeJson::new(Role(AkRole::Paragraph)).with_label(format!(
+                        "Phase: {}  │  Bankroll: ${}",
+                        self.phase, self.bankroll
+                    )),
+                ));
+
+                // ── Dealer hand ───────────────────────────────────────────────
+                let dealer_label_id = NodeId::from(ctr);
+                ctr += 1;
+                nodes.push((
+                    dealer_label_id,
                     NodeJson::new(Role(AkRole::Paragraph))
-                        .with_label(format!("Phase: {}", self.phase)),
+                        .with_label("Dealer:".to_string()),
                 ));
 
-                // Bankroll paragraph.
-                let bankroll_id = NodeId::from(ctr);
+                let dealer_card_ids =
+                    hand_card_nodes(&self.dealer_hand, &mut ctr, &mut nodes, true);
+                let dealer_row_id = NodeId::from(ctr);
                 ctr += 1;
                 nodes.push((
-                    bankroll_id,
+                    dealer_row_id,
+                    NodeJson::new(Role(AkRole::List))
+                        .with_label("Dealer cards".to_string())
+                        .with_children(dealer_card_ids),
+                ));
+
+                // ── Player hands ──────────────────────────────────────────────
+                let player_label_id = NodeId::from(ctr);
+                ctr += 1;
+                nodes.push((
+                    player_label_id,
                     NodeJson::new(Role(AkRole::Paragraph))
-                        .with_label(format!("Bankroll: ${}", self.bankroll)),
+                        .with_label("Your hand:".to_string()),
                 ));
 
-                // Description paragraph.
-                let desc_id = NodeId::from(ctr);
-                ctr += 1;
-                nodes.push((
-                    desc_id,
-                    NodeJson::new(Role(AkRole::Paragraph)).with_label(self.description.clone()),
-                ));
+                let mut player_section_ids = vec![player_label_id];
+                for (hand_idx, hand) in self.player_hands.iter().enumerate() {
+                    let hand_cards: Vec<Option<_>> = hand.iter().map(|&c| Some(c)).collect();
+                    let card_ids =
+                        hand_card_nodes(&hand_cards, &mut ctr, &mut nodes, false);
+                    let hand_row_id = NodeId::from(ctr);
+                    ctr += 1;
+                    nodes.push((
+                        hand_row_id,
+                        NodeJson::new(Role(AkRole::List))
+                            .with_label(format!("Hand {}", hand_idx + 1))
+                            .with_children(card_ids),
+                    ));
+                    player_section_ids.push(hand_row_id);
+                }
 
+                // Fallback description when no hand data is available.
+                if self.player_hands.is_empty() {
+                    let desc_id = NodeId::from(ctr);
+                    ctr += 1;
+                    nodes.push((
+                        desc_id,
+                        NodeJson::new(Role(AkRole::Paragraph))
+                            .with_label(self.description.clone()),
+                    ));
+                    player_section_ids.push(desc_id);
+                }
+
+                let mut root_children = vec![status_id, dealer_label_id, dealer_row_id];
+                root_children.extend(player_section_ids);
                 nodes.push((
                     root_id,
                     NodeJson::new(Role(AkRole::Main))
                         .with_label("Blackjack — Table".to_string())
-                        .with_children(vec![phase_id, bankroll_id, desc_id]),
+                        .with_children(root_children),
                 ));
             }
             BlackjackDisplayMode::Scorecard => {
@@ -101,4 +146,39 @@ impl GameDisplay for BlackjackStateView {
         let _ = ctr;
         (root_id, nodes)
     }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Build one [`NodeId`] per card in `hand`, pushing `(id, NodeJson)` pairs into
+/// `nodes` and advancing `ctr`.  Each node is `Role::ListItem` whose label is
+/// the pre-generated ASCII art (or the back-of-card placeholder for `None`).
+fn hand_card_nodes(
+    hand: &[Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>],
+    ctr: &mut u64,
+    nodes: &mut Vec<(NodeId, NodeJson)>,
+    _is_dealer: bool,
+) -> Vec<NodeId> {
+    if hand.is_empty() {
+        let placeholder_id = NodeId::from(*ctr);
+        *ctr += 1;
+        nodes.push((
+            placeholder_id,
+            NodeJson::new(Role(AkRole::ListItem)).with_label(CARD_BACK.to_string()),
+        ));
+        return vec![placeholder_id];
+    }
+
+    hand.iter()
+        .map(|card| {
+            let id = NodeId::from(*ctr);
+            *ctr += 1;
+            let art = bj_card_ascii(*card).to_string();
+            nodes.push((
+                id,
+                NodeJson::new(Role(AkRole::ListItem)).with_label(art),
+            ));
+            id
+        })
+        .collect()
 }
