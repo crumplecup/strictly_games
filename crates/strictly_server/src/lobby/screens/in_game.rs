@@ -6,15 +6,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 use derive_getters::Getters;
-use ratatui::{
-    Frame,
-    layout::Alignment,
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Paragraph},
-};
+use elicit_ui::{VerifiedTree, Viewport};
 use tracing::{debug, instrument};
 
 use crate::ProfileService;
+use crate::lobby::lobby_ir::in_game_to_verified_tree;
 use crate::lobby::screen::{Screen, ScreenTransition};
 
 /// In-game screen shown during an active game session.
@@ -39,32 +35,14 @@ impl InGameScreen {
 }
 
 impl Screen for InGameScreen {
-    #[instrument(skip(self, frame, _profile_service))]
-    fn render(&self, frame: &mut Frame, _profile_service: &ProfileService) {
-        let area = frame.area();
-
-        let (text, color) = if self.game_finished {
-            let msg = self.result_message.as_deref().unwrap_or("Game finished.");
-            (
-                format!("{}\n\nPress any key to return to lobby.", msg),
-                Color::Green,
-            )
-        } else {
-            (
-                format!(
-                    "Game in progress vs {}…\n\nThe game loop is running.\nPress any key to return to lobby.",
-                    self.agent_name
-                ),
-                Color::Yellow,
-            )
-        };
-
-        let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(color).add_modifier(Modifier::BOLD))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL).title("In Game"));
-
-        frame.render_widget(paragraph, area);
+    #[instrument(skip(self))]
+    fn to_verified_tree(&self, viewport: Viewport) -> VerifiedTree {
+        in_game_to_verified_tree(
+            &self.agent_name,
+            self.game_finished,
+            self.result_message.as_deref(),
+            viewport,
+        )
     }
 
     #[instrument(skip(self, key, _profile_service))]

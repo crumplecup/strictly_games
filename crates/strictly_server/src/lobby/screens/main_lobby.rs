@@ -2,14 +2,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 use derive_getters::Getters;
-use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-};
+use elicit_ui::{VerifiedTree, Viewport};
+use ratatui::widgets::ListState;
 use tracing::{debug, info, instrument};
 
+use crate::lobby::lobby_ir::main_lobby_to_verified_tree;
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::lobby::settings::GameType;
 use crate::{AggregatedStats, ProfileService, User};
@@ -26,18 +23,6 @@ enum LobbyOption {
 }
 
 impl LobbyOption {
-    #[instrument]
-    fn label(self, selected_game: GameType) -> String {
-        match self {
-            Self::PlayGame => "Play Game".to_string(),
-            Self::SelectGame => format!("Select Game  [ {} ]", selected_game.label()),
-            Self::ViewStats => "View Statistics".to_string(),
-            Self::ChangeProfile => "Change Profile".to_string(),
-            Self::Settings => "Settings".to_string(),
-            Self::Quit => "Quit".to_string(),
-        }
-    }
-
     #[instrument]
     fn all() -> &'static [LobbyOption] {
         &[
@@ -118,68 +103,15 @@ impl MainLobbyScreen {
 }
 
 impl Screen for MainLobbyScreen {
-    #[instrument(skip(self, frame, _profile_service))]
-    fn render(&self, frame: &mut Frame, _profile_service: &ProfileService) {
-        let area = frame.area();
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Min(5),
-                Constraint::Length(3),
-            ])
-            .split(area);
-
-        let title = Paragraph::new("Strictly Games — Lobby")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(title, chunks[0]);
-
-        let stats_text = match &self.stats {
-            Some(stats) => format!(
-                "Player: {}   W:{} / L:{} / D:{}   Win rate: {:.1}%",
-                self.current_user.display_name(),
-                stats.wins(),
-                stats.losses(),
-                stats.draws(),
-                stats.win_rate()
-            ),
-            None => format!("Player: {}", self.current_user.display_name()),
-        };
-        let profile_bar = Paragraph::new(stats_text)
-            .style(Style::default().fg(Color::Green))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(profile_bar, chunks[1]);
-
-        let items: Vec<ListItem> = LobbyOption::all()
-            .iter()
-            .map(|opt| ListItem::new(opt.label(self.selected_game)))
-            .collect();
-
-        let menu = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Menu"))
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("> ");
-
-        let mut list_state = self.list_state;
-        frame.render_stateful_widget(menu, chunks[2], &mut list_state);
-
-        let help = Paragraph::new("↑↓: Navigate | Enter: Select | q: Quit")
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(help, chunks[3]);
+    #[instrument(skip(self))]
+    fn to_verified_tree(&self, viewport: Viewport) -> VerifiedTree {
+        main_lobby_to_verified_tree(
+            &self.current_user,
+            self.stats.as_ref(),
+            self.selected_game,
+            self.list_state.selected().unwrap_or(0),
+            viewport,
+        )
     }
 
     #[instrument(skip(self, key, _profile_service))]

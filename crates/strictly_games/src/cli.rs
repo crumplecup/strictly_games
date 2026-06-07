@@ -1,6 +1,18 @@
 //! Command-line interface for strictly_games.
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+/// UI frontend to launch with the `tui` command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+pub enum FrontendMode {
+    /// Terminal UI using ratatui (default)
+    #[default]
+    Ratatui,
+    /// Native desktop window using egui + wgpu
+    Egui,
+    /// Browser UI served over HTTP using leptos/axum
+    Leptos,
+}
 
 /// Strictly Games - Type-safe game server with MCP interface
 #[derive(Parser, Debug)]
@@ -30,8 +42,12 @@ pub enum Command {
         host: String,
     },
 
-    /// Run the terminal UI (lobby with profiles, agents, settings, statistics)
+    /// Run the UI frontend (defaults to ratatui terminal)
     Tui {
+        /// Frontend renderer: ratatui (terminal), egui (desktop window), leptos (browser/HTTP)
+        #[arg(long, short, value_enum, default_value = "ratatui")]
+        frontend: FrontendMode,
+
         /// Path to the database file (created if it doesn't exist)
         #[arg(long, default_value = "strictly_games.db")]
         db_path: String,
@@ -40,7 +56,7 @@ pub enum Command {
         #[arg(long)]
         agents_dir: Option<std::path::PathBuf>,
 
-        /// Port for standalone game sessions
+        /// Port for standalone game sessions or leptos HTTP server
         #[arg(long, default_value = "3000")]
         port: u16,
     },

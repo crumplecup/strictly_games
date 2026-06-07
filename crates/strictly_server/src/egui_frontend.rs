@@ -17,7 +17,7 @@
 
 use std::sync::Arc;
 
-use egui::Key;
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use egui_winit::State as EguiWinitState;
 use tracing::{error, info, instrument, warn};
 use winit::{
@@ -30,9 +30,17 @@ use winit::{
 use strictly_tictactoe::{Board, Player, Position, TttDisplayMode};
 
 use crate::games::tictactoe::AnyGame;
+use crate::lobby::screen::{Screen, ScreenTransition};
+use crate::lobby::screens::{
+    AgentSelectScreen, BlackjackSetupScreen, GameSelectScreen, InGameScreen, MainLobbyScreen,
+    ProfileSelectScreen, SettingsScreen, StatsViewScreen,
+};
+use crate::lobby::settings::{GameType, LobbySettings};
 use crate::tui::GameEvent;
 use crate::tui::contracts::TttUiConsistent;
 use crate::tui::game_ir::{EventLog, GraphParams, ttt_to_verified_tree};
+use crate::tui::{tictactoe_active, tictactoe_edges, tictactoe_nodes};
+use crate::{AgentLibrary, ProfileService, User};
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
@@ -44,49 +52,40 @@ fn to_color32(c: elicit_ui::SrgbColor) -> egui::Color32 {
     )
 }
 
-// ── Active game state ────────────────────────────────────────────────────────
+// ── Active screen state ───────────────────────────────────────────────────────
 
-/// Which game (if any) is currently being displayed.
-#[derive(Debug)]
-enum ActiveGame {
-    /// Main selection menu.
-    Menu,
-    /// Tic-tac-toe: local two-player game.
+/// Current screen in the egui lobby / game state machine.
+enum EguiActiveScreen {
+    ProfileSelect(ProfileSelectScreen),
+    MainLobby(MainLobbyScreen),
+    GameSelect(GameSelectScreen),
+    AgentSelect(AgentSelectScreen),
+    BlackjackSetup(BlackjackSetupScreen),
+    StatsView(StatsViewScreen),
+    Settings(SettingsScreen),
+    InGame(InGameScreen),
+    /// Local TTT game — rendered through the game IR pipeline.
     TicTacToe {
-        /// Current serialisable game state.
         game: AnyGame,
-        /// Cursor position on the board.
         cursor: Position,
-        /// Accumulated story events for the right-side event log.
         events: Vec<GameEvent>,
     },
 }
 
-impl ActiveGame {
-    fn new_ttt() -> Self {
-        ActiveGame::TicTacToe {
-            game: AnyGame::InProgress {
-                board: Board::default(),
-                to_move: Player::X,
-                history: Vec::new(),
-            },
-            cursor: Position::Center,
-            events: vec![GameEvent::story("🎮 Game begins — X moves first")],
-        }
-    }
-}
-
 // ── Application struct ────────────────────────────────────────────────────────
 
-/// Standalone egui game application.
+/// Egui native-window frontend, driven by the WCAG AccessKit IR pipeline.
 ///
-/// All rendering uses the WCAG AccessKit IR pipeline:
-/// `game_state → *_to_verified_tree() → elicit_egui::render_tree()`
+/// All screens — lobby navigation and in-game — are expressed as
+/// `to_verified_tree() → EguiBackend::render()` calls so there is no
+/// frontend-specific rendering logic.
 struct GamesEguiApp {
-    /// Current active game / menu state.
-    active: ActiveGame,
-    /// Whether the event loop should exit on the next frame.
+    screen: EguiActiveScreen,
     should_quit: bool,
+    profile_service: ProfileService,
+    agent_library: AgentLibrary,
+    current_user: Option<User>,
+    settings: LobbySettings,
 
     // ── wgpu / egui-winit resources (None until `resumed`) ───────────────────
     window: Option<Arc<Window>>,
@@ -99,10 +98,16 @@ struct GamesEguiApp {
 }
 
 impl GamesEguiApp {
-    fn new() -> Self {
+    fn new_with_lobby(profile_service: ProfileService, agent_library: AgentLibrary) -> Self {
+        let screen =
+            EguiActiveScreen::ProfileSelect(ProfileSelectScreen::new(&profile_service));
         Self {
-            active: ActiveGame::Menu,
+            screen,
             should_quit: false,
+            profile_service,
+            agent_library,
+            current_user: None,
+            settings: LobbySettings::default(),
             window: None,
             egui_state: None,
             surface: None,
@@ -151,167 +156,344 @@ impl GamesEguiApp {
     // ── Keyboard input ────────────────────────────────────────────────────────
 
     /// Map egui key events to game actions for the current frame.
+    // ── Input handling ────────────────────────────────────────────────────────
+
+    /// Process all egui events for this frame, applying at most one transition.
     #[instrument(skip(self, ctx))]
-    fn handle_keys(&mut self, ctx: &egui::Context) {
-        ctx.input(|i| {
-            for ev in &i.events {
-                if let egui::Event::Key {
-                    key, pressed: true, ..
-                } = ev
-                {
-                    self.dispatch_key(*key);
-                }
+    fn handle_input(&mut self, ctx: &egui::Context) {
+        let events: Vec<egui::Event> = ctx.input(|i| i.events.clone());
+        for ev in &events {
+            let transition = self.transition_for_event(ev);
+            if !matches!(transition, ScreenTransition::Stay) {
+                self.apply_transition(transition);
+                break;
             }
-        });
+        }
     }
 
-    fn dispatch_key(&mut self, key: Key) {
-        match &mut self.active {
-            ActiveGame::Menu => match key {
-                Key::T => self.active = ActiveGame::new_ttt(),
-                Key::Q | Key::Escape => self.should_quit = true,
-                _ => {}
-            },
-            ActiveGame::TicTacToe {
-                game,
-                cursor,
-                events,
-            } => {
-                match key {
-                    // Cursor movement
-                    Key::ArrowUp | Key::K | Key::W => {
-                        *cursor = cursor_up(*cursor);
-                    }
-                    Key::ArrowDown | Key::J | Key::S => {
-                        *cursor = cursor_down(*cursor);
-                    }
-                    Key::ArrowLeft | Key::H | Key::A => {
-                        *cursor = cursor_left(*cursor);
-                    }
-                    Key::ArrowRight | Key::L | Key::D => {
-                        *cursor = cursor_right(*cursor);
-                    }
-                    // Place piece
-                    Key::Enter | Key::Space => {
-                        let pos = *cursor;
-                        let cur_game = std::mem::replace(
-                            game,
-                            AnyGame::Setup {
-                                board: Board::default(),
-                            },
-                        );
-                        let mover = cur_game.to_move();
-                        match cur_game.make_move_action(strictly_tictactoe::action::Move::new(
-                            mover.unwrap_or(Player::X),
-                            pos,
-                        )) {
-                            Ok(next) => {
-                                let player = if mover == Some(Player::X) { "X" } else { "O" };
-                                events.push(GameEvent::story(format!(
-                                    "  {} {player} plays {pos}",
-                                    if player == "X" { "✕" } else { "◯" },
-                                    pos = pos.label(),
-                                )));
-                                if next.is_over() {
-                                    if let Some(winner) = next.winner() {
-                                        events.push(GameEvent::result(format!(
-                                            "🏆 {winner:?} wins!"
-                                        )));
-                                    } else {
-                                        events
-                                            .push(GameEvent::result("🤝 Draw — the board is full"));
-                                    }
-                                }
-                                *game = next;
-                            }
-                            Err(e) => {
-                                warn!(error = %e, "Illegal move");
-                                events.push(GameEvent::story(format!("⚠ {e}")));
-                                *game = AnyGame::InProgress {
-                                    board: Board::default(),
-                                    to_move: Player::X,
-                                    history: Vec::new(),
-                                };
-                            }
+    /// Compute the `ScreenTransition` produced by a single egui event.
+    fn transition_for_event(&mut self, ev: &egui::Event) -> ScreenTransition {
+        let profile_service = &self.profile_service;
+        match &mut self.screen {
+            EguiActiveScreen::TicTacToe { game, cursor, events } => {
+                ttt_handle_egui_key(game, cursor, events, ev)
+            }
+            EguiActiveScreen::ProfileSelect(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+            EguiActiveScreen::MainLobby(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+            EguiActiveScreen::GameSelect(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+            EguiActiveScreen::AgentSelect(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+            EguiActiveScreen::BlackjackSetup(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+            EguiActiveScreen::StatsView(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+            EguiActiveScreen::Settings(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+            EguiActiveScreen::InGame(s) => egui_ev_to_key(ev)
+                .map(|k| s.handle_key(k, profile_service))
+                .unwrap_or(ScreenTransition::Stay),
+        }
+    }
+
+    /// Apply a `ScreenTransition`, updating `self.screen` and related state.
+    fn apply_transition(&mut self, transition: ScreenTransition) {
+        match transition {
+            ScreenTransition::Stay => {}
+
+            ScreenTransition::Quit => {
+                self.should_quit = true;
+            }
+
+            ScreenTransition::GoToProfileSelect => {
+                self.screen = EguiActiveScreen::ProfileSelect(
+                    ProfileSelectScreen::new(&self.profile_service),
+                );
+            }
+
+            ScreenTransition::GoToMainLobby => {
+                // Extract settings if leaving the settings screen.
+                if let EguiActiveScreen::Settings(s) = &self.screen {
+                    self.settings = s.settings();
+                }
+                // Extract the newly selected user if leaving profile select.
+                if let EguiActiveScreen::ProfileSelect(s) = &self.screen {
+                    if let Some(user_id) = s.selected_user_id().as_deref() {
+                        let handle = tokio::runtime::Handle::current();
+                        if let Ok(Some(user)) = tokio::task::block_in_place(|| {
+                            handle.block_on(
+                                self.profile_service.repository().get_user_by_id(user_id),
+                            )
+                        }) {
+                            self.current_user = Some(user);
                         }
                     }
-                    // New game
-                    Key::N => {
-                        self.active = ActiveGame::new_ttt();
-                    }
-                    // Back to menu
-                    Key::Escape => {
-                        self.active = ActiveGame::Menu;
-                    }
-                    Key::Q => self.should_quit = true,
-                    _ => {}
                 }
+                if let Some(user) = &self.current_user {
+                    self.screen = EguiActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                        user.clone(),
+                        self.settings.selected_game,
+                        &self.profile_service,
+                    ));
+                } else {
+                    self.screen = EguiActiveScreen::ProfileSelect(
+                        ProfileSelectScreen::new(&self.profile_service),
+                    );
+                }
+            }
+
+            ScreenTransition::GoToGameSelect => {
+                self.screen = EguiActiveScreen::GameSelect(GameSelectScreen::new(
+                    self.settings.selected_game,
+                ));
+            }
+
+            ScreenTransition::GameSelected { game } => {
+                self.settings.selected_game = game;
+                self.apply_transition(ScreenTransition::GoToMainLobby);
+            }
+
+            ScreenTransition::GoToAgentSelect => {
+                self.screen =
+                    EguiActiveScreen::AgentSelect(AgentSelectScreen::new(&self.agent_library));
+            }
+
+            ScreenTransition::GoToStatsView => {
+                if let Some(user) = &self.current_user {
+                    self.screen = EguiActiveScreen::StatsView(StatsViewScreen::new(
+                        user.clone(),
+                        &self.profile_service,
+                    ));
+                }
+            }
+
+            ScreenTransition::GoToSettings => {
+                self.screen =
+                    EguiActiveScreen::Settings(SettingsScreen::new(self.settings));
+            }
+
+            ScreenTransition::GoToInGame { agent_name } => {
+                if self.settings.selected_game == GameType::TicTacToe {
+                    self.screen = EguiActiveScreen::TicTacToe {
+                        game: AnyGame::InProgress {
+                            board: Board::default(),
+                            to_move: Player::X,
+                            history: Vec::new(),
+                        },
+                        cursor: Position::Center,
+                        events: vec![GameEvent::story(format!(
+                            "🎮 Game begins vs {agent_name}"
+                        ))],
+                    };
+                } else {
+                    self.screen =
+                        EguiActiveScreen::InGame(InGameScreen::new(agent_name));
+                }
+            }
+
+            ScreenTransition::GoToBlackjackSetup => {
+                let name = self
+                    .current_user
+                    .as_ref()
+                    .map(|u| u.display_name().clone())
+                    .unwrap_or_else(|| "Player".to_string());
+                self.screen = EguiActiveScreen::BlackjackSetup(BlackjackSetupScreen::new(
+                    name,
+                    &self.agent_library,
+                ));
+            }
+
+            ScreenTransition::GoToBlackjackTable { .. } => {
+                // Async multi-player session not yet implemented in egui frontend.
+                self.screen = EguiActiveScreen::InGame(InGameScreen::new(
+                    "Blackjack Table".to_string(),
+                ));
             }
         }
     }
 
     // ── Per-frame render ──────────────────────────────────────────────────────
 
-    /// Called once per frame inside the egui context.
+    /// Called once per frame: process input then render the current screen.
     ///
-    /// The WCAG IR pipeline: `game_state → *_to_verified_tree() → render_tree(ui, …)`.
+    /// All screens are expressed as `to_verified_tree() → EguiBackend::render()`
+    /// so no frontend-specific widget code lives here.
     #[instrument(skip(self, ui))]
     fn render_ui(&mut self, ui: &mut egui::Ui) {
-        let ctx = ui.ctx().clone();
-        self.handle_keys(&ctx);
+        use elicit_egui::EguiBackend;
+        use elicit_ui::{UiTreeRenderer as _, Viewport};
 
-        match &self.active {
-            ActiveGame::Menu => {
-                render_menu(ui);
+        let ctx = ui.ctx().clone();
+        self.handle_input(&ctx);
+
+        let size = ui.available_size();
+        let viewport = Viewport::new(size.x as u32, size.y as u32);
+
+        match &self.screen {
+            EguiActiveScreen::TicTacToe { game, cursor, events } => {
+                let _proof = render_ttt_egui(ui, game, cursor, events);
             }
-            ActiveGame::TicTacToe {
-                game,
-                cursor,
-                events,
-            } => {
-                render_ttt_egui(ui, game, cursor, events);
+            screen => {
+                let tree = match screen {
+                    EguiActiveScreen::ProfileSelect(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::MainLobby(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::GameSelect(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::AgentSelect(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::BlackjackSetup(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::StatsView(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::Settings(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::InGame(s) => s.to_verified_tree(viewport),
+                    EguiActiveScreen::TicTacToe { .. } => unreachable!(),
+                };
+                let backend = EguiBackend::new();
+                match backend.render(&tree) {
+                    Ok((widget, _stats, _proof)) => widget(ui),
+                    Err(e) => {
+                        error!(error = %e, "EguiBackend render failed");
+                        ui.label(format!("Render error: {e}"));
+                    }
+                }
             }
         }
     }
 }
 
-// ── IR render helpers ─────────────────────────────────────────────────────────
+// ── Input helpers ──────────────────────────────────────────────────────────────
 
-/// Render the main menu via the IR pipeline.
+/// Convert an egui key event to a crossterm [`KeyEvent`] for dispatch to lobby screens.
 ///
-/// Builds a minimal one-node `VerifiedTree` containing the help text and
-/// drives `elicit_egui::render_tree` — same pattern as game renders.
-#[instrument(skip(ui))]
-fn render_menu(ui: &mut egui::Ui) {
-    // Build a trivial verified tree for the menu screen.
-    use accesskit::{Node, NodeId, Role};
-    use elicit_ui::{VerifiedTree, Viewport};
-
-    let size = ui.available_size();
-    let vp = Viewport::new(size.x as u32, size.y as u32);
-
-    let root_id = NodeId::from(1u64);
-    let mut root = Node::new(Role::Window);
-    root.set_label("Strictly Games");
-    root.set_description("T — Tic-tac-toe   |   Q/Esc — quit");
-
-    let mut nodes = std::collections::BTreeMap::new();
-    nodes.insert(root_id, root);
-    let tree = VerifiedTree::from_parts(nodes, root_id, vp);
-    let (_stats, _clicked) = elicit_egui::render_tree(ui, tree.nodes(), tree.root());
-
-    // Overlay friendly text directly (egui is immediate mode).
-    ui.centered_and_justified(|ui| {
-        ui.vertical_centered(|ui| {
-            ui.add_space(80.0);
-            ui.heading("Strictly Games");
-            ui.add_space(20.0);
-            ui.label("T — Tic-tac-toe");
-            ui.add_space(40.0);
-            ui.label("Q / Esc — quit");
-        });
-    });
+/// Returns `None` for events that don't correspond to a lobby action
+/// (mouse, scroll, IME, etc.).
+fn egui_ev_to_key(ev: &egui::Event) -> Option<KeyEvent> {
+    let (key, modifiers) = match ev {
+        egui::Event::Key {
+            key,
+            pressed: true,
+            modifiers,
+            ..
+        } => (*key, *modifiers),
+        _ => return None,
+    };
+    use egui::Key::*;
+    let code = match key {
+        ArrowUp => KeyCode::Up,
+        ArrowDown => KeyCode::Down,
+        ArrowLeft => KeyCode::Left,
+        ArrowRight => KeyCode::Right,
+        Enter => KeyCode::Enter,
+        Escape => KeyCode::Esc,
+        Backspace => KeyCode::Backspace,
+        Space => KeyCode::Char(' '),
+        A => KeyCode::Char(if modifiers.shift { 'A' } else { 'a' }),
+        B => KeyCode::Char(if modifiers.shift { 'B' } else { 'b' }),
+        N => KeyCode::Char(if modifiers.shift { 'N' } else { 'n' }),
+        Q => KeyCode::Char(if modifiers.shift { 'Q' } else { 'q' }),
+        S => KeyCode::Char(if modifiers.shift { 'S' } else { 's' }),
+        T => KeyCode::Char(if modifiers.shift { 'T' } else { 't' }),
+        _ => return None,
+    };
+    Some(KeyEvent {
+        code,
+        modifiers: KeyModifiers::NONE,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    })
 }
+
+/// Handle an egui event while the TTT game is active.
+///
+/// Converts movement / action keys to game moves and returns a
+/// [`ScreenTransition`] for Escape / Quit.
+fn ttt_handle_egui_key(
+    game: &mut AnyGame,
+    cursor: &mut Position,
+    events: &mut Vec<GameEvent>,
+    ev: &egui::Event,
+) -> ScreenTransition {
+    let egui::Event::Key {
+        key,
+        pressed: true,
+        ..
+    } = ev
+    else {
+        return ScreenTransition::Stay;
+    };
+    use egui::Key::*;
+    match key {
+        ArrowUp | K | W => {
+            *cursor = cursor_up(*cursor);
+        }
+        ArrowDown | J => {
+            *cursor = cursor_down(*cursor);
+        }
+        ArrowLeft | H | A => {
+            *cursor = cursor_left(*cursor);
+        }
+        ArrowRight | L | D => {
+            *cursor = cursor_right(*cursor);
+        }
+        Enter | Space => {
+            let pos = *cursor;
+            let cur_game = std::mem::replace(game, AnyGame::Setup { board: Board::default() });
+            let mover = cur_game.to_move();
+            match cur_game.make_move_action(strictly_tictactoe::action::Move::new(
+                mover.unwrap_or(Player::X),
+                pos,
+            )) {
+                Ok(next) => {
+                    let player = if mover == Some(Player::X) { "X" } else { "O" };
+                    events.push(GameEvent::story(format!(
+                        "  {} {player} plays {pos}",
+                        if player == "X" { "✕" } else { "◯" },
+                        pos = pos.label(),
+                    )));
+                    if next.is_over() {
+                        if let Some(winner) = next.winner() {
+                            events.push(GameEvent::result(format!("🏆 {winner:?} wins!")));
+                        } else {
+                            events.push(GameEvent::result("🤝 Draw — the board is full"));
+                        }
+                    }
+                    *game = next;
+                }
+                Err(e) => {
+                    warn!(error = %e, "Illegal move");
+                    events.push(GameEvent::story(format!("⚠ {e}")));
+                    *game = AnyGame::InProgress {
+                        board: Board::default(),
+                        to_move: Player::X,
+                        history: Vec::new(),
+                    };
+                }
+            }
+        }
+        N => {
+            *game = AnyGame::InProgress {
+                board: Board::default(),
+                to_move: Player::X,
+                history: Vec::new(),
+            };
+            *cursor = Position::Center;
+            events.clear();
+            events.push(GameEvent::story("🎮 New game — X moves first"));
+        }
+        Escape => return ScreenTransition::GoToMainLobby,
+        Q => return ScreenTransition::Quit,
+        _ => {}
+    }
+    ScreenTransition::Stay
+}
+
+// ── IR render helpers ──────────────────────────────────────────────────────────
 
 /// Gate function: renders TTT state through the WCAG IR pipeline into `ui`.
 ///
@@ -330,16 +512,16 @@ fn render_ttt_egui(
     let size = ui.available_size();
     let vp = Viewport::new(size.x as u32, size.y as u32);
 
-    let empty_nodes: &[_] = &[];
-    let empty_edges: &[_] = &[];
+    let ttt_nodes = tictactoe_nodes();
+    let ttt_edges = tictactoe_edges();
     let log = EventLog {
         events,
         dialogue: &[],
     };
     let graph = GraphParams {
-        nodes: empty_nodes,
-        edges: empty_edges,
-        active: None,
+        nodes: &ttt_nodes,
+        edges: &ttt_edges,
+        active: tictactoe_active(game),
     };
 
     let tree = ttt_to_verified_tree(
@@ -630,11 +812,11 @@ impl ApplicationHandler for GamesEguiApp {
 /// # Errors
 ///
 /// Returns an error if the winit event loop fails to start.
-#[instrument]
-pub fn run_egui() -> anyhow::Result<()> {
+#[instrument(skip(profile_service, agent_library))]
+pub fn run_egui(profile_service: ProfileService, agent_library: AgentLibrary) -> anyhow::Result<()> {
     info!("Starting egui frontend");
     let event_loop = EventLoop::new()?;
-    let mut app = GamesEguiApp::new();
+    let mut app = GamesEguiApp::new_with_lobby(profile_service, agent_library);
     event_loop.run_app(&mut app)?;
     Ok(())
 }

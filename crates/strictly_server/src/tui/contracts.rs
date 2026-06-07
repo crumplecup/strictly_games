@@ -170,7 +170,7 @@ pub fn verify_label_contained(
 
 fn check_labels(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
     match node {
-        TuiNode::Widget { widget } => {
+        TuiNode::Widget { widget, .. } => {
             if let WidgetJson::Paragraph { block: Some(b), .. } = widget.as_ref()
                 && let Some(title) = &b.title
             {
@@ -233,7 +233,7 @@ pub fn verify_text_wrapped(node: &TuiNode) -> Result<Established<TextWrapped>, L
 
 fn check_wrapping(node: &TuiNode) -> Result<(), LayoutError> {
     match node {
-        TuiNode::Widget { widget } => {
+        TuiNode::Widget { widget, .. } => {
             if let WidgetJson::Paragraph {
                 text: ParagraphText::Rich(_),
                 wrap,
@@ -277,7 +277,7 @@ pub fn verify_area_sufficient(
 
 fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
     match node {
-        TuiNode::Widget { widget } => {
+        TuiNode::Widget { widget, .. } => {
             if let WidgetJson::Paragraph {
                 text: ParagraphText::Rich(text),
                 block,
@@ -415,6 +415,7 @@ pub fn render_resize_prompt(frame: &mut Frame<'_>, error: &LayoutError) {
                 padding: None,
             }),
         }),
+        proofs: Default::default(),
     };
     render_node(frame, frame.area(), &node);
 }

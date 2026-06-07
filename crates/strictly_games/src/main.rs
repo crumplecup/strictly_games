@@ -9,7 +9,7 @@ mod cli;
 
 use anyhow::Result;
 use clap::Parser;
-use cli::{Cli, Command};
+use cli::{Cli, Command, FrontendMode};
 use strictly_server::{AgentConfig, AnyGame, Board, GameAgent, GameServer, SessionManager};
 use tracing::{error, info, instrument, warn};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -31,14 +31,22 @@ async fn main() -> Result<()> {
             run_http_server(host, port).await
         }
         Command::Tui {
+            frontend,
             db_path,
             agents_dir,
             port,
-        } => {
-            // TUI (lobby) has its own logging setup
-            let agent_config = std::path::PathBuf::from("agent_config.toml");
-            run_lobby(db_path, agents_dir, port, agent_config).await
-        }
+        } => match frontend {
+            FrontendMode::Ratatui => {
+                let agent_config = std::path::PathBuf::from("agent_config.toml");
+                run_lobby(db_path, agents_dir, port, agent_config).await
+            }
+            FrontendMode::Egui => {
+                run_egui_lobby(db_path, agents_dir).await
+            }
+            FrontendMode::Leptos => {
+                run_leptos_lobby(db_path, agents_dir, port).await
+            }
+        },
         Command::Agent {
             config,
             server_url,
@@ -267,6 +275,64 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
     result?;
 
     Ok(())
+}
+
+/// Run the leptos HTTP frontend with the full lobby.
+#[instrument(skip_all, fields(db_path = %db_path, port))]
+async fn run_leptos_lobby(
+    db_path: String,
+    agents_dir: Option<std::path::PathBuf>,
+    port: u16,
+) -> Result<()> {
+    use strictly_server::{AgentLibrary, GameRepository, ProfileService};
+
+    init_logging();
+
+    let repository = GameRepository::open(&db_path)?;
+    let profile_service = ProfileService::new(repository);
+
+    let agent_library = if let Some(dir) = agents_dir {
+        AgentLibrary::scan(&dir).unwrap_or_else(|e| {
+            warn!(error = %e, "Failed to scan agent directory, using empty library");
+            AgentLibrary::empty()
+        })
+    } else {
+        AgentLibrary::scan_default().unwrap_or_else(|e| {
+            warn!(error = %e, "Failed to scan default agents, using empty library");
+            AgentLibrary::empty()
+        })
+    };
+
+    info!(port, "Starting leptos frontend at http://127.0.0.1:{port}/lobby");
+    strictly_server::run_leptos(profile_service, agent_library, port).await
+}
+
+/// Run the egui native-window frontend with the full lobby.
+#[instrument(skip_all, fields(db_path = %db_path))]
+async fn run_egui_lobby(
+    db_path: String,
+    agents_dir: Option<std::path::PathBuf>,
+) -> Result<()> {
+    use strictly_server::{AgentLibrary, GameRepository, ProfileService};
+
+    init_logging();
+
+    let repository = GameRepository::open(&db_path)?;
+    let profile_service = ProfileService::new(repository);
+
+    let agent_library = if let Some(dir) = agents_dir {
+        AgentLibrary::scan(&dir).unwrap_or_else(|e| {
+            warn!(error = %e, "Failed to scan agent directory, using empty library");
+            AgentLibrary::empty()
+        })
+    } else {
+        AgentLibrary::scan_default().unwrap_or_else(|e| {
+            warn!(error = %e, "Failed to scan default agents, using empty library");
+            AgentLibrary::empty()
+        })
+    };
+
+    strictly_server::run_egui(profile_service, agent_library).map_err(Into::into)
 }
 
 /// Run the lobby TUI

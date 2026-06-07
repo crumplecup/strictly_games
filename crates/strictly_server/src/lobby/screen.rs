@@ -1,7 +1,7 @@
 //! Screen trait and transition type for the lobby state machine.
 
 use crossterm::event::KeyEvent;
-use ratatui::Frame;
+use elicit_ui::{VerifiedTree, Viewport};
 
 use crate::ProfileService;
 use crate::lobby::settings::{GameType, PlayerSlot};
@@ -49,11 +49,14 @@ pub enum ScreenTransition {
 
 /// Trait implemented by each screen in the lobby state machine.
 ///
-/// Each screen owns its own state, renders its UI, and handles key events.
-/// The controller calls these methods in the event loop.
+/// Each screen owns its own state, produces a [`VerifiedTree`] for any
+/// rendering backend, and handles key events to drive state transitions.
 pub trait Screen {
-    /// Renders the screen into the provided [`Frame`].
-    fn render(&self, frame: &mut Frame, profile_service: &ProfileService);
+    /// Produce the AccessKit IR tree for this screen's current state.
+    ///
+    /// All three frontends (ratatui, egui, leptos) call this and pass the
+    /// resulting tree to their respective backends.
+    fn to_verified_tree(&self, viewport: Viewport) -> VerifiedTree;
 
     /// Handles a key event and returns the resulting [`ScreenTransition`].
     fn handle_key(&mut self, key: KeyEvent, profile_service: &ProfileService) -> ScreenTransition;

@@ -1,15 +1,12 @@
 //! Settings screen — configure lobby preferences such as who goes first.
 
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-};
+use elicit_ui::{VerifiedTree, Viewport};
+use ratatui::widgets::ListState;
 use tracing::{debug, info, instrument};
 
 use crate::ProfileService;
+use crate::lobby::lobby_ir::settings_to_verified_tree;
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::lobby::settings::LobbySettings;
 
@@ -81,58 +78,13 @@ impl SettingsScreen {
 }
 
 impl Screen for SettingsScreen {
-    #[instrument(skip(self, frame, _profile_service))]
-    fn render(&self, frame: &mut Frame, _profile_service: &ProfileService) {
-        let area = frame.area();
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(5),
-                Constraint::Length(3),
-            ])
-            .split(area);
-
-        let title = Paragraph::new("Settings")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(title, chunks[0]);
-
-        let checkbox = |checked: bool| if checked { "[✓]" } else { "[ ]" };
-
-        let items = vec![
-            ListItem::new(format!(
-                "Who Goes First?    [ {} ]",
-                self.settings.first_player.label()
-            )),
-            ListItem::new(format!(
-                "Show Typestate Graph   {}",
-                checkbox(self.settings.show_typestate_graph)
-            )),
-        ];
-
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Preferences"))
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("> ");
-
-        let mut list_state = self.list_state;
-        frame.render_stateful_widget(list, chunks[1], &mut list_state);
-
-        let help = Paragraph::new("↑↓: Navigate | ←→ / Enter / Space: Toggle | Esc: Back")
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(help, chunks[2]);
+    #[instrument(skip(self))]
+    fn to_verified_tree(&self, viewport: Viewport) -> VerifiedTree {
+        settings_to_verified_tree(
+            &self.settings,
+            self.list_state.selected().unwrap_or(0),
+            viewport,
+        )
     }
 
     #[instrument(skip(self, key, _profile_service))]

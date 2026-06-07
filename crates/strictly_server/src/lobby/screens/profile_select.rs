@@ -2,14 +2,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 use derive_getters::Getters;
-use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-};
+use elicit_ui::{VerifiedTree, Viewport};
+use ratatui::widgets::ListState;
 use tracing::{debug, info, instrument};
 
+use crate::lobby::lobby_ir::profile_select_to_verified_tree;
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::{ProfileService, User};
 
@@ -132,80 +129,16 @@ impl ProfileSelectScreen {
 }
 
 impl Screen for ProfileSelectScreen {
-    #[instrument(skip(self, frame, _profile_service))]
-    fn render(&self, frame: &mut Frame, _profile_service: &ProfileService) {
-        let area = frame.area();
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(5),
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Length(3),
-            ])
-            .split(area);
-
-        let title = Paragraph::new("Select or Create Profile")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(title, chunks[0]);
-
-        let items: Vec<ListItem> = self
-            .users
-            .iter()
-            .map(|u| ListItem::new(u.display_name().as_str()))
-            .collect();
-
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Profiles"))
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("> ");
-
-        let mut list_state = self.list_state;
-        frame.render_stateful_widget(list, chunks[1], &mut list_state);
-
-        let input_title = if self.input_mode {
-            "New Profile Name (Enter to confirm, Esc to cancel)"
-        } else {
-            "Press 'n' to create new profile"
-        };
-        let input_style = if self.input_mode {
-            Style::default().fg(Color::White)
-        } else {
-            Style::default().fg(Color::DarkGray)
-        };
-        let input = Paragraph::new(self.new_name_input.as_str())
-            .style(input_style)
-            .block(Block::default().borders(Borders::ALL).title(input_title));
-        frame.render_widget(input, chunks[2]);
-
-        let error_text = self.error_message.as_deref().unwrap_or("");
-        let error = Paragraph::new(error_text)
-            .style(Style::default().fg(Color::Red))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(error, chunks[3]);
-
-        let help_text = if self.input_mode {
-            "Type name | Enter: Confirm | Esc: Cancel"
-        } else {
-            "↑↓: Select | Enter: Confirm | n: New | q: Quit"
-        };
-        let help = Paragraph::new(help_text)
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(help, chunks[4]);
+    #[instrument(skip(self))]
+    fn to_verified_tree(&self, viewport: Viewport) -> VerifiedTree {
+        profile_select_to_verified_tree(
+            &self.users,
+            self.list_state.selected(),
+            self.input_mode,
+            &self.new_name_input,
+            self.error_message.as_deref(),
+            viewport,
+        )
     }
 
     #[instrument(skip(self, key, profile_service))]

@@ -2,14 +2,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 use derive_getters::Getters;
-use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-};
+use elicit_ui::{VerifiedTree, Viewport};
+use ratatui::widgets::ListState;
 use tracing::{debug, info, instrument};
 
+use crate::lobby::lobby_ir::agent_select_to_verified_tree;
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::{AgentConfig, AgentLibrary, ProfileService};
 
@@ -76,60 +73,9 @@ impl AgentSelectScreen {
 }
 
 impl Screen for AgentSelectScreen {
-    #[instrument(skip(self, frame, _profile_service))]
-    fn render(&self, frame: &mut Frame, _profile_service: &ProfileService) {
-        let area = frame.area();
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(5),
-                Constraint::Length(3),
-            ])
-            .split(area);
-
-        let title = Paragraph::new("Select AI Opponent")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(title, chunks[0]);
-
-        let items: Vec<ListItem> = if self.agents.is_empty() {
-            vec![ListItem::new(
-                "No agents found — check your config directory",
-            )]
-        } else {
-            self.agents
-                .iter()
-                .map(|a| {
-                    let label =
-                        format!("{} ({:?} / {})", a.name(), a.llm_provider(), a.llm_model());
-                    ListItem::new(label)
-                })
-                .collect()
-        };
-
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Agents"))
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol("> ");
-
-        let mut list_state = self.list_state;
-        frame.render_stateful_widget(list, chunks[1], &mut list_state);
-
-        let help = Paragraph::new("↑↓: Select | Enter: Start Game | Esc: Back | q: Quit")
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
-        frame.render_widget(help, chunks[2]);
+    #[instrument(skip(self))]
+    fn to_verified_tree(&self, viewport: Viewport) -> VerifiedTree {
+        agent_select_to_verified_tree(&self.agents, self.list_state.selected(), viewport)
     }
 
     #[instrument(skip(self, key, _profile_service))]

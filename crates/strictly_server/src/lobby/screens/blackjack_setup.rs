@@ -12,14 +12,11 @@
 //! - `Esc` / `q` — cancel and return to the main lobby
 
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-};
+use elicit_ui::{VerifiedTree, Viewport};
+use ratatui::widgets::ListState;
 use tracing::{info, instrument};
 
+use crate::lobby::lobby_ir::blackjack_setup_to_verified_tree;
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::lobby::settings::{PlayerKind, PlayerSlot};
 use crate::{AgentConfig, AgentLibrary, ProfileService};
@@ -137,94 +134,15 @@ impl BlackjackSetupScreen {
 }
 
 impl Screen for BlackjackSetupScreen {
-    #[instrument(skip(self, frame, _profile_service))]
-    fn render(&self, frame: &mut Frame, _profile_service: &ProfileService) {
-        let area = frame.area();
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // title
-                Constraint::Length(3), // human seat
-                Constraint::Min(5),    // agent list
-                Constraint::Length(3), // status / help
-            ])
-            .split(area);
-
-        // ── Title ───────────────────────────────────────────────────────────
-        let title = Paragraph::new("♠  Blackjack Table Setup  ♠")
-            .alignment(Alignment::Center)
-            .style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .block(Block::default().borders(Borders::NONE));
-        frame.render_widget(title, chunks[0]);
-
-        // ── Human seat ──────────────────────────────────────────────────────
-        let seat_text = format!(
-            "  ✔  {} (You)   —   bankroll: {} chips",
-            self.human_name, DEFAULT_BANKROLL
-        );
-        let seat_widget = Paragraph::new(seat_text)
-            .style(Style::default().fg(Color::Cyan))
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(" Your Seat ")
-                    .border_style(Style::default().fg(Color::Cyan)),
-            );
-        frame.render_widget(seat_widget, chunks[1]);
-
-        // ── Agent list ──────────────────────────────────────────────────────
-        let items: Vec<ListItem> = self
-            .agents
-            .iter()
-            .enumerate()
-            .map(|(i, agent)| {
-                let check = if self.seated[i] { "✔" } else { "○" };
-                let color = if self.seated[i] {
-                    Color::Green
-                } else {
-                    Color::Gray
-                };
-                ListItem::new(format!("  {}  {}", check, agent.name()))
-                    .style(Style::default().fg(color))
-            })
-            .collect();
-
-        let agent_count_label = if self.agents.is_empty() {
-            " No agents in library ".to_string()
-        } else {
-            format!(
-                " Add AI Agents ({}/{} selected) ",
-                self.seated_count(),
-                MAX_AGENTS
-            )
-        };
-
-        let agent_list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(agent_count_label)
-                    .border_style(Style::default().fg(Color::Magenta)),
-            )
-            .highlight_style(
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD | Modifier::REVERSED),
-            );
-        frame.render_stateful_widget(agent_list, chunks[2], &mut self.list_state.clone());
-
-        // ── Help bar ────────────────────────────────────────────────────────
-        let help =
-            Paragraph::new("↑↓: Navigate  Space/Enter: Toggle agent  s: Start game  Esc/q: Back")
-                .alignment(Alignment::Center)
-                .style(Style::default().fg(Color::DarkGray))
-                .block(Block::default().borders(Borders::TOP));
-        frame.render_widget(help, chunks[3]);
+    #[instrument(skip(self))]
+    fn to_verified_tree(&self, viewport: Viewport) -> VerifiedTree {
+        blackjack_setup_to_verified_tree(
+            &self.human_name,
+            &self.agents,
+            &self.seated,
+            self.list_state.selected(),
+            viewport,
+        )
     }
 
     #[instrument(skip(self, _profile_service))]

@@ -89,20 +89,30 @@ impl LobbyController {
             ActiveScreen::ProfileSelect(ProfileSelectScreen::new(&self.profile_service));
 
         loop {
-            // Render current screen.
-            terminal.draw(|f| {
+            // Render current screen via IR pipeline: screen → VerifiedTree → RatatuiBackend → render_node.
+            {
                 use crate::lobby::screen::Screen;
-                match &screen {
-                    ActiveScreen::ProfileSelect(s) => s.render(f, &self.profile_service),
-                    ActiveScreen::MainLobby(s) => s.render(f, &self.profile_service),
-                    ActiveScreen::GameSelect(s) => s.render(f, &self.profile_service),
-                    ActiveScreen::AgentSelect(s) => s.render(f, &self.profile_service),
-                    ActiveScreen::BlackjackSetup(s) => s.render(f, &self.profile_service),
-                    ActiveScreen::StatsView(s) => s.render(f, &self.profile_service),
-                    ActiveScreen::InGame(s) => s.render(f, &self.profile_service),
-                    ActiveScreen::Settings(s) => s.render(f, &self.profile_service),
-                }
-            })?;
+                use elicit_ratatui::{RatatuiBackend, render_node};
+                use elicit_ui::{UiTreeRenderer as _, Viewport};
+
+                let size = terminal.size()?;
+                let viewport = Viewport::new(size.width as u32, size.height as u32);
+                let tree = match &screen {
+                    ActiveScreen::ProfileSelect(s) => s.to_verified_tree(viewport),
+                    ActiveScreen::MainLobby(s) => s.to_verified_tree(viewport),
+                    ActiveScreen::GameSelect(s) => s.to_verified_tree(viewport),
+                    ActiveScreen::AgentSelect(s) => s.to_verified_tree(viewport),
+                    ActiveScreen::BlackjackSetup(s) => s.to_verified_tree(viewport),
+                    ActiveScreen::StatsView(s) => s.to_verified_tree(viewport),
+                    ActiveScreen::InGame(s) => s.to_verified_tree(viewport),
+                    ActiveScreen::Settings(s) => s.to_verified_tree(viewport),
+                };
+                let backend = RatatuiBackend::new();
+                let (tui_node, _stats, _proof) = backend.render(&tree)?;
+                terminal.draw(|f| {
+                    render_node(f, f.area(), &tui_node);
+                })?;
+            }
 
             // Poll for input with short timeout to keep the loop responsive.
             if event::poll(Duration::from_millis(100))?

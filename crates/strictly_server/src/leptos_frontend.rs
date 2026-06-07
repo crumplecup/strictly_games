@@ -24,7 +24,7 @@ use std::sync::Arc;
 use axum::{
     Router,
     extract::{Query, State},
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Redirect},
     routing::get,
 };
 use elicit_leptos::LeptosRenderer;
@@ -41,10 +41,20 @@ use strictly_tictactoe::{Player, Position, TttDisplayMode};
 use crate::games::blackjack::BlackjackStateView;
 use crate::games::craps::CrapsStateView;
 use crate::games::tictactoe::AnyGame;
+use crate::lobby::lobby_ir::{
+    agent_select_to_verified_tree, main_lobby_to_verified_tree, profile_select_to_verified_tree,
+    settings_to_verified_tree, stats_view_to_verified_tree,
+};
+use crate::lobby::settings::{GameType, LobbySettings};
 use crate::tui::contracts::{BjUiConsistent, CrapsUiConsistent, TttUiConsistent};
 use crate::tui::game_ir::{
     EventLog, GraphParams, bj_to_verified_tree, craps_to_verified_tree, ttt_to_verified_tree,
 };
+use crate::tui::{
+    blackjack_active, blackjack_edges, blackjack_nodes, craps_active, craps_edges, craps_nodes,
+    tictactoe_active, tictactoe_edges, tictactoe_nodes,
+};
+use crate::{AgentLibrary, ProfileService, User};
 
 // ── IR render helpers ─────────────────────────────────────────────────────────
 
@@ -84,14 +94,16 @@ pub fn render_bj_html(
     display_mode: &BlackjackDisplayMode,
     viewport: Viewport,
 ) -> (String, Established<BjUiConsistent>) {
+    let bj_nodes = blackjack_nodes();
+    let bj_edges = blackjack_edges();
     let log = EventLog {
         events: &[],
         dialogue: &[],
     };
     let graph = GraphParams {
-        nodes: &[],
-        edges: &[],
-        active: None,
+        nodes: &bj_nodes,
+        edges: &bj_edges,
+        active: blackjack_active(&state.phase),
     };
     let tree = bj_to_verified_tree(state, display_mode, &[], &log, &[], &graph, viewport);
     let renderer = LeptosRenderer::html();
@@ -118,10 +130,12 @@ pub fn render_craps_html(
     log: &EventLog<'_>,
     viewport: Viewport,
 ) -> (String, Established<CrapsUiConsistent>) {
+    let craps_ns = craps_nodes();
+    let craps_es = craps_edges();
     let graph = GraphParams {
-        nodes: &[],
-        edges: &[],
-        active: None,
+        nodes: &craps_ns,
+        edges: &craps_es,
+        active: craps_active(&state.phase),
     };
     let tree = craps_to_verified_tree(state, display_mode, log, &graph, viewport);
     let renderer = LeptosRenderer::html();
@@ -151,22 +165,33 @@ pub struct LeptosAppState {
     pub blackjack: Arc<Mutex<Option<BlackjackStateView>>>,
     /// Latest craps snapshot (None = no session).
     pub craps: Arc<Mutex<Option<CrapsStateView>>>,
+
+    // ── Lobby state ───────────────────────────────────────────────────────────
+    /// Profile service for user accounts and stats.
+    pub profile_service: ProfileService,
+    /// Available AI agent configurations.
+    pub agent_library: AgentLibrary,
+    /// Currently logged-in user (None = profile not yet selected).
+    pub current_user: Arc<Mutex<Option<User>>>,
+    /// Selected game type.
+    pub selected_game: Arc<Mutex<GameType>>,
+    /// Lobby preferences.
+    pub lobby_settings: Arc<Mutex<LobbySettings>>,
 }
 
 impl LeptosAppState {
-    /// Create a fresh state with no active games.
-    pub fn new() -> Self {
+    /// Create a fresh state backed by the given lobby services.
+    pub fn new_with_lobby(profile_service: ProfileService, agent_library: AgentLibrary) -> Self {
         Self {
             ttt: Arc::new(Mutex::new(None)),
             blackjack: Arc::new(Mutex::new(None)),
             craps: Arc::new(Mutex::new(None)),
+            profile_service,
+            agent_library,
+            current_user: Arc::new(Mutex::new(None)),
+            selected_game: Arc::new(Mutex::new(GameType::default())),
+            lobby_settings: Arc::new(Mutex::new(LobbySettings::default())),
         }
-    }
-}
-
-impl Default for LeptosAppState {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -194,7 +219,7 @@ fn html_page(title: &str, body: &str) -> String {
 </head>
 <body>
   <nav>
-    <a href="/">Home</a>
+    <a href="/lobby">Lobby</a>
     <a href="/games/ttt">Tic-tac-toe</a>
     <a href="/games/blackjack">Blackjack</a>
     <a href="/games/craps">Craps</a>
@@ -206,7 +231,307 @@ fn html_page(title: &str, body: &str) -> String {
     )
 }
 
-// ── Route handlers ────────────────────────────────────────────────────────────
+// ── Lobby route helpers ───────────────────────────────────────────────────────
+
+/// Render a `VerifiedTree` to an HTML fragment via `LeptosRenderer`.
+fn render_lobby_html(tree: elicit_ui::VerifiedTree) -> String {
+    let renderer = LeptosRenderer::html();
+    match renderer.render(&tree) {
+        Ok((html, _stats, _proof)) => html,
+        Err(e) => {
+            error!(error = %e, "LeptosRenderer failed for lobby screen");
+            format!("<p class='error'>Render error: {e}</p>")
+        }
+    }
+}
+
+/// Helper: load users from profile service (blocking).
+fn load_users(state: &LeptosAppState) -> Vec<User> {
+    let handle = tokio::runtime::Handle::current();
+    tokio::task::block_in_place(|| {
+        handle.block_on(state.profile_service.repository().list_users())
+    })
+    .unwrap_or_default()
+}
+
+// ── Lobby route handlers ──────────────────────────────────────────────────────
+
+/// `GET /lobby` — profile selection page.
+#[instrument(skip(state))]
+async fn handle_lobby(State(state): State<LeptosAppState>) -> Html<String> {
+    let users = load_users(&state);
+    let selected = state.current_user.lock().await;
+    let selected_idx = selected.as_ref().and_then(|u| {
+        users.iter().position(|user| user.id() == u.id())
+    });
+    drop(selected);
+
+    let tree = profile_select_to_verified_tree(
+        &users,
+        selected_idx,
+        false,
+        "",
+        None,
+        default_viewport(),
+    );
+    let fragment = render_lobby_html(tree);
+
+    let mut links = String::from("<ul>");
+    for user in &users {
+        links.push_str(&format!(
+            "<li><a href='/lobby/select?id={}'>{}</a></li>",
+            user.id(),
+            user.display_name()
+        ));
+    }
+    links.push_str("</ul>");
+    let create_form = r#"<form method="get" action="/lobby/create">
+  <label>New profile: <input name="name" required/></label>
+  <button type="submit">Create</button>
+</form>"#;
+
+    Html(html_page(
+        "Select Profile",
+        &format!("{fragment}{links}{create_form}"),
+    ))
+}
+
+/// `GET /lobby/select?id=USER_ID` — select an existing profile.
+#[derive(Debug, Deserialize)]
+struct SelectParams {
+    id: String,
+}
+#[instrument(skip(state))]
+async fn handle_lobby_select(
+    State(state): State<LeptosAppState>,
+    Query(p): Query<SelectParams>,
+) -> impl IntoResponse {
+    let handle = tokio::runtime::Handle::current();
+    let user = tokio::task::block_in_place(|| {
+        handle.block_on(state.profile_service.repository().get_user_by_id(&p.id))
+    })
+    .ok()
+    .flatten();
+    if let Some(user) = user {
+        *state.current_user.lock().await = Some(user);
+    }
+    Redirect::to("/lobby/main")
+}
+
+/// `GET /lobby/create?name=NAME` — create a new profile and select it.
+#[derive(Debug, Deserialize)]
+struct CreateParams {
+    name: String,
+}
+#[instrument(skip(state))]
+async fn handle_lobby_create(
+    State(state): State<LeptosAppState>,
+    Query(p): Query<CreateParams>,
+) -> impl IntoResponse {
+    let handle = tokio::runtime::Handle::current();
+    let user = tokio::task::block_in_place(|| {
+        handle.block_on(state.profile_service.get_or_create_user(p.name))
+    })
+    .ok();
+    if let Some(user) = user {
+        *state.current_user.lock().await = Some(user);
+    }
+    Redirect::to("/lobby/main")
+}
+
+/// `GET /lobby/main` — main lobby menu.
+#[instrument(skip(state))]
+async fn handle_lobby_main(State(state): State<LeptosAppState>) -> Html<String> {
+    let user = state.current_user.lock().await.clone();
+    let Some(user) = user else {
+        return Html(html_page(
+            "Lobby",
+            "<p>No profile selected. <a href='/lobby'>Choose one here</a>.</p>",
+        ));
+    };
+    let game = *state.selected_game.lock().await;
+    let handle = tokio::runtime::Handle::current();
+    let stats = tokio::task::block_in_place(|| {
+        handle.block_on(state.profile_service.get_stats(user.id()))
+    })
+    .ok();
+
+    let tree = main_lobby_to_verified_tree(&user, stats.as_ref(), game, 0, default_viewport());
+    let fragment = render_lobby_html(tree);
+
+    let actions = format!(
+        r#"<ul>
+  <li><a href='/lobby/agents'>Play Game ({game})</a></li>
+  <li><a href='/lobby/game-select'>Select Game</a></li>
+  <li><a href='/lobby/stats'>View Statistics</a></li>
+  <li><a href='/lobby'>Change Profile</a></li>
+  <li><a href='/lobby/settings'>Settings</a></li>
+</ul>"#,
+        game = game.label()
+    );
+    Html(html_page("Strictly Games — Lobby", &format!("{fragment}{actions}")))
+}
+
+/// `GET /lobby/game-select` — game selection page.
+#[instrument(skip(state))]
+async fn handle_lobby_game_select(State(state): State<LeptosAppState>) -> Html<String> {
+    let current = *state.selected_game.lock().await;
+    let idx = GameType::all().iter().position(|&g| g == current).unwrap_or(0);
+    let tree = crate::lobby::lobby_ir::game_select_to_verified_tree(idx, default_viewport());
+    let fragment = render_lobby_html(tree);
+
+    let links: String = GameType::all()
+        .iter()
+        .map(|g| {
+            format!(
+                "<li><a href='/lobby/game-select/set?game={}'>{}</a></li>",
+                g.id(),
+                g.label()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    Html(html_page(
+        "Select Game",
+        &format!("{fragment}<ul>{links}</ul>"),
+    ))
+}
+
+/// `GET /lobby/game-select/set?game=GAME_ID` — set selected game.
+#[derive(Debug, Deserialize)]
+struct SetGameParams {
+    game: String,
+}
+#[instrument(skip(state))]
+async fn handle_lobby_set_game(
+    State(state): State<LeptosAppState>,
+    Query(p): Query<SetGameParams>,
+) -> impl IntoResponse {
+    let game = match p.game.as_str() {
+        "blackjack" => GameType::Blackjack,
+        "craps" => GameType::Craps,
+        _ => GameType::TicTacToe,
+    };
+    *state.selected_game.lock().await = game;
+    Redirect::to("/lobby/main")
+}
+
+/// `GET /lobby/settings` — settings page.
+#[instrument(skip(state))]
+async fn handle_lobby_settings(State(state): State<LeptosAppState>) -> Html<String> {
+    let settings = *state.lobby_settings.lock().await;
+    let tree = settings_to_verified_tree(&settings, 0, default_viewport());
+    let fragment = render_lobby_html(tree);
+
+    let actions = format!(
+        r#"<ul>
+  <li>Who Goes First: {} <a href='/lobby/settings/toggle?s=first_player'>[toggle]</a></li>
+  <li>Show Typestate Graph: {} <a href='/lobby/settings/toggle?s=typestate_graph'>[toggle]</a></li>
+</ul>
+<a href='/lobby/main'>Back to Lobby</a>"#,
+        settings.first_player.label(),
+        if settings.show_typestate_graph { "✓" } else { "○" }
+    );
+    Html(html_page("Settings", &format!("{fragment}{actions}")))
+}
+
+/// `GET /lobby/settings/toggle?s=SETTING` — toggle a setting.
+#[derive(Debug, Deserialize)]
+struct ToggleParams {
+    s: String,
+}
+#[instrument(skip(state))]
+async fn handle_lobby_settings_toggle(
+    State(state): State<LeptosAppState>,
+    Query(p): Query<ToggleParams>,
+) -> impl IntoResponse {
+    let mut settings = state.lobby_settings.lock().await;
+    match p.s.as_str() {
+        "first_player" => settings.first_player = settings.first_player.toggle(),
+        "typestate_graph" => settings.show_typestate_graph = !settings.show_typestate_graph,
+        _ => {}
+    }
+    Redirect::to("/lobby/settings")
+}
+
+/// `GET /lobby/stats` — stats view.
+#[instrument(skip(state))]
+async fn handle_lobby_stats(State(state): State<LeptosAppState>) -> Html<String> {
+    let user = state.current_user.lock().await.clone();
+    let Some(user) = user else {
+        return Html(html_page(
+            "Stats",
+            "<p>No profile selected. <a href='/lobby'>Choose one here</a>.</p>",
+        ));
+    };
+    let handle = tokio::runtime::Handle::current();
+    let aggregated = tokio::task::block_in_place(|| {
+        handle.block_on(state.profile_service.get_stats(user.id()))
+    })
+    .ok();
+    let recent_games = tokio::task::block_in_place(|| {
+        handle.block_on(state.profile_service.get_history(user.id()))
+    })
+    .unwrap_or_default();
+
+    let tree = stats_view_to_verified_tree(&user, aggregated.as_ref(), &recent_games, default_viewport());
+    let fragment = render_lobby_html(tree);
+    Html(html_page(
+        &format!("Statistics — {}", user.display_name()),
+        &format!("{fragment}<p><a href='/lobby/main'>Back to Lobby</a></p>"),
+    ))
+}
+
+/// `GET /lobby/agents` — agent selection page.
+#[instrument(skip(state))]
+async fn handle_lobby_agents(State(state): State<LeptosAppState>) -> Html<String> {
+    let agents = state.agent_library.agents().to_vec();
+    let tree = agent_select_to_verified_tree(&agents, None, default_viewport());
+    let fragment = render_lobby_html(tree);
+
+    let links: String = agents
+        .iter()
+        .map(|a| {
+            format!(
+                "<li><a href='/lobby/play?agent={}'>{} ({:?} / {})</a></li>",
+                a.name(),
+                a.name(),
+                a.llm_provider(),
+                a.llm_model()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    Html(html_page(
+        "Select Agent",
+        &format!(
+            "{fragment}<ul>{links}</ul><p><a href='/lobby/main'>Back</a></p>"
+        ),
+    ))
+}
+
+/// `GET /lobby/play?agent=AGENT_NAME` — start a game with an agent.
+#[derive(Debug, Deserialize)]
+struct PlayParams {
+    agent: String,
+}
+#[instrument(skip(state))]
+async fn handle_lobby_play(
+    State(state): State<LeptosAppState>,
+    Query(p): Query<PlayParams>,
+) -> impl IntoResponse {
+    let game = *state.selected_game.lock().await;
+    info!(agent = %p.agent, game = %game.label(), "Starting game from lobby");
+    // Route to appropriate game page
+    let redirect = match game {
+        GameType::TicTacToe => "/games/ttt/new",
+        GameType::Blackjack => "/games/blackjack",
+        GameType::Craps => "/games/craps",
+    };
+    Redirect::to(redirect)
+}
+
+// ── Game route handlers ───────────────────────────────────────────────────────
 
 /// `GET /` — game selection page.
 #[instrument(skip(_state))]
@@ -234,14 +559,16 @@ async fn handle_ttt(State(state): State<LeptosAppState>) -> Html<String> {
         }
     };
 
+    let ttt_nodes = tictactoe_nodes();
+    let ttt_edges = tictactoe_edges();
     let log = EventLog {
         events: &[],
         dialogue: &[],
     };
     let graph = GraphParams {
-        nodes: &[],
-        edges: &[],
-        active: None,
+        nodes: &ttt_nodes,
+        edges: &ttt_edges,
+        active: tictactoe_active(game),
     };
     let (fragment, _proof) = render_ttt_html(
         game,
@@ -379,6 +706,19 @@ fn position_from_index(idx: u8) -> Position {
 /// ```
 pub fn leptos_game_router(state: LeptosAppState) -> Router {
     Router::new()
+        // ── Lobby ──────────────────────────────────────────────────────────
+        .route("/lobby", get(handle_lobby))
+        .route("/lobby/select", get(handle_lobby_select))
+        .route("/lobby/create", get(handle_lobby_create))
+        .route("/lobby/main", get(handle_lobby_main))
+        .route("/lobby/game-select", get(handle_lobby_game_select))
+        .route("/lobby/game-select/set", get(handle_lobby_set_game))
+        .route("/lobby/settings", get(handle_lobby_settings))
+        .route("/lobby/settings/toggle", get(handle_lobby_settings_toggle))
+        .route("/lobby/stats", get(handle_lobby_stats))
+        .route("/lobby/agents", get(handle_lobby_agents))
+        .route("/lobby/play", get(handle_lobby_play))
+        // ── Games ──────────────────────────────────────────────────────────
         .route("/", get(handle_home))
         .route("/games/ttt", get(handle_ttt))
         .route("/games/ttt/new", get(handle_ttt_new))
@@ -396,11 +736,15 @@ pub fn leptos_game_router(state: LeptosAppState) -> Router {
 /// # Errors
 ///
 /// Returns an error if the address cannot be bound or if the server task fails.
-#[instrument(fields(port))]
-pub async fn run_leptos(port: u16) -> anyhow::Result<()> {
+#[instrument(skip(profile_service, agent_library), fields(port))]
+pub async fn run_leptos(
+    profile_service: ProfileService,
+    agent_library: AgentLibrary,
+    port: u16,
+) -> anyhow::Result<()> {
     use tokio::net::TcpListener;
 
-    let state = LeptosAppState::new();
+    let state = LeptosAppState::new_with_lobby(profile_service, agent_library);
     let app = leptos_game_router(state);
 
     let addr = format!("0.0.0.0:{port}");
