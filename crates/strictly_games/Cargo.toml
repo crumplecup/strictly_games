@@ -28,6 +28,11 @@ http-body-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+# Asset generation (generate-assets command only)
+resvg = { workspace = true }
+tiny-skia = { workspace = true }
+cascii = { workspace = true }
+
 [features]
 # Empty marker feature for API tests
 api = []

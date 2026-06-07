@@ -6,6 +6,7 @@
 #![recursion_limit = "256"]
 
 mod cli;
+mod generate_assets;
 
 use anyhow::Result;
 use clap::Parser;
@@ -71,6 +72,11 @@ async fn main() -> Result<()> {
         Command::Verify { tool, verbose } => {
             init_logging();
             run_verify(&tool, verbose)
+        }
+        Command::GenerateAssets { columns, input, rust_out } => {
+            init_logging();
+            generate_assets::run_generate_assets(columns, &input, &rust_out)
+                .map_err(Into::into)
         }
     }
 }

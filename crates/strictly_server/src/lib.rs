@@ -29,6 +29,7 @@
 #![recursion_limit = "256"]
 
 // Private module declarations
+pub mod assets;
 mod agent_config;
 mod agent_handler;
 mod agent_library;

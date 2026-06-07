@@ -102,4 +102,29 @@ pub enum Command {
         #[arg(short, long)]
         verbose: bool,
     },
+
+    /// Convert SVG game assets (cards, dice) to ASCII art for the terminal frontend.
+    ///
+    /// Reads SVGs from --input, rasterizes each via resvg, then converts to ASCII
+    /// using cascii at the given column width.  Writes a Rust source file of
+    /// `pub const` raw-string literals that the server crate embeds at compile time.
+    ///
+    /// Run this whenever you want to regenerate at a different size, then
+    /// recompile the workspace.
+    GenerateAssets {
+        /// Terminal column width for the ASCII art (e.g. 12 for cards, 7 for dice).
+        #[arg(short, long)]
+        columns: u32,
+
+        /// Directory containing `cards/` and `dice/` SVG subdirectories.
+        #[arg(long, default_value = "assets")]
+        input: std::path::PathBuf,
+
+        /// Destination Rust source file (overwritten on each run).
+        #[arg(
+            long,
+            default_value = "crates/strictly_server/src/assets/ascii_art.rs"
+        )]
+        rust_out: std::path::PathBuf,
+    },
 }
