@@ -1,11 +1,11 @@
 //! AccessKit display implementation for the Blackjack [`BlackjackStateView`].
 
 use accesskit::Role as AkRole;
-use elicit_accesskit::{NodeId, NodeJson, Role};
+use elicit_accesskit::{NodeId, NodeJson, Orientation, Role};
 use strictly_blackjack::BlackjackDisplayMode;
 use tracing::instrument;
 
-use crate::assets::{bj_card_ascii, CARD_BACK};
+use crate::assets::bj_card_ascii;
 use crate::games::blackjack::BlackjackStateView;
 use crate::games::display::GameDisplay;
 
@@ -46,16 +46,7 @@ impl GameDisplay for BlackjackStateView {
                         .with_label("Dealer:".to_string()),
                 ));
 
-                let dealer_card_ids =
-                    hand_card_nodes(&self.dealer_hand, &mut ctr, &mut nodes, true);
-                let dealer_row_id = NodeId::from(ctr);
-                ctr += 1;
-                nodes.push((
-                    dealer_row_id,
-                    NodeJson::new(Role(AkRole::List))
-                        .with_label("Dealer cards".to_string())
-                        .with_children(dealer_card_ids),
-                ));
+                let dealer_row_id = hand_card_nodes(&self.dealer_hand, &mut ctr, &mut nodes);
 
                 // ── Player hands ──────────────────────────────────────────────
                 let player_label_id = NodeId::from(ctr);
@@ -67,19 +58,10 @@ impl GameDisplay for BlackjackStateView {
                 ));
 
                 let mut player_section_ids = vec![player_label_id];
-                for (hand_idx, hand) in self.player_hands.iter().enumerate() {
+                for hand in self.player_hands.iter() {
                     let hand_cards: Vec<Option<_>> = hand.iter().map(|&c| Some(c)).collect();
-                    let card_ids =
-                        hand_card_nodes(&hand_cards, &mut ctr, &mut nodes, false);
-                    let hand_row_id = NodeId::from(ctr);
-                    ctr += 1;
-                    nodes.push((
-                        hand_row_id,
-                        NodeJson::new(Role(AkRole::List))
-                            .with_label(format!("Hand {}", hand_idx + 1))
-                            .with_children(card_ids),
-                    ));
-                    player_section_ids.push(hand_row_id);
+                    let row_id = hand_card_nodes(&hand_cards, &mut ctr, &mut nodes);
+                    player_section_ids.push(row_id);
                 }
 
                 // Fallback description when no hand data is available.
@@ -150,35 +132,44 @@ impl GameDisplay for BlackjackStateView {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Build one [`NodeId`] per card in `hand`, pushing `(id, NodeJson)` pairs into
-/// `nodes` and advancing `ctr`.  Each node is `Role::ListItem` whose label is
-/// the pre-generated ASCII art (or the back-of-card placeholder for `None`).
+/// Build a horizontal row of card art nodes for one hand.
+///
+/// Returns the ID of the row container.  Each card becomes a `Role::Paragraph`
+/// leaf (multi-line ASCII art renders correctly there); the row container is a
+/// `Role::Group` with `Orientation::Horizontal` so the bridge produces a
+/// horizontal `TuiNode::Layout` instead of a list widget.
 fn hand_card_nodes(
     hand: &[Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>],
     ctr: &mut u64,
     nodes: &mut Vec<(NodeId, NodeJson)>,
-    _is_dealer: bool,
-) -> Vec<NodeId> {
-    if hand.is_empty() {
-        let placeholder_id = NodeId::from(*ctr);
+) -> NodeId {
+    let cards: Vec<_> = if hand.is_empty() {
+        // No cards yet — show a single face-down placeholder.
+        vec![None]
+    } else {
+        hand.to_vec()
+    };
+
+    let mut card_ids = Vec::with_capacity(cards.len());
+    for card in &cards {
+        let id = NodeId::from(*ctr);
         *ctr += 1;
+        let art = bj_card_ascii(*card).to_string();
         nodes.push((
-            placeholder_id,
-            NodeJson::new(Role(AkRole::ListItem)).with_label(CARD_BACK.to_string()),
+            id,
+            NodeJson::new(Role(AkRole::Paragraph)).with_label(art),
         ));
-        return vec![placeholder_id];
+        card_ids.push(id);
     }
 
-    hand.iter()
-        .map(|card| {
-            let id = NodeId::from(*ctr);
-            *ctr += 1;
-            let art = bj_card_ascii(*card).to_string();
-            nodes.push((
-                id,
-                NodeJson::new(Role(AkRole::ListItem)).with_label(art),
-            ));
-            id
-        })
-        .collect()
+    // Horizontal container — children → TuiNode::Layout(Horizontal).
+    let row_id = NodeId::from(*ctr);
+    *ctr += 1;
+    nodes.push((
+        row_id,
+        NodeJson::new(Role(AkRole::Group))
+            .with_orientation(Orientation(accesskit::Orientation::Horizontal))
+            .with_children(card_ids),
+    ));
+    row_id
 }
