@@ -472,6 +472,14 @@ pub struct SharedTableSeatView {
     pub description: String,
     /// True when the session has ended.
     pub is_terminal: bool,
+    /// Player hands — outer vec is hands (>1 after a split), inner is cards in
+    /// deal order.  Empty when not in `player_turn` or `waiting`.
+    #[serde(default)]
+    pub player_hands: Vec<Vec<(strictly_blackjack::Rank, strictly_blackjack::Suit)>>,
+    /// Dealer's cards.  Hole card (index 1) is `None` during `player_turn`
+    /// (face-down); all revealed in `waiting` and `finished`.
+    #[serde(default)]
+    pub dealer_hand: Vec<Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>>,
 }
 
 impl SharedTableSeatView {
@@ -490,6 +498,8 @@ impl SharedTableSeatView {
                             bets_placed, num_seats
                         ),
                         is_terminal: false,
+                        player_hands: vec![],
+                        dealer_hand: vec![],
                     }
                 } else {
                     let bankroll = seats.get(seat_index).map(|s| s.bankroll).unwrap_or(0);
@@ -500,6 +510,8 @@ impl SharedTableSeatView {
                             "💰 Bankroll: ${bankroll}\n\nPlace your bet to begin."
                         ),
                         is_terminal: false,
+                        player_hands: vec![],
+                        dealer_hand: vec![],
                     }
                 }
             }
@@ -511,9 +523,27 @@ impl SharedTableSeatView {
             } => {
                 let bankroll = seat_bankrolls.get(seat_index).copied().unwrap_or(0);
                 let seat = &round.seats[seat_index];
-                let dealer_up = &round.dealer_hand.cards()[0];
+                let dealer_cards = round.dealer_hand.cards();
+                let dealer_up = &dealer_cards[0];
                 let done_count = seats_done.len();
                 let total = seat_bankrolls.len();
+
+                // Card data: player hand and dealer (hole card hidden during play).
+                let player_hands = vec![
+                    seat.hand.cards().iter().map(|c| (c.rank(), c.suit())).collect()
+                ];
+                let dealer_hand: Vec<Option<_>> = dealer_cards
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        if i == 1 && !seats_done.contains(&seat_index) {
+                            None // hole card hidden while player is still playing
+                        } else {
+                            Some((c.rank(), c.suit()))
+                        }
+                    })
+                    .collect();
+
                 if seats_done.contains(&seat_index) {
                     Self {
                         phase: "waiting".to_string(),
@@ -525,6 +555,8 @@ impl SharedTableSeatView {
                             total
                         ),
                         is_terminal: false,
+                        player_hands,
+                        dealer_hand,
                     }
                 } else {
                     Self {
@@ -537,6 +569,8 @@ impl SharedTableSeatView {
                             dealer_up
                         ),
                         is_terminal: false,
+                        player_hands,
+                        dealer_hand,
                     }
                 }
             }
@@ -561,6 +595,8 @@ impl SharedTableSeatView {
                     bankroll,
                     description: desc,
                     is_terminal: false,
+                    player_hands: vec![],
+                    dealer_hand: vec![],
                 }
             }
         }

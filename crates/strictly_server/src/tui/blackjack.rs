@@ -163,6 +163,8 @@ where
             bankroll: 0,
             description: "Connecting...".to_string(),
             is_terminal: false,
+            player_hands: vec![],
+            dealer_hand: vec![],
         };
 
         let human_state = human_observer
@@ -228,16 +230,13 @@ where
             use elicitation::contracts::Established;
             use strictly_blackjack::BlackjackDisplayMode;
 
-            // Build the human state view.  SharedTableSeatView doesn't carry
-            // raw card data (it's a serialised REST snapshot); card art is
-            // available in the single-player path via BlackjackStateView::from_phase.
             let bj_view = crate::games::blackjack::BlackjackStateView {
                 phase: human_state.phase.clone(),
                 bankroll: human_state.bankroll,
                 description: human_state.description.clone(),
                 is_terminal: human_state.is_terminal,
-                player_hands: vec![],
-                dealer_hand: vec![],
+                player_hands: human_state.player_hands.clone(),
+                dealer_hand: human_state.dealer_hand.clone(),
             };
 
             // Agent views: (name, phase, description).

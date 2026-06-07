@@ -170,12 +170,20 @@ fn hand_card_nodes(
     }
 
     // Horizontal container — children → TuiNode::Layout(Horizontal).
+    // numeric_value communicates the minimum row count to the ratatui bridge
+    // so the parent vertical layout allocates enough height for the art.
+    let art_height = cards
+        .iter()
+        .map(|c| bj_card_ascii(*c).lines().count())
+        .max()
+        .unwrap_or(11) as f64;
     let row_id = NodeId::from(*ctr);
     *ctr += 1;
     nodes.push((
         row_id,
         NodeJson::new(Role(AkRole::Group))
             .with_orientation(Orientation(accesskit::Orientation::Horizontal))
+            .with_numeric_value(art_height + 1.0)
             .with_children(card_ids),
     ));
     row_id
