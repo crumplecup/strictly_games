@@ -74,6 +74,7 @@ async fn main() -> Result<()> {
             run_verify(&tool, verbose)
         }
         Command::GenerateAssets { columns, input, rust_out } => {
+            init_logging();
             generate_assets::run_generate_assets(columns, &input, &rust_out)
                 .map_err(Into::into)
         }
