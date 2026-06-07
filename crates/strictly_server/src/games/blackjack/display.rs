@@ -3,7 +3,7 @@
 use accesskit::Role as AkRole;
 use elicit_accesskit::{NodeId, NodeJson, Orientation, Role};
 use strictly_blackjack::BlackjackDisplayMode;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::assets::bj_card_ascii;
 use crate::games::blackjack::BlackjackStateView;
@@ -14,7 +14,7 @@ use crate::games::display::GameDisplay;
 impl GameDisplay for BlackjackStateView {
     type Mode = BlackjackDisplayMode;
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(phase = %self.phase, player_hands = self.player_hands.len(), dealer_cards = self.dealer_hand.len()))]
     fn to_ak_nodes(
         &self,
         mode: &BlackjackDisplayMode,
@@ -155,6 +155,13 @@ fn hand_card_nodes(
         let id = NodeId::from(*ctr);
         *ctr += 1;
         let art = bj_card_ascii(*card).to_string();
+        debug!(
+            card = ?card,
+            art_lines = art.lines().count(),
+            art_max_w = art.lines().map(|l| l.len()).max().unwrap_or(0),
+            art_empty = art.is_empty(),
+            "hand_card_nodes: card art"
+        );
         nodes.push((
             id,
             NodeJson::new(Role(AkRole::Paragraph)).with_label(art),
