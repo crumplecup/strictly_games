@@ -130,12 +130,19 @@ fn stem_to_const(stem: &str, prefix: &str) -> String {
     format!("{prefix}_{upper}")
 }
 
+/// Build usvg options with system fonts loaded so card text renders without warnings.
+fn usvg_options() -> usvg::Options<'static> {
+    let mut opt = usvg::Options::default();
+    opt.fontdb_mut().load_system_fonts();
+    opt
+}
+
 /// Rasterize an SVG and convert to an ASCII string at `columns` wide.
 fn convert_svg(svg_path: &Path, columns: u32) -> Result<String> {
     // 1. Rasterize SVG → PNG bytes via resvg + tiny_skia.
     let svg_data =
         std::fs::read(svg_path).with_context(|| format!("reading {}", svg_path.display()))?;
-    let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default())
+    let tree = usvg::Tree::from_data(&svg_data, &usvg_options())
         .with_context(|| format!("parsing SVG {}", svg_path.display()))?;
     let size = tree.size();
     let width = (size.width().ceil() as u32).max(1);
