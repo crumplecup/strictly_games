@@ -7,7 +7,6 @@ members = [
   "crates/strictly_craps",
   "crates/strictly_proofs",
   "crates/strictly_server",
-  "crates/strictly_verus",
 ]
 
 [workspace.package]
@@ -24,10 +23,14 @@ strictly_craps = { path = "crates/strictly_craps" }
 strictly_server = { path = "crates/strictly_server" }
 
 # Elicitation framework (local dev)
-elicitation = { path = "../elicitation/crates/elicitation", features = ["rand"] }
+elicitation = { path = "../elicitation/crates/elicitation", features = [
+  "rand",
+] }
 elicitation_derive = { path = "../elicitation/crates/elicitation_derive" }
 elicitation_rand = { path = "../elicitation/crates/elicitation_rand" }
-elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui", features = ["runtime"] }
+elicit_ratatui = { path = "../elicitation/crates/elicit_ratatui", features = [
+  "runtime",
+] }
 elicit_egui = { path = "../elicitation/crates/elicit_egui" }
 elicit_leptos = { path = "../elicitation/crates/elicit_leptos" }
 elicit_ui = { path = "../elicitation/crates/elicit_ui" }
@@ -95,7 +98,7 @@ rmcp = { version = "1", features = [
 schemars = { version = "1", features = ["derive"] }
 
 # LLM clients
-async-openai = { version = "0.40", features = ["chat-completion"] }
+async-openai = { version = "0.41", features = ["chat-completion"] }
 
 # Config
 dotenvy = "0.15"
@@ -114,9 +117,13 @@ ratatui = "0.30"
 crossterm = "0.29"
 unicode-width = "0.2"
 
+# ASCII art
+resvg = "0.47.0"
+tiny-skia = "0.12"
+image = { version = "0.25", default-features = false, features = ["png"] }
+cascii = "0.21.0"
+
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
-
-
