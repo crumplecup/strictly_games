@@ -196,16 +196,8 @@ impl GameRepository {
     pub async fn record_game(&self, stat: NewGameStat) -> Result<GameStat, DbError> {
         debug!("Recording game result");
 
-        let game_stat = GameStat::new(
-            Uuid::new_v4().to_string(),
-            stat.user_id().clone(),
-            stat.opponent_name().clone(),
-            stat.game_type().clone(),
-            stat.outcome().clone(),
-            Utc::now().to_rfc3339(),
-            *stat.moves_count(),
-            stat.session_id().clone(),
-        );
+        let game_stat =
+            GameStat::from_stat(Uuid::new_v4().to_string(), Utc::now().to_rfc3339(), stat);
 
         let json = serde_json::to_string(&game_stat)
             .map_err(|e| DbError::new(DbErrorKind::Serialization(e.to_string())))?;

@@ -108,10 +108,7 @@ impl ProfileSelectScreen {
                     handle.block_on(profile_service.repository().list_users())
                 })
                 .unwrap_or_default();
-                let pos = new_users
-                    .iter()
-                    .position(|u| u.id() == &id)
-                    .unwrap_or(0);
+                let pos = new_users.iter().position(|u| u.id() == &id).unwrap_or(0);
                 self.users = new_users;
                 self.list_state.select(Some(pos));
                 self.new_name_input.clear();

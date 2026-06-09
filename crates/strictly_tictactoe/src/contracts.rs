@@ -31,13 +31,13 @@ impl VerifiedWorkflow for PlayerTurn {}
 /// `And<SquareEmpty, PlayerTurn>: VerifiedWorkflow` via blanket impl — proof composition is automatic.
 pub type LegalMove = And<SquareEmpty, PlayerTurn>;
 
-/// Proposition: all five visual lines of the tic-tac-toe board have their
-/// vertical separator characters (`│` / `┼`) at identical display-column
-/// positions across every row.
-///
-/// This is a *rendering* contract — it lives in the display layer of
-/// `strictly_server`, not here.  The type has been moved; this comment is
-/// intentionally left as a navigation aid only.
+// Proposition: all five visual lines of the tic-tac-toe board have their
+// vertical separator characters (`│` / `┼`) at identical display-column
+// positions across every row.
+//
+// This is a *rendering* contract — it lives in the display layer of
+// `strictly_server`, not here.  The type has been moved; this comment is
+// intentionally left as a navigation aid only.
 // BoardColumnsAligned → strictly_server::games::tictactoe::contracts
 
 // ─────────────────────────────────────────────────────────────

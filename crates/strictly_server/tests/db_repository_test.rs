@@ -57,8 +57,12 @@ async fn record_game_and_aggregate() {
 
     repo.record_game(make_stat(uid, "win")).await.expect("win");
     repo.record_game(make_stat(uid, "win")).await.expect("win");
-    repo.record_game(make_stat(uid, "loss")).await.expect("loss");
-    repo.record_game(make_stat(uid, "draw")).await.expect("draw");
+    repo.record_game(make_stat(uid, "loss"))
+        .await
+        .expect("loss");
+    repo.record_game(make_stat(uid, "draw"))
+        .await
+        .expect("draw");
 
     let stats = repo.get_aggregated_stats(uid).await.expect("stats");
     assert_eq!(*stats.total_games(), 4);
@@ -74,8 +78,12 @@ async fn get_user_stats_most_recent_first() {
     let user = repo.create_user("Dave".to_string()).await.expect("create");
     let uid = user.id().as_str();
 
-    repo.record_game(make_stat(uid, "win")).await.expect("first");
-    repo.record_game(make_stat(uid, "loss")).await.expect("second");
+    repo.record_game(make_stat(uid, "win"))
+        .await
+        .expect("first");
+    repo.record_game(make_stat(uid, "loss"))
+        .await
+        .expect("second");
 
     let history = repo.get_user_stats(uid).await.expect("history");
     assert_eq!(history.len(), 2);

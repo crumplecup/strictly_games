@@ -25,14 +25,12 @@ impl StatsViewScreen {
         debug!(user_id = %user_id, "Initializing StatsViewScreen");
 
         let handle = tokio::runtime::Handle::current();
-        let aggregated = tokio::task::block_in_place(|| {
-            handle.block_on(profile_service.get_stats(&user_id))
-        })
-        .ok();
-        let recent_games = tokio::task::block_in_place(|| {
-            handle.block_on(profile_service.get_history(&user_id))
-        })
-        .unwrap_or_default();
+        let aggregated =
+            tokio::task::block_in_place(|| handle.block_on(profile_service.get_stats(&user_id)))
+                .ok();
+        let recent_games =
+            tokio::task::block_in_place(|| handle.block_on(profile_service.get_history(&user_id)))
+                .unwrap_or_default();
 
         info!(
             user_id,

@@ -6,9 +6,9 @@
 //! holds — the same invariant proven at construction time, now verified against
 //! what was *actually rendered*.
 
+use crate::{BoardCentered, BoardColumnsAligned};
 use elicit_ratatui::{RatatuiRenderContext, RenderVerifiable};
 use elicit_ui::RenderContext;
-use crate::{BoardCentered, BoardColumnsAligned};
 use tracing::instrument;
 
 /// Separator characters rendered by [`crate::games::tictactoe::display`].
@@ -28,7 +28,7 @@ impl RenderVerifiable<RatatuiRenderContext<'_>> for BoardColumnsAligned {
             let mut sep_cols: Vec<u16> = Vec::new();
             for col in 0..width {
                 let sym = ctx.symbol_at(area, col, row);
-                if sym.chars().next().map_or(false, |c| SEP_CHARS.contains(&c)) {
+                if sym.chars().next().is_some_and(|c| SEP_CHARS.contains(&c)) {
                     sep_cols.push(col);
                 }
             }
@@ -58,8 +58,7 @@ impl RenderVerifiable<RatatuiRenderContext<'_>> for BoardColumnsAligned {
                 );
             }
             debug_assert_eq!(
-                *cols,
-                reference,
+                *cols, reference,
                 "BoardColumnsAligned violated at row {row_idx}: \
                  expected separators at {reference:?}, got {cols:?}"
             );
@@ -92,12 +91,10 @@ impl RenderVerifiable<RatatuiRenderContext<'_>> for BoardCentered {
 
         for row in 0..height {
             // Find first and last non-space column.
-            let first = (0..width).find(|&col| {
-                ctx.symbol_at(area, col, row).trim() != ""
-            });
-            let last = (0..width).rev().find(|&col| {
-                ctx.symbol_at(area, col, row).trim() != ""
-            });
+            let first = (0..width).find(|&col| ctx.symbol_at(area, col, row).trim() != "");
+            let last = (0..width)
+                .rev()
+                .find(|&col| ctx.symbol_at(area, col, row).trim() != "");
 
             let (Some(first), Some(last)) = (first, last) else {
                 continue; // blank row — skip
@@ -129,4 +126,3 @@ impl RenderVerifiable<RatatuiRenderContext<'_>> for BoardCentered {
         tracing::debug!(rows_checked, area_mid, "board_centered_verify: OK");
     }
 }
-

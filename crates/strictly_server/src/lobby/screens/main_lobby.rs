@@ -60,7 +60,9 @@ impl MainLobbyScreen {
         debug!(user_id = %current_user.id(), game = %selected_game.label(), "Initializing MainLobbyScreen");
         let user_id = current_user.id().clone();
         let handle = tokio::runtime::Handle::current();
-        let stats = tokio::task::block_in_place(|| handle.block_on(profile_service.get_stats(&user_id))).ok();
+        let stats =
+            tokio::task::block_in_place(|| handle.block_on(profile_service.get_stats(&user_id)))
+                .ok();
         let mut state = ListState::default();
         state.select(Some(0));
         Self {

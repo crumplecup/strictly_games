@@ -121,10 +121,7 @@ pub enum Command {
         input: std::path::PathBuf,
 
         /// Destination Rust source file (overwritten on each run).
-        #[arg(
-            long,
-            default_value = "crates/strictly_server/src/assets/ascii_art.rs"
-        )]
+        #[arg(long, default_value = "crates/strictly_server/src/assets/ascii_art.rs")]
         rust_out: std::path::PathBuf,
     },
 }

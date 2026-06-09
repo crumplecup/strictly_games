@@ -17,7 +17,7 @@ pub struct User {
 }
 
 /// Game statistics database model.
-#[derive(Debug, Clone, Serialize, Deserialize, Getters, derive_new::new)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
 pub struct GameStat {
     id: String,
     user_id: String,
@@ -30,6 +30,21 @@ pub struct GameStat {
 }
 
 impl GameStat {
+    /// Creates a [`GameStat`] from a [`NewGameStat`] plus server-generated fields.
+    #[instrument(skip(stat), fields(id = %id, played_at = %played_at))]
+    pub fn from_stat(id: String, played_at: String, stat: NewGameStat) -> Self {
+        Self {
+            id,
+            user_id: stat.user_id,
+            opponent_name: stat.opponent_name,
+            game_type: stat.game_type,
+            outcome: stat.outcome,
+            played_at,
+            moves_count: stat.moves_count,
+            session_id: stat.session_id,
+        }
+    }
+
     /// Parses the stored outcome string into a [`GameOutcome`] enum.
     #[instrument(skip(self), fields(outcome = %self.outcome))]
     pub fn parse_outcome(&self) -> Result<GameOutcome, DbError> {

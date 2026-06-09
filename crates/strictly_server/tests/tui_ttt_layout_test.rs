@@ -6,9 +6,9 @@
 use elicit_ratatui::{ParagraphText, RatatuiBackend, TuiNode, WidgetJson};
 use elicit_ui::{UiTreeRenderer as _, Viewport};
 use ratatui::layout::Rect;
+use strictly_server::AnyGame;
 use strictly_server::tui::contracts::verify_area_sufficient;
 use strictly_server::tui::game_ir::{EventLog, GraphParams, ttt_to_verified_tree};
-use strictly_server::AnyGame;
 use strictly_tictactoe::{Board, Position, TttDisplayMode};
 use tracing::info;
 
@@ -35,8 +35,15 @@ fn run_layout_check(label: &str, w: u16, h: u16, cursor: Position) {
     let tree = ttt_to_verified_tree(
         &game,
         &TttDisplayMode::BoardWithCursor(cursor),
-        &EventLog { events: &[], dialogue: &[] },
-        &GraphParams { nodes: &[], edges: &[], active: None },
+        &EventLog {
+            events: &[],
+            dialogue: &[],
+        },
+        &GraphParams {
+            nodes: &[],
+            edges: &[],
+            active: None,
+        },
         viewport,
     );
 
@@ -82,8 +89,11 @@ where
     F: FnMut(usize, &ParagraphText, &Option<String>),
 {
     match node {
-        TuiNode::Widget { widget } => {
-            if let WidgetJson::Paragraph { text, alignment, .. } = widget.as_ref() {
+        TuiNode::Widget { widget, .. } => {
+            if let WidgetJson::Paragraph {
+                text, alignment, ..
+            } = widget.as_ref()
+            {
                 f(depth, text, alignment);
             }
         }
@@ -105,8 +115,15 @@ fn collect_paragraph_alignments(w: u16, h: u16) -> Vec<(Option<String>, Option<S
     let tree = ttt_to_verified_tree(
         &game,
         &TttDisplayMode::BoardWithCursor(Position::Center),
-        &EventLog { events: &[], dialogue: &[] },
-        &GraphParams { nodes: &[], edges: &[], active: None },
+        &EventLog {
+            events: &[],
+            dialogue: &[],
+        },
+        &GraphParams {
+            nodes: &[],
+            edges: &[],
+            active: None,
+        },
         viewport,
     );
 
@@ -150,8 +167,15 @@ fn board_with_cursor_genuinely_too_small() {
     let tree = ttt_to_verified_tree(
         &game,
         &TttDisplayMode::BoardWithCursor(Position::Center),
-        &EventLog { events: &[], dialogue: &[] },
-        &GraphParams { nodes: &[], edges: &[], active: None },
+        &EventLog {
+            events: &[],
+            dialogue: &[],
+        },
+        &GraphParams {
+            nodes: &[],
+            edges: &[],
+            active: None,
+        },
         viewport,
     );
 
@@ -190,9 +214,7 @@ fn board_paragraph_alignment_is_center() {
     // legitimately have no alignment set.
     let mismatched: Vec<_> = alignments
         .iter()
-        .filter(|(text_align, outer_align)| {
-            text_align.is_some() && text_align != outer_align
-        })
+        .filter(|(text_align, outer_align)| text_align.is_some() && text_align != outer_align)
         .collect();
     assert!(
         mismatched.is_empty(),

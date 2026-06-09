@@ -20,7 +20,7 @@ use elicit_ui::{VerifiedTree, Viewport};
 use tracing::instrument;
 
 use crate::lobby::settings::{GameType, LobbySettings};
-use crate::{AggregatedStats, AgentConfig, GameStat, User};
+use crate::{AgentConfig, AggregatedStats, GameStat, User};
 
 // ── ID constants ──────────────────────────────────────────────────────────────
 
@@ -86,19 +86,20 @@ fn list_nodes(
 ) -> (NodeId, Vec<(NodeId, NodeJson)>) {
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let root_id = NodeId::from(id_base);
-    let mut ctr = id_base + 1;
     let mut child_ids = Vec::with_capacity(items.len());
 
-    for (label, selected) in items {
+    for (ctr, (label, selected)) in (id_base + 1..).zip(items.iter()) {
         let pid = NodeId::from(ctr);
-        ctr += 1;
         child_ids.push(pid);
         let display = if *selected {
             format!("▶ {label}")
         } else {
             format!("  {label}")
         };
-        pairs.push((pid, NodeJson::new(Role(AkRole::ListItem)).with_label(display)));
+        pairs.push((
+            pid,
+            NodeJson::new(Role(AkRole::ListItem)).with_label(display),
+        ));
     }
 
     pairs.push((
@@ -168,7 +169,13 @@ pub fn profile_select_to_verified_tree(
     } else {
         "↑↓: Select | Enter: Confirm | n: New profile | q: Quit"
     };
-    wrap_in_window("Select or Create Profile", help, content_id, nodes, viewport)
+    wrap_in_window(
+        "Select or Create Profile",
+        help,
+        content_id,
+        nodes,
+        viewport,
+    )
 }
 
 // ── Main lobby ────────────────────────────────────────────────────────────────
@@ -324,10 +331,8 @@ pub fn blackjack_setup_to_verified_tree(
     let human_id = NodeId::from(3u64);
     pairs.push((
         human_id,
-        NodeJson::new(Role(AkRole::ListItem)).with_label(format!(
-            "✔  {} (You)  —  bankroll: 1000 chips",
-            human_name
-        )),
+        NodeJson::new(Role(AkRole::ListItem))
+            .with_label(format!("✔  {} (You)  —  bankroll: 1000 chips", human_name)),
     ));
 
     // Agent checklist
@@ -339,7 +344,11 @@ pub fn blackjack_setup_to_verified_tree(
             .enumerate()
             .map(|(i, a)| {
                 let check = if seated[i] { "✔" } else { "○" };
-                let cursor = if selected_idx == Some(i) { "▶ " } else { "  " };
+                let cursor = if selected_idx == Some(i) {
+                    "▶ "
+                } else {
+                    "  "
+                };
                 (format!("{cursor}{check}  {}", a.name()), false)
             })
             .collect()
@@ -376,10 +385,7 @@ pub fn settings_to_verified_tree(
     let checkbox = |b: bool| if b { "[✓]" } else { "[ ]" };
     let items = vec![
         (
-            format!(
-                "Who Goes First?    [ {} ]",
-                settings.first_player.label()
-            ),
+            format!("Who Goes First?    [ {} ]", settings.first_player.label()),
             selected_idx == 0,
         ),
         (
@@ -441,10 +447,9 @@ pub fn stats_view_to_verified_tree(
 
     // Recent games as list items
     let mut game_ids: Vec<NodeId> = Vec::new();
-    let mut ctr = 4u64;
-    for stat in recent_games.iter().take(20) {
+    let item_count = recent_games.len().min(20) as u64;
+    for (ctr, stat) in (4u64..).zip(recent_games.iter().take(20)) {
         let pid = NodeId::from(ctr);
-        ctr += 1;
         game_ids.push(pid);
         let label = format!(
             "{}  |  {}  |  {}  |  {} moves",
@@ -455,7 +460,7 @@ pub fn stats_view_to_verified_tree(
         );
         pairs.push((pid, NodeJson::new(Role(AkRole::ListItem)).with_label(label)));
     }
-    let games_root = NodeId::from(ctr);
+    let games_root = NodeId::from(4u64 + item_count);
     pairs.push((
         games_root,
         NodeJson::new(Role(AkRole::List))
@@ -490,9 +495,7 @@ pub fn in_game_to_verified_tree(
     viewport: Viewport,
 ) -> VerifiedTree {
     let text = if game_finished {
-        result_message
-            .unwrap_or("Game finished.")
-            .to_string()
+        result_message.unwrap_or("Game finished.").to_string()
             + "\n\nPress any key to return to lobby."
     } else {
         format!(
@@ -502,10 +505,7 @@ pub fn in_game_to_verified_tree(
 
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let msg_id = NodeId::from(3u64);
-    pairs.push((
-        msg_id,
-        NodeJson::new(Role(AkRole::Status)).with_label(text),
-    ));
+    pairs.push((msg_id, NodeJson::new(Role(AkRole::Status)).with_label(text)));
 
     let mut nodes = convert_nodes(pairs);
     let content_id = AkNodeId::from(CONTENT_ID);
@@ -513,5 +513,11 @@ pub fn in_game_to_verified_tree(
     content.set_children(vec![msg_id.0]);
     nodes.insert(content_id, content);
 
-    wrap_in_window("In Game", "q: Quit | any key: Return to Lobby", content_id, nodes, viewport)
+    wrap_in_window(
+        "In Game",
+        "q: Quit | any key: Return to Lobby",
+        content_id,
+        nodes,
+        viewport,
+    )
 }
