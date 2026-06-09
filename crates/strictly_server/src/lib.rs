@@ -29,10 +29,10 @@
 #![recursion_limit = "256"]
 
 // Private module declarations
-pub mod assets;
 mod agent_config;
 mod agent_handler;
 mod agent_library;
+pub mod assets;
 mod db;
 mod egui_frontend;
 mod games;
@@ -74,8 +74,9 @@ pub use server::GameServer;
 
 // Public API exports - Session
 pub use session::{
-    DialogueEntry, ExploreStats, GameSession, SeatEntry, SessionManager, SharedTable,
-    SharedTablePhase, SharedTableSeatView, SharedTableState, new_shared_table,
+    DialogueEntry, ExploreStats, GameSession, PoisonedMutex, SeatEntry, SessionError,
+    SessionErrorKind, SessionManager, SharedTable, SharedTablePhase, SharedTableSeatView,
+    SharedTableState, new_shared_table,
 };
 
 // Public API exports - TUI
@@ -100,8 +101,8 @@ pub use games::tictactoe::{
 };
 
 // Public API exports - TicTacToe contract propositions
-pub use games::tictactoe::{BoardCentered, BoardColumnsAligned, PlayerTurn, SquareEmpty};
 pub use games::tictactoe::TttBoardDisplay;
+pub use games::tictactoe::{BoardCentered, BoardColumnsAligned, PlayerTurn, SquareEmpty};
 
 // Public API exports - Blackjack types (game logic from strictly_blackjack, workflow from server)
 pub use games::blackjack::{BlackjackStateView, BlackjackWorkflow, HandResult};

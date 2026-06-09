@@ -12,6 +12,7 @@
 //! After regenerating, recompile the workspace to embed the new art.
 
 pub(crate) mod ascii_art;
+pub(crate) mod card_art;
 
 use std::path::Path;
 
@@ -270,30 +271,121 @@ pub fn bj_suit(suit: strictly_blackjack::Suit) -> Suit {
     }
 }
 
-/// ASCII art for a blackjack card, or a placeholder when face-down.
-pub fn bj_card_ascii(card: Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>) -> &'static str {
-    match card {
-        Some((rank, suit)) => card_ascii(Card::Playing(bj_rank(rank), bj_suit(suit))),
-        None => CARD_BACK,
+// ── Size-adaptive card art ────────────────────────────────────────────────────
+
+/// Size tier for card art, chosen to fit the available column width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CardSize {
+    /// Large cards: 13 wide × 11 tall.
+    Large,
+    /// Medium cards: 9 wide × 7 tall (default).
+    Medium,
+    /// Small cards: 7 wide × 5 tall.
+    Small,
+}
+
+impl CardSize {
+    /// Outer width in columns for this size tier.
+    pub fn width(self) -> usize {
+        match self {
+            Self::Large => 13,
+            Self::Medium => 9,
+            Self::Small => 7,
+        }
+    }
+
+    /// Outer height in rows for this size tier.
+    pub fn height(self) -> usize {
+        match self {
+            Self::Large => 11,
+            Self::Medium => 7,
+            Self::Small => 5,
+        }
+    }
+
+    /// Choose the largest tier that fits both horizontally and vertically.
+    ///
+    /// Horizontal condition: `n * size.width() ≤ col_width`
+    /// Vertical condition: `n_card_rows * (size.height() + 1) + WINDOW_CHROME ≤ viewport_height`
+    ///
+    /// Degrades through Large → Medium → Small until both conditions hold.
+    /// `n_card_rows` is the number of horizontal card rows in the column
+    /// (1 for the dealer row + 1 per player hand).
+    /// `WINDOW_CHROME = 2` accounts for the top and bottom window bars.
+    #[tracing::instrument]
+    pub fn for_hand(
+        n: usize,
+        n_card_rows: usize,
+        col_width: u16,
+        viewport_height: u16,
+    ) -> (Self, elicitation::contracts::Established<CardSizeFits>, elicitation::contracts::Established<CardHeightFits>) {
+        const WINDOW_CHROME: usize = 2;
+        let col = col_width as usize;
+        let vp = viewport_height as usize;
+        let n = n.max(1);
+        let rows = n_card_rows.max(1);
+
+        let h_fits = |s: Self| n * s.width() <= col;
+        let v_fits = |s: Self| rows * (s.height() + 1) + WINDOW_CHROME <= vp;
+
+        let size = if h_fits(Self::Large) && v_fits(Self::Large) {
+            tracing::debug!(n, n_card_rows, col_width, viewport_height, tier = "Large",
+                h_needed = n * Self::Large.width(), v_needed = rows * (Self::Large.height() + 1) + WINDOW_CHROME,
+                "CardSize::for_hand: Large fits");
+            Self::Large
+        } else if h_fits(Self::Medium) && v_fits(Self::Medium) {
+            tracing::debug!(n, n_card_rows, col_width, viewport_height, tier = "Medium",
+                h_needed = n * Self::Medium.width(), v_needed = rows * (Self::Medium.height() + 1) + WINDOW_CHROME,
+                "CardSize::for_hand: Medium fits");
+            Self::Medium
+        } else {
+            tracing::debug!(n, n_card_rows, col_width, viewport_height, tier = "Small (fallback)",
+                h_needed = n * Self::Small.width(), v_needed = rows * (Self::Small.height() + 1) + WINDOW_CHROME,
+                "CardSize::for_hand: using Small");
+            Self::Small
+        };
+        (
+            size,
+            elicitation::contracts::Established::assert(),
+            elicitation::contracts::Established::assert(),
+        )
     }
 }
 
-/// ASCII art placeholder for a face-down card.
+/// Proposition: a [`CardSize`] was chosen such that `n * size.width() ≤ col_width`.
+#[derive(elicitation::Prop)]
+pub struct CardSizeFits;
+
+/// Proposition: a [`CardSize`] was chosen such that
+/// `n_card_rows * (size.height() + 1) + window_chrome ≤ viewport_height`.
+#[derive(elicitation::Prop)]
+pub struct CardHeightFits;
+
+/// Render ASCII art for one blackjack card at the given size, or a face-down
+/// placeholder when `card` is `None`.
+pub fn bj_card_ascii_sized(
+    card: Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>,
+    size: CardSize,
+) -> String {
+    let w = size.width();
+    let h = size.height();
+    match card {
+        Some((rank, suit)) => {
+            crate::assets::card_art::render_card(Card::Playing(bj_rank(rank), bj_suit(suit)), w, h)
+        }
+        None => crate::assets::card_art::render_card_back(w, h),
+    }
+}
+
+/// ASCII art for a blackjack card at medium size, or a face-down placeholder.
 ///
-/// Used for the dealer's hole card during player turn.  Rendered as a uniform
-/// block so it has the same visual weight as a revealed card.
-pub const CARD_BACK: &str = "\
-############\n\
-#          #\n\
-# -------- #\n\
-# |      | #\n\
-# |  ??  | #\n\
-# |      | #\n\
-# |  ??  | #\n\
-# |      | #\n\
-# -------- #\n\
-#          #\n\
-############\n";
+/// Prefer [`bj_card_ascii_sized`] when the column width is known so the tier
+/// is chosen to fit the available space.
+pub fn bj_card_ascii(
+    card: Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>,
+) -> String {
+    bj_card_ascii_sized(card, CardSize::Medium)
+}
 
 // ── Die lookups ───────────────────────────────────────────────────────────────
 

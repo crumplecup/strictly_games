@@ -360,9 +360,19 @@ pub fn bj_to_verified_tree(
     tools: &[String],
     graph: &GraphParams<'_>,
     viewport: Viewport,
-) -> VerifiedTree {
+) -> (VerifiedTree, elicitation::contracts::Established<crate::tui::contracts::CardDisplayBuilt>) {
+    // Choose column width: viewport split equally across the content columns.
+    // The BJ layout always has at least one content column (the game state).
+    let n_columns = 1 + (!agents.is_empty() as u16)
+        + 1  // event log
+        + (!tools.is_empty() as u16)
+        + (!log.dialogue.is_empty() as u16)
+        + (!graph.nodes.is_empty() as u16);
+    let col_width = (viewport.width as u16).saturating_div(n_columns);
+
     // id=0: Window, id=1: Banner, id=2: Row, id=3+: human subtree; 10_000: status
-    let (human_root, human_pairs) = view.to_ak_nodes(mode, 3);
+    let (human_root, human_pairs, display_proof) =
+        view.to_ak_nodes_bj(mode, 3, col_width, viewport.height as u16);
     let mut all_pairs = human_pairs;
 
     let mut col_roots = vec![human_root.0];
@@ -408,7 +418,8 @@ pub fn bj_to_verified_tree(
     nodes.insert(row_id, row);
 
     let status = format!("Blackjack — {} | Bankroll: ${}", view.phase, view.bankroll);
-    wrap_in_window_with_row("Blackjack", &status, row_id, nodes, viewport)
+    let tree = wrap_in_window_with_row("Blackjack", &status, row_id, nodes, viewport);
+    (tree, display_proof)
 }
 
 /// Build the full multi-column [`VerifiedTree`] for the Craps TUI frame.

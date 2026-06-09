@@ -131,14 +131,24 @@ pub struct TttUiConsistent;
 impl VerifiedWorkflow for TttUiConsistent {}
 impl ProvableFrom<Established<RenderComplete>> for TttUiConsistent {}
 
+/// Proposition: the blackjack display IR was built with verified card geometry —
+/// both horizontal fit ([`crate::assets::CardSizeFits`]) and vertical fit
+/// ([`crate::assets::CardHeightFits`]) were proven at IR construction time.
+#[derive(elicitation::Prop)]
+pub struct CardDisplayBuilt;
+impl VerifiedWorkflow for CardDisplayBuilt {}
+impl ProvableFrom<Established<And<crate::assets::CardSizeFits, crate::assets::CardHeightFits>>>
+    for CardDisplayBuilt
+{}
+
 /// Proposition: the Blackjack game state was rendered through a WCAG-verified
-/// AccessKit IR pipeline to completion.
+/// AccessKit IR pipeline to completion, and the card geometry was verified.
 ///
-/// Provable from [`Established<RenderComplete>`].
+/// Provable from `Established<And<RenderComplete, CardDisplayBuilt>>`.
 #[derive(elicitation::Prop)]
 pub struct BjUiConsistent;
 impl VerifiedWorkflow for BjUiConsistent {}
-impl ProvableFrom<Established<RenderComplete>> for BjUiConsistent {}
+impl ProvableFrom<Established<And<RenderComplete, CardDisplayBuilt>>> for BjUiConsistent {}
 
 /// Proposition: the Craps game state was rendered through a WCAG-verified
 /// AccessKit IR pipeline to completion.
@@ -192,6 +202,7 @@ fn check_labels(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
             constraints,
             children,
             margin,
+            ..
         } => {
             let inner = apply_margin(
                 area,
@@ -290,9 +301,12 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
                 let available = area.height.saturating_sub(border_overhead) as usize;
                 let needed = text.lines.len();
                 tracing::debug!(
-                    area_x = area.x, area_y = area.y,
-                    area_w = area.width, area_h = area.height,
-                    needed, available,
+                    area_x = area.x,
+                    area_y = area.y,
+                    area_w = area.width,
+                    area_h = area.height,
+                    needed,
+                    available,
                     "check_area: Rich paragraph"
                 );
                 // Only fail if content has lines AND the cell is too short to
@@ -300,9 +314,12 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
                 // sizing problem, not a content problem.
                 if needed > 0 && available == 0 {
                     tracing::warn!(
-                        area_x = area.x, area_y = area.y,
-                        area_w = area.width, area_h = area.height,
-                        needed, available,
+                        area_x = area.x,
+                        area_y = area.y,
+                        area_w = area.width,
+                        area_h = area.height,
+                        needed,
+                        available,
                         "check_area: AreaInsufficient"
                     );
                     return Err(LayoutError::AreaInsufficient { needed, available });
@@ -315,6 +332,7 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
             constraints,
             children,
             margin,
+            ..
         } => {
             let inner = apply_margin(
                 area,
@@ -330,8 +348,10 @@ fn check_area(node: &TuiNode, area: Rect) -> Result<(), LayoutError> {
             let ratatui_constraints: Vec<Constraint> =
                 constraints.iter().copied().map(Constraint::from).collect();
             tracing::debug!(
-                ?direction, ?constraints,
-                inner_w = inner.width, inner_h = inner.height,
+                ?direction,
+                ?constraints,
+                inner_w = inner.width,
+                inner_h = inner.height,
                 n_children = children.len(),
                 "check_area: Layout split"
             );

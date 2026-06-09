@@ -294,7 +294,7 @@ where
                     edges: bj_graph_edges,
                     active: active_node,
                 };
-                let tree = bj_to_verified_tree(
+                let (tree, display_proof) = bj_to_verified_tree(
                     &bj_view,
                     &BlackjackDisplayMode::Table,
                     &agent_triples,
@@ -304,15 +304,26 @@ where
                     viewport,
                 );
                 let backend = RatatuiBackend::new();
-                let (tui_node, _stats, render_proof) = backend
-                    .render(&tree)
-                    .unwrap_or_else(|e| panic!("RatatuiBackend::render failed: {e}"));
-                let _: Established<BjUiConsistent> = Established::prove(&render_proof);
-                verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
-                    use crate::tui::contracts::render_resize_prompt;
-                    render_resize_prompt(f, &e);
-                    elicitation::contracts::Established::assert()
-                });
+                match backend.render(&tree) {
+                    Ok((tui_node, _stats, render_proof)) => {
+                        use elicitation::contracts::both;
+                        let _: Established<BjUiConsistent> =
+                            Established::prove(&both(render_proof, display_proof));
+                        verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
+                            use crate::tui::contracts::render_resize_prompt;
+                            render_resize_prompt(f, &e);
+                            elicitation::contracts::Established::assert()
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "RatatuiBackend::render failed");
+                        use crate::tui::contracts::{LayoutError, render_resize_prompt};
+                        render_resize_prompt(
+                            f,
+                            &LayoutError::AreaInsufficient { needed: 1, available: 0 },
+                        );
+                    }
+                }
             })?;
         }
 
