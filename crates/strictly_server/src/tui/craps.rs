@@ -8,15 +8,84 @@
 //! `execute_place_bets` → `execute_comeout_roll` → `execute_point_roll`.
 //! The compiler enforces correct phase ordering via `Established<P>` contracts.
 
-use elicitation::middleware::{ChatMessage, ContextualCommunicator, ObservableCommunicator,
-    Participant, knowledge_cache};
-use elicit_ratatui::TuiCommunicator;
 use crate::tui::typestate_widget::{GameEvent, craps_active, craps_edges, craps_nodes};
-use anyhow::Result;
+
+// ── Error type ────────────────────────────────────────────────────────────────
+
+/// Discriminant for [`CrapsSessionError`].
+#[derive(Debug, derive_more::Display)]
+pub enum CrapsSessionErrorKind {
+    /// A game-library operation failed.
+    #[display("{}", _0)]
+    Game(strictly_craps::CrapsError),
+    /// A seat index was out of range for the table.
+    #[display("seat {} not found (table has {} seats)", index, count)]
+    SeatNotFound {
+        /// Requested seat index.
+        index: usize,
+        /// Actual number of seats in the table.
+        count: usize,
+    },
+    /// A seat had the wrong communication type for the operation.
+    #[display("seat {} type mismatch: expected {expected}, found {found}", index)]
+    SeatTypeMismatch {
+        /// Seat index where the mismatch occurred.
+        index: usize,
+        /// Communication type expected at this seat.
+        expected: &'static str,
+        /// Communication type actually present.
+        found: &'static str,
+    },
+    /// A terminal I/O operation failed (crossterm event or terminal draw).
+    #[display("I/O error: {}", _0)]
+    Io(std::io::Error),
+}
+
+/// Error produced by craps session operations.
+#[derive(Debug, derive_more::Display, derive_more::Error)]
+#[display("{} at {}:{}", kind, file, line)]
+pub struct CrapsSessionError {
+    kind: CrapsSessionErrorKind,
+    line: u32,
+    file: &'static str,
+}
+
+impl CrapsSessionError {
+    #[track_caller]
+    fn new(kind: CrapsSessionErrorKind) -> Self {
+        let loc = std::panic::Location::caller();
+        Self { kind, line: loc.line(), file: loc.file() }
+    }
+
+    #[track_caller]
+    fn game(e: strictly_craps::CrapsError) -> Self {
+        Self::new(CrapsSessionErrorKind::Game(e))
+    }
+
+    #[track_caller]
+    fn seat_not_found(index: usize, count: usize) -> Self {
+        Self::new(CrapsSessionErrorKind::SeatNotFound { index, count })
+    }
+
+    #[track_caller]
+    fn seat_type_mismatch(index: usize, expected: &'static str, found: &'static str) -> Self {
+        Self::new(CrapsSessionErrorKind::SeatTypeMismatch { index, expected, found })
+    }
+
+    #[track_caller]
+    fn io(e: std::io::Error) -> Self {
+        Self::new(CrapsSessionErrorKind::Io(e))
+    }
+
+}
 use crossterm::event::{self, Event, KeyCode};
+use elicit_ratatui::TuiCommunicator;
 use elicitation::ElicitCommunicator as _;
 use elicitation::Elicitation as _;
 use elicitation::Generator as _;
+use elicitation::middleware::{
+    ChatMessage, ContextualCommunicator, ObservableCommunicator, Participant, knowledge_cache,
+};
 use ratatui::{Terminal, backend::Backend};
 use strictly_craps::{
     ActiveBet, BetOutcome, BetType, ComeOutOutput, CrapsAction, CrapsTable, CrapsTableView,
@@ -91,9 +160,9 @@ pub async fn run_craps_session<B: Backend>(
     player_name: String,
     initial_bankroll: u64,
     show_typestate_graph: bool,
-) -> Result<CrapsSessionOutcome>
+) -> Result<CrapsSessionOutcome, CrapsSessionError>
 where
-    <B as Backend>::Error: Send + Sync + 'static,
+    <B as Backend>::Error: Into<std::io::Error>,
 {
     info!("Starting craps session");
 
@@ -151,7 +220,10 @@ where
 
         // Check lesson advancement
         if table.seats()[0].lesson().can_advance() {
-            let seat = &mut table.seat_mut(0).expect("seat 0 exists");
+            let count = table.seats().len();
+            let seat = table
+                .seat_mut(0)
+                .ok_or_else(|| CrapsSessionError::seat_not_found(0, count))?;
             if seat.advance_round() {
                 let new_title = seat.lesson().lesson_title();
                 let new_level = seat.lesson().level();
@@ -183,9 +255,9 @@ async fn run_single_round<B: Backend>(
     comm: &ObservableCommunicator<TuiCommunicator>,
     event_log: &mut Vec<GameEvent>,
     rng: &impl elicitation::Generator<Target = DiceRoll>,
-) -> Result<RoundOutcome>
+) -> Result<RoundOutcome, CrapsSessionError>
 where
-    <B as Backend>::Error: Send + Sync + 'static,
+    <B as Backend>::Error: Into<std::io::Error>,
 {
     let bankroll = *table.seats()[0].bankroll();
     let lesson = table.seats()[0].lesson();
@@ -241,11 +313,12 @@ where
     };
 
     // Deduct from bankroll
+    let seat_count = table.seats().len();
     table
         .seat_mut(0)
-        .expect("seat 0 exists")
+        .ok_or_else(|| CrapsSessionError::seat_not_found(0, seat_count))?
         .deduct_wagers(bet_amount)
-        .map_err(anyhow::Error::msg)?;
+        .map_err(CrapsSessionError::game)?;
 
     let bet = ActiveBet::new(BetType::PassLine, bet_amount);
     let seat_bets = vec![vec![bet.clone()]];
@@ -259,7 +332,7 @@ where
     let setup = GameSetup::new(1, table.max_odds());
     let betting_state = setup.start_betting(table.bankroll_vec());
     let (comeout_state, bets_proof) =
-        execute_place_bets(betting_state, seat_bets.clone()).map_err(anyhow::Error::msg)?;
+        execute_place_bets(betting_state, seat_bets.clone()).map_err(CrapsSessionError::game)?;
 
     current_phase = "ComeOut".to_string();
     event_log.push(GameEvent::phase_change("Betting", "ComeOut"));
@@ -293,9 +366,10 @@ where
 
             if pass_won {
                 // Credit back wager + winnings
+                let seat_count = table.seats().len();
                 table
                     .seat_mut(0)
-                    .expect("seat 0")
+                    .ok_or_else(|| CrapsSessionError::seat_not_found(0, seat_count))?
                     .credit_winnings(bet_amount * 2);
                 let natural_word = if sum == 7 { "Seven" } else { "Yo-leven" };
                 event_log.push(GameEvent::story(format!(
@@ -349,7 +423,11 @@ where
                 event_log,
             )?;
 
-            table.seat_mut(0).expect("seat 0").record_round();
+            let seat_count = table.seats().len();
+            table
+                .seat_mut(0)
+                .ok_or_else(|| CrapsSessionError::seat_not_found(0, seat_count))?
+                .record_round();
 
             let new_bankroll = *table.seats()[0].bankroll();
             let net: i64 = if pass_won {
@@ -454,9 +532,10 @@ where
                         );
 
                         if pass_won {
+                            let seat_count = table.seats().len();
                             table
                                 .seat_mut(0)
-                                .expect("seat 0")
+                                .ok_or_else(|| CrapsSessionError::seat_not_found(0, seat_count))?
                                 .credit_winnings(bet_amount * 2);
                             event_log.push(GameEvent::story(format!(
                                 "🎯  Point {point} hit on roll #{roll_count}! \
@@ -502,7 +581,11 @@ where
                             event_log,
                         )?;
 
-                        table.seat_mut(0).expect("seat 0").record_round();
+                        let seat_count = table.seats().len();
+                        table
+                            .seat_mut(0)
+                            .ok_or_else(|| CrapsSessionError::seat_not_found(0, seat_count))?
+                            .record_round();
 
                         let new_bankroll = *table.seats()[0].bankroll();
                         let net: i64 = if pass_won {
@@ -534,9 +617,9 @@ fn render_craps<B: Backend>(
     phase: DisplayPhase<'_>,
     active: Option<usize>,
     event_log: &[GameEvent],
-) -> Result<()>
+) -> Result<(), CrapsSessionError>
 where
-    <B as Backend>::Error: Send + Sync + 'static,
+    <B as Backend>::Error: Into<std::io::Error>,
 {
     use crate::tui::contracts::{CrapsUiConsistent, render_resize_prompt, verified_draw};
     use crate::tui::game_ir::{EventLog, GraphParams, craps_to_verified_tree};
@@ -566,20 +649,34 @@ where
         active,
     };
 
-    ctx.terminal.draw(|f| {
-        let area = f.area();
-        let viewport = Viewport::new(area.width as u32, area.height as u32);
-        let tree = craps_to_verified_tree(&view, &CrapsDisplayMode::Table, &log, &graph, viewport);
-        let backend = RatatuiBackend::new();
-        let (tui_node, _stats, render_proof) = backend
-            .render(&tree)
-            .unwrap_or_else(|e| panic!("RatatuiBackend::render failed: {e}"));
-        let _: Established<CrapsUiConsistent> = Established::prove(&render_proof);
-        verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
-            render_resize_prompt(f, &e);
-            Established::assert()
-        });
-    })?;
+    ctx.terminal
+        .draw(|f| {
+            let area = f.area();
+            let viewport = Viewport::new(area.width as u32, area.height as u32);
+            let tree =
+                craps_to_verified_tree(&view, &CrapsDisplayMode::Table, &log, &graph, viewport);
+            let backend = RatatuiBackend::new();
+            match backend.render(&tree) {
+                Ok((tui_node, _stats, render_proof)) => {
+                    let _: Established<CrapsUiConsistent> = Established::prove(&render_proof);
+                    verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
+                        render_resize_prompt(f, &e);
+                        Established::assert()
+                    });
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "RatatuiBackend::render failed");
+                    render_resize_prompt(
+                        f,
+                        &crate::tui::contracts::LayoutError::AreaInsufficient {
+                            needed: 1,
+                            available: 0,
+                        },
+                    );
+                }
+            }
+        })
+        .map_err(|e| CrapsSessionError::io(e.into()))?;
     Ok(())
 }
 
@@ -684,9 +781,12 @@ fn craps_state_view_from_phase(phase: &DisplayPhase<'_>) -> crate::games::craps:
 // ─────────────────────────────────────────────────────────────
 
 /// Wait for a keypress. Returns `false` if Q pressed (quit).
-async fn wait_for_keypress_raw() -> Result<RoundOutcome> {
+async fn wait_for_keypress_raw() -> Result<RoundOutcome, CrapsSessionError> {
     loop {
-        let ev = tokio::task::spawn_blocking(event::read).await??;
+        let ev = tokio::task::spawn_blocking(event::read)
+            .await
+            .map_err(|e| CrapsSessionError::io(std::io::Error::other(e)))?
+            .map_err(CrapsSessionError::io)?;
         if let Event::Key(key) = ev {
             return Ok(
                 if key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q') {
@@ -703,13 +803,13 @@ async fn wait_for_keypress_raw() -> Result<RoundOutcome> {
 async fn wait_for_continue<B: Backend>(
     _ctx: &mut RenderCtx<'_, B>,
     _event_log: &[GameEvent],
-) -> Result<RoundOutcome>
+) -> Result<RoundOutcome, CrapsSessionError>
 where
-    <B as Backend>::Error: Send + Sync + 'static,
+    <B as Backend>::Error: Into<std::io::Error>,
 {
     // Drain pending events so we don't accidentally skip
-    while event::poll(std::time::Duration::from_millis(50))? {
-        let _ = event::read()?;
+    while event::poll(std::time::Duration::from_millis(50)).map_err(CrapsSessionError::io)? {
+        let _ = event::read().map_err(CrapsSessionError::io)?;
     }
 
     wait_for_keypress_raw().await
@@ -889,10 +989,13 @@ async fn elicit_agent_craps_bet<C: elicitation::ElicitCommunicator + Clone>(
                 };
                 event_log.push(GameEvent::story(format!("  🔍 {seat_name} {narration}")));
 
-                knowledge
-                    .lock()
-                    .unwrap()
-                    .push(format!("[{category}] {description}"));
+                match knowledge.lock() {
+                    Ok(mut guard) => guard.push(format!("[{category}] {description}")),
+                    Err(e) => tracing::warn!(
+                        error = %e,
+                        "knowledge cache mutex poisoned; skipping entry"
+                    ),
+                }
 
                 let _ = ctx_comm
                     .send_prompt(&format!("[Table State — {category}] {description}"))
@@ -917,9 +1020,9 @@ pub async fn run_multi_craps_session<B: Backend>(
     initial_bankroll: u64,
     co_players: Vec<CrapsCoPlayer>,
     show_typestate_graph: bool,
-) -> Result<CrapsSessionOutcome>
+) -> Result<CrapsSessionOutcome, CrapsSessionError>
 where
-    <B as Backend>::Error: Send + Sync + 'static,
+    <B as Backend>::Error: Into<std::io::Error>,
 {
     info!("Starting multi-player craps session");
 
@@ -941,8 +1044,11 @@ where
     let mut seat_names: Vec<String> = Vec::new();
 
     // Seat 0: human
-    let human_comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx)
-        .with_chat(chat_tx.clone(), Participant::Human, ChatMessage::new);
+    let human_comm = ObservableCommunicator::new(TuiCommunicator::new(), prompt_tx).with_chat(
+        chat_tx.clone(),
+        Participant::Human,
+        ChatMessage::new,
+    );
     seat_comms.push(CrapsSeatComm::Human { comm: human_comm });
     seat_names.push(player_name.clone());
 
@@ -954,8 +1060,11 @@ where
                 Ok(base) => {
                     let base = base.with_system_prompt(cp.personality.system_prompt());
                     let participant = Participant::Agent(Some(cp.slot.name.clone()));
-                    let comm = ObservableCommunicator::new(base, agent_prompt_tx)
-                        .with_chat(chat_tx.clone(), participant, ChatMessage::new);
+                    let comm = ObservableCommunicator::new(base, agent_prompt_tx).with_chat(
+                        chat_tx.clone(),
+                        participant,
+                        ChatMessage::new,
+                    );
                     seat_comms.push(CrapsSeatComm::Agent {
                         comm,
                         personality: cp.personality,
@@ -1057,7 +1166,7 @@ where
         let human_bet = {
             let max_bet = bankroll.min(table.table_max());
             let CrapsSeatComm::Human { ref comm, .. } = seat_comms[0] else {
-                unreachable!("seat 0 is always human");
+                return Err(CrapsSessionError::seat_type_mismatch(0, "Human", "Agent"));
             };
             match elicit_craps_bet(comm, table.table_min(), max_bet, bankroll).await {
                 Some(v) => v,
@@ -1073,11 +1182,12 @@ where
         };
 
         // Deduct human bet
+        let seat_count = table.seats().len();
         table
             .seat_mut(0)
-            .expect("seat 0")
+            .ok_or_else(|| CrapsSessionError::seat_not_found(0, seat_count))?
             .deduct_wagers(human_bet)
-            .map_err(anyhow::Error::msg)?;
+            .map_err(CrapsSessionError::game)?;
 
         event_log.push(GameEvent::story(format!(
             "💰  You bet ${human_bet} on Pass Line"
@@ -1115,12 +1225,15 @@ where
                         None => table.table_min().min(ai_bankroll),
                     }
                 }
-                CrapsSeatComm::Human { .. } => unreachable!(),
+                CrapsSeatComm::Human { .. } => {
+                    return Err(CrapsSessionError::seat_type_mismatch(i, "Agent", "Human"));
+                }
             };
 
+            let count = table.seats().len();
             if let Err(e) = table
                 .seat_mut(i)
-                .expect("seat exists")
+                .ok_or_else(|| CrapsSessionError::seat_not_found(i, count))?
                 .deduct_wagers(ai_bet)
             {
                 warn!(seat = i, error = %e, "AI bet deduction failed");
@@ -1145,7 +1258,7 @@ where
         let setup = GameSetup::new(seat_comms.len(), table.max_odds());
         let betting_state = setup.start_betting(table.bankroll_vec());
         let (comeout_state, bets_proof) =
-            execute_place_bets(betting_state, all_seat_bets.clone()).map_err(anyhow::Error::msg)?;
+            execute_place_bets(betting_state, all_seat_bets.clone()).map_err(CrapsSessionError::game)?;
 
         current_phase = "ComeOut".to_string();
         event_log.push(GameEvent::phase_change("Betting", "ComeOut"));
@@ -1181,9 +1294,10 @@ where
 
                 // Narrate human result
                 if pass_won {
+                    let seat_count = table.seats().len();
                     table
                         .seat_mut(0)
-                        .expect("seat 0")
+                        .ok_or_else(|| CrapsSessionError::seat_not_found(0, seat_count))?
                         .credit_winnings(human_bet * 2);
                     let natural_word = if sum == 7 { "Seven" } else { "Yo-leven" };
                     event_log.push(GameEvent::story(format!(
@@ -1208,9 +1322,10 @@ where
                         continue;
                     }
                     if pass_won {
+                        let seat_count = table.seats().len();
                         table
                             .seat_mut(i)
-                            .expect("seat exists")
+                            .ok_or_else(|| CrapsSessionError::seat_not_found(i, seat_count))?
                             .credit_winnings(ai_bet_amount * 2);
                         event_log.push(GameEvent::story(format!(
                             "  🤖 {} wins +${ai_bet_amount}",
@@ -1249,8 +1364,12 @@ where
                     &event_log,
                 )?;
 
+                let seat_count = table.seats().len();
                 for i in 0..seat_comms.len() {
-                    table.seat_mut(i).expect("seat").record_round();
+                    table
+                        .seat_mut(i)
+                        .ok_or_else(|| CrapsSessionError::seat_not_found(i, seat_count))?
+                        .record_round();
                 }
 
                 let new_bankroll = *table.seats()[0].bankroll();
@@ -1369,9 +1488,12 @@ where
 
                             // Narrate human result
                             if pass_won {
+                                let seat_count = table.seats().len();
                                 table
                                     .seat_mut(0)
-                                    .expect("seat 0")
+                                    .ok_or_else(|| {
+                                        CrapsSessionError::seat_not_found(0, seat_count)
+                                    })?
                                     .credit_winnings(human_bet * 2);
                                 event_log.push(GameEvent::story(format!(
                                     "🎯  Point {point} hit on roll #{roll_count}! \
@@ -1392,9 +1514,12 @@ where
                                     continue;
                                 }
                                 if pass_won {
+                                    let seat_count = table.seats().len();
                                     table
                                         .seat_mut(i)
-                                        .expect("seat exists")
+                                        .ok_or_else(|| {
+                                            CrapsSessionError::seat_not_found(i, seat_count)
+                                        })?
                                         .credit_winnings(ai_bet_amount * 2);
                                     event_log.push(GameEvent::story(format!(
                                         "  🤖 {} wins +${ai_bet_amount}",
@@ -1433,8 +1558,12 @@ where
                                 &event_log,
                             )?;
 
+                            let seat_count = table.seats().len();
                             for i in 0..seat_comms.len() {
-                                table.seat_mut(i).expect("seat").record_round();
+                                table
+                                    .seat_mut(i)
+                                    .ok_or_else(|| CrapsSessionError::seat_not_found(i, seat_count))?
+                                    .record_round();
                             }
 
                             let new_bankroll = *table.seats()[0].bankroll();

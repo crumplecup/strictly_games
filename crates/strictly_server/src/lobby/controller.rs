@@ -81,7 +81,7 @@ impl LobbyController {
         terminal: &mut Terminal<B>,
     ) -> anyhow::Result<()>
     where
-        <B as Backend>::Error: Send + Sync + 'static,
+        <B as Backend>::Error: Into<std::io::Error> + Send + Sync + 'static,
     {
         info!("Starting lobby event loop");
 
@@ -397,7 +397,7 @@ impl LobbyController {
         show_typestate_graph: bool,
     ) -> anyhow::Result<ActiveScreen>
     where
-        <B as Backend>::Error: Send + Sync + 'static,
+        <B as Backend>::Error: Into<std::io::Error> + Send + Sync + 'static,
     {
         info!(
             agent_name = %agent_name,
@@ -415,7 +415,8 @@ impl LobbyController {
 
         let selected_game = self.settings.selected_game;
         let profile_service = self.profile_service.clone();
-        let fallback = make_lobby_screen(&self.current_user.clone(), selected_game, &profile_service);
+        let fallback =
+            make_lobby_screen(&self.current_user.clone(), selected_game, &profile_service);
 
         match selected_game {
             // ── Blackjack ── MCP agent game via HTTP server ──────────────
@@ -642,7 +643,7 @@ impl LobbyController {
         show_typestate_graph: bool,
     ) -> anyhow::Result<ActiveScreen>
     where
-        <B as Backend>::Error: Send + Sync + 'static,
+        <B as Backend>::Error: Into<std::io::Error> + Send + Sync + 'static,
     {
         use crate::tui::run_blackjack_mcp_session;
 
@@ -703,11 +704,9 @@ fn make_lobby_screen(
     profile_service: &ProfileService,
 ) -> ActiveScreen {
     match user {
-        Some(u) => ActiveScreen::MainLobby(MainLobbyScreen::with_game(
-            u.clone(),
-            game,
-            profile_service,
-        )),
+        Some(u) => {
+            ActiveScreen::MainLobby(MainLobbyScreen::with_game(u.clone(), game, profile_service))
+        }
         None => ActiveScreen::ProfileSelect(ProfileSelectScreen::new(profile_service)),
     }
 }

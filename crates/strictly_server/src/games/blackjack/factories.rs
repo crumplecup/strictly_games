@@ -477,12 +477,24 @@ async fn place_bet_and_transition(
 
         let seat_bets: Vec<SeatBet> = seats
             .iter()
-            .map(|s| SeatBet {
-                name: s.session_id.clone(),
-                bankroll: s.bankroll,
-                bet: s.bet.expect("all bets set"),
+            .map(|s| {
+                let bet = s.bet.ok_or_else(|| {
+                    warn!(
+                        session_id = %s.session_id,
+                        "seat has no bet when all bets expected to be set"
+                    );
+                    ErrorData::internal_error(
+                        format!("seat '{}' missing bet after all-bets check", s.session_id),
+                        None,
+                    )
+                })?;
+                Ok(SeatBet {
+                    name: s.session_id.clone(),
+                    bankroll: s.bankroll,
+                    bet,
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, ErrorData>>()?;
 
         let seat_registries: Vec<DynamicToolRegistry> =
             seats.iter().map(|s| s.registry.clone()).collect();
@@ -684,7 +696,13 @@ async fn take_action_and_transition(
                         seat_session_ids,
                         ..
                     } => (round, seat_registries, seat_session_ids),
-                    _ => unreachable!(),
+                    _ => {
+                        warn!("phase was not PlayerTurns after swap; aborting settle");
+                        return Err(ErrorData::internal_error(
+                            "unexpected phase after PlayerTurns swap",
+                            None,
+                        ));
+                    }
                 };
 
                 let dealer_display = round.dealer_hand.display();

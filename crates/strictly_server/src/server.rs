@@ -154,17 +154,23 @@ impl GameServer {
         );
 
         // Create session if it doesn't exist
-        if self.sessions.get_session(&req.session_id).is_none() {
+        if self
+            .sessions
+            .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
+            .is_none()
+        {
             info!(session_id = %req.session_id, "Creating new session");
             self.sessions
                 .create_session(req.session_id.clone())
-                .map_err(|e| McpError::internal_error(e, None))?;
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         }
 
         // Get session and register player
         let mut session = self
             .sessions
             .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
             .ok_or_else(|| McpError::internal_error("Session not found after creation", None))?;
 
         // Generate player ID
@@ -178,7 +184,9 @@ impl GameServer {
             .register_player(player_id.clone(), req.name.clone(), req.player_type)
             .map_err(|e| McpError::invalid_params(e, None))?;
 
-        self.sessions.update_session(session.clone());
+        self.sessions
+            .update_session(session.clone())
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         let message = format!(
             "Registered as player {:?}!\nPlayer ID: {}\nSession: {}\n\n{}",
@@ -207,15 +215,21 @@ impl GameServer {
     ) -> Result<CallToolResult, McpError> {
         info!(session_id = %req.session_id, "Starting new game");
 
-        let mut session = self.sessions.get_session(&req.session_id).ok_or_else(|| {
-            McpError::invalid_params("Session not found. Use register_player first.", None)
-        })?;
+        let mut session = self
+            .sessions
+            .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
+            .ok_or_else(|| {
+                McpError::invalid_params("Session not found. Use register_player first.", None)
+            })?;
 
         // Reset the game board and clear players for fresh start
         session.game = crate::games::tictactoe::Game::new().into();
         session.player_x = None;
         session.player_o = None;
-        self.sessions.update_session(session.clone());
+        self.sessions
+            .update_session(session.clone())
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         let message = format!(
             "New game started! Players can rejoin.\n{}",
@@ -243,6 +257,7 @@ impl GameServer {
         let mut session = self
             .sessions
             .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
             .ok_or_else(|| McpError::invalid_params("Session not found", None))?;
 
         // Make the move (validates turn and position)
@@ -250,7 +265,9 @@ impl GameServer {
             .make_move(&req.player_id, req.position)
             .map_err(|e| McpError::invalid_params(e, None))?;
 
-        self.sessions.update_session(session.clone());
+        self.sessions
+            .update_session(session.clone())
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         let status_msg = session.game.status_string();
 
@@ -278,6 +295,7 @@ impl GameServer {
         let session = self
             .sessions
             .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
             .ok_or_else(|| McpError::invalid_params("Session not found", None))?;
 
         let player_x_name = session
@@ -323,6 +341,7 @@ impl GameServer {
         let session = self
             .sessions
             .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
             .ok_or_else(|| McpError::invalid_params("Session not found", None))?;
 
         session.request_cancel();
@@ -338,7 +357,10 @@ impl GameServer {
     pub async fn list_sessions(&self) -> Result<CallToolResult, McpError> {
         info!("Listing all game sessions");
 
-        let session_ids: Vec<String> = self.sessions.list_sessions();
+        let session_ids: Vec<String> = self
+            .sessions
+            .list_sessions()
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         if session_ids.is_empty() {
             info!("No active sessions found");
@@ -350,7 +372,11 @@ impl GameServer {
         let mut result = String::from("Available game sessions:\n\n");
 
         for session_id in &session_ids {
-            if let Some(session) = self.sessions.get_session(session_id) {
+            if let Some(session) = self
+                .sessions
+                .get_session(session_id)
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?
+            {
                 let has_x = session.player_x.is_some();
                 let has_o = session.player_o.is_some();
                 let player_count = if has_x { 1 } else { 0 } + if has_o { 1 } else { 0 };
@@ -402,10 +428,15 @@ impl GameServer {
             req.player_name.to_lowercase().replace(' ', "_")
         );
 
-        if self.sessions.get_session(&req.session_id).is_none() {
+        if self
+            .sessions
+            .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
+            .is_none()
+        {
             self.sessions
                 .create_session(req.session_id.clone())
-                .map_err(|e: String| McpError::internal_error(e, None))?;
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         }
 
         let mark = self
@@ -436,23 +467,26 @@ impl GameServer {
         let session = self
             .sessions
             .get_session(&req.session_id)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?
             .ok_or_else(|| McpError::internal_error("Session not found", None))?;
 
         let board = session.game.board().display();
 
         // Record the game briefing in the chat log so the chat pane shows the
         // instructions given to the agent at the start of every game.
-        self.sessions.push_dialogue(
-            &req.session_id,
-            DialogueEntry::server(format!(
-                "🎮 {} joined as {:?}. \
-                 You are competing in Tic-Tac-Toe against a human opponent. \
-                 Win by occupying three squares in a row — horizontally, vertically, or diagonally. \
-                 Block your opponent if they are about to win. \
-                 Each available tool represents one empty square.",
-                req.player_name, mark
-            )),
-        );
+        self.sessions
+            .push_dialogue(
+                &req.session_id,
+                DialogueEntry::server(format!(
+                    "🎮 {} joined as {:?}. \
+                     You are competing in Tic-Tac-Toe against a human opponent. \
+                     Win by occupying three squares in a row — horizontally, vertically, or diagonally. \
+                     Block your opponent if they are about to win. \
+                     Each available tool represents one empty square.",
+                    req.player_name, mark
+                )),
+            )
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         if session.game.is_over() {
             let result = if let Some(winner) = session.game.winner() {
@@ -518,7 +552,10 @@ impl GameServer {
         self.dynamic.set_peer(peer);
 
         // Initialise (or get) the shared table.
-        let table = self.sessions.init_shared_table(num_seats);
+        let table = self
+            .sessions
+            .init_shared_table(num_seats)
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
         // Join the table — add our seat entry.
         let seat_index = {
@@ -555,7 +592,9 @@ impl GameServer {
         // Record session_id on this connection (used by call_tool dialogue logging).
         if let Some(ref sid) = req.session_id {
             let _ = self.session_id.set(sid.clone());
-            self.sessions.register_seat_index(sid.clone(), seat_index);
+            self.sessions
+                .register_seat_index(sid.clone(), seat_index)
+                .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         }
 
         // Register bet tools for this seat.
@@ -587,8 +626,12 @@ impl GameServer {
         );
 
         if let Some(session_id) = &req.session_id {
-            self.sessions
-                .push_dialogue(session_id, DialogueEntry::server(prologue.clone()));
+            if let Err(e) = self
+                .sessions
+                .push_dialogue(session_id, DialogueEntry::server(prologue.clone()))
+            {
+                tracing::warn!(error = %e, "push_dialogue failed");
+            }
         }
 
         Ok(CallToolResult::success(vec![Content::text(prologue)]))
@@ -653,8 +696,12 @@ impl ServerHandler for GameServer {
             // Dynamic tool — log agent call and server response as dialogue.
             let tool_name = request.name.clone();
             if let Some(session_id) = self.session_id.get() {
-                self.sessions
-                    .push_dialogue(session_id, DialogueEntry::agent(format!("→ `{tool_name}`")));
+                if let Err(e) = self
+                    .sessions
+                    .push_dialogue(session_id, DialogueEntry::agent(format!("→ `{tool_name}`")))
+                {
+                    tracing::warn!(error = %e, "push_dialogue (agent) failed");
+                }
             }
 
             let result = self.dynamic.call_tool(request, context).await?;
@@ -667,8 +714,12 @@ impl ServerHandler for GameServer {
                     .collect::<Vec<_>>()
                     .join("\n");
                 if !response_text.is_empty() {
-                    self.sessions
-                        .push_dialogue(session_id, DialogueEntry::server(response_text));
+                    if let Err(e) = self
+                        .sessions
+                        .push_dialogue(session_id, DialogueEntry::server(response_text))
+                    {
+                        tracing::warn!(error = %e, "push_dialogue (server) failed");
+                    }
                 }
             }
 

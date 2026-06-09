@@ -12,7 +12,7 @@
 
 use elicitation::contracts::Established;
 #[cfg(not(kani))]
-use tracing::instrument;
+use tracing::{error, instrument};
 
 use crate::{
     ActionError, BasicAction, GameBetting, GameDealerTurn, GameFinished, GamePlayerTurn,
@@ -49,8 +49,9 @@ pub fn execute_place_bet(betting: GameBetting, bet: u64) -> Result<PlaceBetOutpu
         GameResult::PlayerTurn(pt) => PlaceBetOutput::PlayerTurn(pt, Established::assert()),
         GameResult::Finished(f, settled) => PlaceBetOutput::Finished(f, settled),
         GameResult::DealerTurn(_) => {
-            // place_bet never emits DealerTurn — statically unreachable.
-            unreachable!("place_bet never emits GameResult::DealerTurn")
+            // place_bet should never emit DealerTurn; treat as an unexpected state.
+            error!("place_bet emitted unexpected GameResult::DealerTurn");
+            return Err(ActionError::DeckExhausted);
         }
     };
     Ok(output)

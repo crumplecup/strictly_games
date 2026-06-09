@@ -41,12 +41,8 @@ async fn main() -> Result<()> {
                 let agent_config = std::path::PathBuf::from("agent_config.toml");
                 run_lobby(db_path, agents_dir, port, agent_config).await
             }
-            FrontendMode::Egui => {
-                run_egui_lobby(db_path, agents_dir).await
-            }
-            FrontendMode::Leptos => {
-                run_leptos_lobby(db_path, agents_dir, port).await
-            }
+            FrontendMode::Egui => run_egui_lobby(db_path, agents_dir).await,
+            FrontendMode::Leptos => run_leptos_lobby(db_path, agents_dir, port).await,
         },
         Command::Agent {
             config,
@@ -73,10 +69,13 @@ async fn main() -> Result<()> {
             init_logging();
             run_verify(&tool, verbose)
         }
-        Command::GenerateAssets { columns, input, rust_out } => {
+        Command::GenerateAssets {
+            columns,
+            input,
+            rust_out,
+        } => {
             init_logging();
             generate_assets::run_generate_assets(columns, &input, &rust_out)
-                .map_err(Into::into)
         }
     }
 }
@@ -123,7 +122,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
         .create(true)
         .append(true)
         .open("server.log")
-        .expect("Failed to open server.log");
+        .map_err(|e| anyhow::anyhow!("Failed to open server.log: {e}"))?;
 
     tracing_subscriber::fmt()
         .with_writer(std::sync::Arc::new(log_file))
@@ -175,7 +174,8 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 let sessions = rest_sessions.clone();
                 move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                     use axum::Json;
-                    if let Some(session) = sessions.get_session(&session_id) {
+                    let found = sessions.get_session(&session_id).ok().flatten();
+                    if let Some(session) = found {
                         Json(session.game.clone())
                     } else {
                         Json(AnyGame::Setup {
@@ -203,7 +203,8 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 let sessions = explore_sessions.clone();
                 move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                     use axum::Json;
-                    if let Some(session) = sessions.get_session(&session_id) {
+                    let found = sessions.get_session(&session_id).ok().flatten();
+                    if let Some(session) = found {
                         Json(session.explore_stats.clone())
                     } else {
                         Json(strictly_server::ExploreStats::default())
@@ -217,7 +218,7 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 let sessions = explore_sessions.clone();
                 move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                     use axum::Json;
-                    Json(sessions.get_dialogue(&session_id))
+                    Json(sessions.get_dialogue(&session_id).unwrap_or_default())
                 }
             }),
         )
@@ -228,8 +229,9 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                 move |axum::extract::Path(session_id): axum::extract::Path<String>| async move {
                     use axum::Json;
                     use strictly_server::SharedTableSeatView;
-                    if let Some(table) = sessions.get_shared_table() {
-                        let seat_index = sessions.get_seat_index(&session_id).unwrap_or(0);
+                    if let Some(table) = sessions.get_shared_table().ok().flatten() {
+                        let seat_index =
+                            sessions.get_seat_index(&session_id).ok().flatten().unwrap_or(0);
                         let guard = table.lock().await;
                         Json(SharedTableSeatView::from_table(&guard, seat_index))
                     } else {
@@ -238,6 +240,8 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                             bankroll: 0,
                             description: "No active blackjack session.".to_string(),
                             is_terminal: true,
+                            player_hands: Vec::new(),
+                            dealer_hand: Vec::new(),
                         })
                     }
                 }
@@ -309,16 +313,16 @@ async fn run_leptos_lobby(
         })
     };
 
-    info!(port, "Starting leptos frontend at http://127.0.0.1:{port}/lobby");
+    info!(
+        port,
+        "Starting leptos frontend at http://127.0.0.1:{port}/lobby"
+    );
     strictly_server::run_leptos(profile_service, agent_library, port).await
 }
 
 /// Run the egui native-window frontend with the full lobby.
 #[instrument(skip_all, fields(db_path = %db_path))]
-async fn run_egui_lobby(
-    db_path: String,
-    agents_dir: Option<std::path::PathBuf>,
-) -> Result<()> {
+async fn run_egui_lobby(db_path: String, agents_dir: Option<std::path::PathBuf>) -> Result<()> {
     use strictly_server::{AgentLibrary, GameRepository, ProfileService};
 
     init_logging();
@@ -338,7 +342,7 @@ async fn run_egui_lobby(
         })
     };
 
-    strictly_server::run_egui(profile_service, agent_library).map_err(Into::into)
+    strictly_server::run_egui(profile_service, agent_library)
 }
 
 /// Run the lobby TUI
@@ -565,7 +569,7 @@ async fn play_ttt_game(
             rmcp::model::CallToolRequestParams::new("play_game").with_arguments(
                 json!({ "session_id": session_id, "player_name": config.name() })
                     .as_object()
-                    .unwrap()
+                    .ok_or_else(|| anyhow::anyhow!("play_game arguments are not an object"))?
                     .clone(),
             ),
         )
@@ -736,7 +740,7 @@ async fn play_blackjack_game(
             rmcp::model::CallToolRequestParams::new("blackjack_deal").with_arguments(
                 json!({ "initial_bankroll": initial_bankroll, "session_id": session_id })
                     .as_object()
-                    .unwrap()
+                    .ok_or_else(|| anyhow::anyhow!("blackjack_deal arguments are not an object"))?
                     .clone(),
             ),
         )
@@ -978,11 +982,13 @@ fn initialize_agent_tracing() {
     use tracing_subscriber::fmt::format::FmtSpan;
 
     // Log agent to file since TUI owns stderr
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("agent.log")
-        .expect("Failed to open agent.log");
+    let log_file = match OpenOptions::new().create(true).append(true).open("agent.log") {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Failed to open agent.log: {e}");
+            return;
+        }
+    };
 
     tracing_subscriber::registry()
         .with(

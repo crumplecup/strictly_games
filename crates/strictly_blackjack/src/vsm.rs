@@ -226,6 +226,8 @@ pub fn bj_player_action(
         valid_action: valid_proof,
         not_bust: bust_proof,
     });
+    // Clone before consuming so we can recover the state on unexpected error.
+    let pt_fallback = pt.clone();
     match pt.action_on_current(action) {
         Ok(GameResult::PlayerTurn(pt2)) => (
             BlackjackState::PlayerTurn {
@@ -248,7 +250,16 @@ pub fn bj_player_action(
             },
             new_proof,
         ),
-        Err(_) => unreachable!("valid_proof and bust_proof guarantee action validity"),
+        Err(e) => {
+            tracing::error!(error = %e, "action_on_current failed despite valid_proof and bust_proof; returning unchanged state");
+            (
+                BlackjackState::PlayerTurn {
+                    inner: pt_fallback,
+                    display_mode,
+                },
+                new_proof,
+            )
+        }
     }
 }
 

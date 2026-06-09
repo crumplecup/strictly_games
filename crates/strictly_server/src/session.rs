@@ -10,6 +10,65 @@ use strictly_blackjack::{MultiRound, SeatResult};
 use tokio::sync::watch;
 use tracing::{debug, info, instrument, warn};
 
+// ── Error type ────────────────────────────────────────────────────────────────
+
+/// A `std::sync::Mutex` was poisoned because another thread panicked while holding it.
+///
+/// `PoisonError<MutexGuard<'_, T>>` carries a lifetime-bound guard and cannot
+/// be stored in a `'static` error type, so we own the diagnostic context
+/// (mutex name) instead.  `PoisonError` itself has `source() → None`, meaning
+/// no further error chain exists — the original panic is already gone.
+#[derive(Debug, Clone, derive_more::Display, derive_more::Error)]
+#[display("mutex '{}' poisoned — another thread panicked while holding this lock", name)]
+pub struct PoisonedMutex {
+    /// Name of the poisoned mutex, for diagnostics.
+    #[error(not(source))]
+    pub name: &'static str,
+}
+
+/// Discriminant for [`SessionError`].
+#[derive(Debug, derive_more::Display)]
+pub enum SessionErrorKind {
+    /// A mutex was poisoned (see [`PoisonedMutex`]).
+    #[display("{}", _0)]
+    Poisoned(PoisonedMutex),
+    /// The requested session does not exist.
+    #[display("session not found: {}", _0)]
+    NotFound(String),
+    /// A session operation could not be completed.
+    #[display("{}", _0)]
+    OperationFailed(String),
+}
+
+/// Error produced by [`SessionManager`] operations.
+#[derive(Debug, derive_more::Display, derive_more::Error)]
+#[display("{} at {}:{}", kind, file, line)]
+pub struct SessionError {
+    /// What went wrong.
+    pub kind: SessionErrorKind,
+    /// Source line where the error was constructed.
+    pub line: u32,
+    /// Source file where the error was constructed.
+    pub file: &'static str,
+}
+
+impl SessionError {
+    /// Construct a [`SessionError`], capturing the call site via `#[track_caller]`.
+    #[track_caller]
+    pub fn new(kind: SessionErrorKind) -> Self {
+        let loc = std::panic::Location::caller();
+        Self { kind, line: loc.line(), file: loc.file() }
+    }
+}
+
+/// Convert a lock-poison event into a [`SessionError`].
+///
+/// `PoisonError<T>` cannot be owned due to its generic guard lifetime, so we
+/// discard the guard and own only the mutex name.
+fn poison_err<T>(name: &'static str) -> impl FnOnce(std::sync::PoisonError<T>) -> SessionError {
+    move |_| SessionError::new(SessionErrorKind::Poisoned(PoisonedMutex { name }))
+}
+
 /// Unique identifier for a game session.
 pub type SessionId = String;
 
@@ -530,7 +589,11 @@ impl SharedTableSeatView {
 
                 // Card data: player hand and dealer (hole card hidden during play).
                 let player_hands = vec![
-                    seat.hand.cards().iter().map(|c| (c.rank(), c.suit())).collect()
+                    seat.hand
+                        .cards()
+                        .iter()
+                        .map(|c| (c.rank(), c.suit()))
+                        .collect(),
                 ];
                 let dealer_hand: Vec<Option<_>> = dealer_cards
                     .iter()
@@ -638,49 +701,49 @@ impl SessionManager {
 
     /// Creates a new game session.
     #[instrument(skip(self))]
-    pub fn create_session(&self, id: SessionId) -> Result<SessionId, String> {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub fn create_session(&self, id: SessionId) -> Result<SessionId, SessionError> {
+        let mut sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
 
         if sessions.contains_key(&id) {
             warn!(session_id = %id, "Session already exists");
-            return Err("Session already exists".to_string());
+            return Err(SessionError::new(SessionErrorKind::OperationFailed(
+                format!("session '{id}' already exists"),
+            )));
         }
 
         let session = GameSession::new(id.clone());
         sessions.insert(id.clone(), session);
-
         info!(session_id = %id, "Created new session");
         Ok(id)
     }
 
     /// Gets a session by ID.
     #[instrument(skip(self))]
-    pub fn get_session(&self, id: &str) -> Option<GameSession> {
-        let sessions = self.sessions.lock().unwrap();
+    pub fn get_session(&self, id: &str) -> Result<Option<GameSession>, SessionError> {
+        let sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
         let session = sessions.get(id).cloned();
-
         if session.is_none() {
             debug!(session_id = id, "Session not found");
         }
-
-        session
+        Ok(session)
     }
 
     /// Updates a session.
     #[instrument(skip(self, session), fields(session_id = %session.id))]
-    pub fn update_session(&self, session: GameSession) {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub fn update_session(&self, session: GameSession) -> Result<(), SessionError> {
+        let mut sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
         sessions.insert(session.id.clone(), session);
         debug!("Session updated");
+        Ok(())
     }
 
     /// Lists all active session IDs.
     #[instrument(skip(self))]
-    pub fn list_sessions(&self) -> Vec<SessionId> {
-        let sessions = self.sessions.lock().unwrap();
+    pub fn list_sessions(&self) -> Result<Vec<SessionId>, SessionError> {
+        let sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
         let ids: Vec<_> = sessions.keys().cloned().collect();
         info!(count = ids.len(), "Listed sessions");
-        ids
+        Ok(ids)
     }
 
     /// Atomically registers a player in a session (thread-safe).
@@ -692,26 +755,23 @@ impl SessionManager {
         player_id: String,
         name: String,
         player_type: PlayerType,
-    ) -> Result<Mark, String> {
-        let mut sessions = self.sessions.lock().unwrap();
-
+    ) -> Result<Mark, SessionError> {
+        let mut sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| "Session not found".to_string())?;
-
-        // Register player while holding the lock
-        session.register_player(player_id, name, player_type)
+            .ok_or_else(|| SessionError::new(SessionErrorKind::NotFound(session_id.to_string())))?;
+        session
+            .register_player(player_id, name, player_type)
+            .map_err(|e| SessionError::new(SessionErrorKind::OperationFailed(e)))
     }
 
     /// Atomically updates game state without overwriting player registrations.
     #[instrument(skip(self, game))]
-    pub fn update_game_atomic(&self, session_id: &str, game: AnyGame) -> Result<(), String> {
-        let mut sessions = self.sessions.lock().unwrap();
-
+    pub fn update_game_atomic(&self, session_id: &str, game: AnyGame) -> Result<(), SessionError> {
+        let mut sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
         let session = sessions
             .get_mut(session_id)
-            .ok_or_else(|| "Session not found".to_string())?;
-
+            .ok_or_else(|| SessionError::new(SessionErrorKind::NotFound(session_id.to_string())))?;
         session.game = game;
         debug!("Game state updated atomically");
         Ok(())
@@ -719,28 +779,26 @@ impl SessionManager {
 
     /// Restarts game in session (keeps players registered).
     #[instrument(skip(self))]
-    pub fn restart_game(&self, session_id: &str) -> Result<(), String> {
-        let mut sessions = self.sessions.lock().unwrap();
-
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| "Session not found".to_string())?;
-
-        session.game = GameSetup::new()
-            .start(crate::games::tictactoe::Player::X)
-            .into();
-        session.explore_stats = ExploreStats::default();
-        // Release session lock before taking dialogue lock.
-        drop(sessions);
-        self.clear_dialogue(session_id);
+    pub fn restart_game(&self, session_id: &str) -> Result<(), SessionError> {
+        {
+            let mut sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
+            let session = sessions.get_mut(session_id).ok_or_else(|| {
+                SessionError::new(SessionErrorKind::NotFound(session_id.to_string()))
+            })?;
+            session.game = GameSetup::new()
+                .start(crate::games::tictactoe::Player::X)
+                .into();
+            session.explore_stats = ExploreStats::default();
+        } // lock released here before taking dialogue lock
+        self.clear_dialogue(session_id)?;
         info!("Game restarted with same players");
         Ok(())
     }
 
     /// Records an agent explore action on a session.
     #[instrument(skip(self))]
-    pub fn record_explore(&self, session_id: &str) {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub fn record_explore(&self, session_id: &str) -> Result<(), SessionError> {
+        let mut sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
         if let Some(session) = sessions.get_mut(session_id) {
             session.explore_stats.record_explore();
             debug!(
@@ -749,12 +807,13 @@ impl SessionManager {
                 "Recorded explore action"
             );
         }
+        Ok(())
     }
 
     /// Records an agent commit (play) action on a session.
     #[instrument(skip(self))]
-    pub fn record_play(&self, session_id: &str) {
-        let mut sessions = self.sessions.lock().unwrap();
+    pub fn record_play(&self, session_id: &str) -> Result<(), SessionError> {
+        let mut sessions = self.sessions.lock().map_err(poison_err("sessions"))?;
         if let Some(session) = sessions.get_mut(session_id) {
             session.explore_stats.record_play();
             debug!(
@@ -762,31 +821,34 @@ impl SessionManager {
                 "Recorded play action"
             );
         }
+        Ok(())
     }
 
     /// Appends a dialogue entry for the given session.
     #[instrument(skip(self, entry), fields(role = %entry.role))]
-    pub fn push_dialogue(&self, session_id: &str, entry: DialogueEntry) {
-        let mut dialogue = self.dialogue.lock().unwrap();
+    pub fn push_dialogue(&self, session_id: &str, entry: DialogueEntry) -> Result<(), SessionError> {
+        let mut dialogue = self.dialogue.lock().map_err(poison_err("dialogue"))?;
         dialogue
             .entry(session_id.to_string())
             .or_default()
             .push(entry);
+        Ok(())
     }
 
     /// Returns all dialogue entries for a session.
     #[instrument(skip(self))]
-    pub fn get_dialogue(&self, session_id: &str) -> Vec<DialogueEntry> {
-        let dialogue = self.dialogue.lock().unwrap();
-        dialogue.get(session_id).cloned().unwrap_or_default()
+    pub fn get_dialogue(&self, session_id: &str) -> Result<Vec<DialogueEntry>, SessionError> {
+        let dialogue = self.dialogue.lock().map_err(poison_err("dialogue"))?;
+        Ok(dialogue.get(session_id).cloned().unwrap_or_default())
     }
 
     /// Clears the dialogue log for a session (called on restart).
     #[instrument(skip(self))]
-    pub fn clear_dialogue(&self, session_id: &str) {
-        let mut dialogue = self.dialogue.lock().unwrap();
+    pub fn clear_dialogue(&self, session_id: &str) -> Result<(), SessionError> {
+        let mut dialogue = self.dialogue.lock().map_err(poison_err("dialogue"))?;
         dialogue.remove(session_id);
         debug!("Cleared dialogue log");
+        Ok(())
     }
 
     // ── Shared blackjack table ────────────────────────────────────────────────
@@ -796,36 +858,46 @@ impl SessionManager {
     /// Idempotent: if a table is already initialised, returns it unchanged.
     /// Returns the `SharedTable` handle.
     #[instrument(skip(self))]
-    pub fn init_shared_table(&self, num_seats: usize) -> SharedTable {
-        let mut guard = self.shared_table.lock().unwrap();
+    pub fn init_shared_table(&self, num_seats: usize) -> Result<SharedTable, SessionError> {
+        let mut guard = self.shared_table.lock().map_err(poison_err("shared_table"))?;
         if let Some(ref table) = *guard {
             debug!(num_seats, "Shared table already initialised");
-            return table.clone();
+            return Ok(table.clone());
         }
         info!(num_seats, "Initialising shared blackjack table");
         let table = new_shared_table(num_seats);
         *guard = Some(table.clone());
-        table
+        Ok(table)
     }
 
     /// Returns the shared table handle, if one has been initialised.
     #[instrument(skip(self))]
-    pub fn get_shared_table(&self) -> Option<SharedTable> {
-        self.shared_table.lock().unwrap().clone()
+    pub fn get_shared_table(&self) -> Result<Option<SharedTable>, SessionError> {
+        Ok(self.shared_table.lock().map_err(poison_err("shared_table"))?.clone())
     }
 
     /// Records that `session_id` owns seat `seat_index`.
     #[instrument(skip(self))]
-    pub fn register_seat_index(&self, session_id: SessionId, seat_index: usize) {
-        let mut map = self.seat_indices.lock().unwrap();
+    pub fn register_seat_index(
+        &self,
+        session_id: SessionId,
+        seat_index: usize,
+    ) -> Result<(), SessionError> {
+        let mut map = self.seat_indices.lock().map_err(poison_err("seat_indices"))?;
         map.insert(session_id, seat_index);
         debug!(seat_index, "Registered seat index");
+        Ok(())
     }
 
     /// Returns the seat index for the given session, if registered.
     #[instrument(skip(self))]
-    pub fn get_seat_index(&self, session_id: &str) -> Option<usize> {
-        self.seat_indices.lock().unwrap().get(session_id).copied()
+    pub fn get_seat_index(&self, session_id: &str) -> Result<Option<usize>, SessionError> {
+        Ok(self
+            .seat_indices
+            .lock()
+            .map_err(poison_err("seat_indices"))?
+            .get(session_id)
+            .copied())
     }
 
     // ── Blackjack shared state (single-player legacy) ─────────────────────────
@@ -835,17 +907,32 @@ impl SessionManager {
     /// The Arc is shared with the `GameServer` instance, so readers always see
     /// the current phase without any extra update calls from the factories.
     #[instrument(skip(self, session))]
-    pub fn store_blackjack_session(&self, session_id: SessionId, session: BlackjackSession) {
-        let mut map = self.blackjack_sessions.lock().unwrap();
+    pub fn store_blackjack_session(
+        &self,
+        session_id: SessionId,
+        session: BlackjackSession,
+    ) -> Result<(), SessionError> {
+        let mut map = self
+            .blackjack_sessions
+            .lock()
+            .map_err(poison_err("blackjack_sessions"))?;
         map.insert(session_id.clone(), session);
         debug!(session_id = %session_id, "Stored blackjack session");
+        Ok(())
     }
 
     /// Returns the live blackjack phase Arc for the given session, if registered.
     #[instrument(skip(self))]
-    pub fn get_blackjack_session(&self, session_id: &str) -> Option<BlackjackSession> {
-        let map = self.blackjack_sessions.lock().unwrap();
-        map.get(session_id).cloned()
+    pub fn get_blackjack_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<BlackjackSession>, SessionError> {
+        Ok(self
+            .blackjack_sessions
+            .lock()
+            .map_err(poison_err("blackjack_sessions"))?
+            .get(session_id)
+            .cloned())
     }
 }
 

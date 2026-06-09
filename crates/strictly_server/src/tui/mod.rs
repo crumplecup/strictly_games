@@ -15,8 +15,8 @@ mod typestate_widget;
 pub use blackjack::{BlackjackSessionOutcome, run_blackjack_mcp_session};
 pub use craps::{CrapsCoPlayer, CrapsSessionOutcome, run_craps_session, run_multi_craps_session};
 pub use typestate_widget::{
-    EdgeDef, GameEvent, NodeDef, blackjack_active, blackjack_edges, blackjack_nodes,
-    craps_active, craps_edges, craps_nodes, tictactoe_active, tictactoe_edges, tictactoe_nodes,
+    EdgeDef, GameEvent, NodeDef, blackjack_active, blackjack_edges, blackjack_nodes, craps_active,
+    craps_edges, craps_nodes, tictactoe_active, tictactoe_edges, tictactoe_nodes,
 };
 
 use anyhow::Result;
@@ -43,10 +43,11 @@ pub async fn run(server_url: Option<String>, port: u16, agent_config: PathBuf) -
     let log_file = std::fs::File::create("strictly_games_tui.log")?;
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new(
                     "info,strictly_server::games::tictactoe::display=debug",
-                )),
+                )
+            }),
         )
         .with_writer(std::sync::Arc::new(log_file))
         .with_ansi(false)

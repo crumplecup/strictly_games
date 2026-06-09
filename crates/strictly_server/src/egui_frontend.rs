@@ -99,8 +99,7 @@ struct GamesEguiApp {
 
 impl GamesEguiApp {
     fn new_with_lobby(profile_service: ProfileService, agent_library: AgentLibrary) -> Self {
-        let screen =
-            EguiActiveScreen::ProfileSelect(ProfileSelectScreen::new(&profile_service));
+        let screen = EguiActiveScreen::ProfileSelect(ProfileSelectScreen::new(&profile_service));
         Self {
             screen,
             should_quit: false,
@@ -153,10 +152,8 @@ impl GamesEguiApp {
         ctx.set_visuals(visuals);
     }
 
-    // ── Keyboard input ────────────────────────────────────────────────────────
-
-    /// Map egui key events to game actions for the current frame.
-    // ── Input handling ────────────────────────────────────────────────────────
+    // ── Keyboard input / Input handling ──────────────────────────────────────
+    // Maps egui key events to game actions for the current frame.
 
     /// Process all egui events for this frame, applying at most one transition.
     #[instrument(skip(self, ctx))]
@@ -175,9 +172,11 @@ impl GamesEguiApp {
     fn transition_for_event(&mut self, ev: &egui::Event) -> ScreenTransition {
         let profile_service = &self.profile_service;
         match &mut self.screen {
-            EguiActiveScreen::TicTacToe { game, cursor, events } => {
-                ttt_handle_egui_key(game, cursor, events, ev)
-            }
+            EguiActiveScreen::TicTacToe {
+                game,
+                cursor,
+                events,
+            } => ttt_handle_egui_key(game, cursor, events, ev),
             EguiActiveScreen::ProfileSelect(s) => egui_ev_to_key(ev)
                 .map(|k| s.handle_key(k, profile_service))
                 .unwrap_or(ScreenTransition::Stay),
@@ -215,9 +214,9 @@ impl GamesEguiApp {
             }
 
             ScreenTransition::GoToProfileSelect => {
-                self.screen = EguiActiveScreen::ProfileSelect(
-                    ProfileSelectScreen::new(&self.profile_service),
-                );
+                self.screen = EguiActiveScreen::ProfileSelect(ProfileSelectScreen::new(
+                    &self.profile_service,
+                ));
             }
 
             ScreenTransition::GoToMainLobby => {
@@ -226,16 +225,14 @@ impl GamesEguiApp {
                     self.settings = s.settings();
                 }
                 // Extract the newly selected user if leaving profile select.
-                if let EguiActiveScreen::ProfileSelect(s) = &self.screen {
-                    if let Some(user_id) = s.selected_user_id().as_deref() {
-                        let handle = tokio::runtime::Handle::current();
-                        if let Ok(Some(user)) = tokio::task::block_in_place(|| {
-                            handle.block_on(
-                                self.profile_service.repository().get_user_by_id(user_id),
-                            )
-                        }) {
-                            self.current_user = Some(user);
-                        }
+                if let EguiActiveScreen::ProfileSelect(s) = &self.screen
+                    && let Some(user_id) = s.selected_user_id().as_deref()
+                {
+                    let handle = tokio::runtime::Handle::current();
+                    if let Ok(Some(user)) = tokio::task::block_in_place(|| {
+                        handle.block_on(self.profile_service.repository().get_user_by_id(user_id))
+                    }) {
+                        self.current_user = Some(user);
                     }
                 }
                 if let Some(user) = &self.current_user {
@@ -245,9 +242,9 @@ impl GamesEguiApp {
                         &self.profile_service,
                     ));
                 } else {
-                    self.screen = EguiActiveScreen::ProfileSelect(
-                        ProfileSelectScreen::new(&self.profile_service),
-                    );
+                    self.screen = EguiActiveScreen::ProfileSelect(ProfileSelectScreen::new(
+                        &self.profile_service,
+                    ));
                 }
             }
 
@@ -277,8 +274,7 @@ impl GamesEguiApp {
             }
 
             ScreenTransition::GoToSettings => {
-                self.screen =
-                    EguiActiveScreen::Settings(SettingsScreen::new(self.settings));
+                self.screen = EguiActiveScreen::Settings(SettingsScreen::new(self.settings));
             }
 
             ScreenTransition::GoToInGame { agent_name } => {
@@ -290,13 +286,10 @@ impl GamesEguiApp {
                             history: Vec::new(),
                         },
                         cursor: Position::Center,
-                        events: vec![GameEvent::story(format!(
-                            "🎮 Game begins vs {agent_name}"
-                        ))],
+                        events: vec![GameEvent::story(format!("🎮 Game begins vs {agent_name}"))],
                     };
                 } else {
-                    self.screen =
-                        EguiActiveScreen::InGame(InGameScreen::new(agent_name));
+                    self.screen = EguiActiveScreen::InGame(InGameScreen::new(agent_name));
                 }
             }
 
@@ -314,9 +307,8 @@ impl GamesEguiApp {
 
             ScreenTransition::GoToBlackjackTable { .. } => {
                 // Async multi-player session not yet implemented in egui frontend.
-                self.screen = EguiActiveScreen::InGame(InGameScreen::new(
-                    "Blackjack Table".to_string(),
-                ));
+                self.screen =
+                    EguiActiveScreen::InGame(InGameScreen::new("Blackjack Table".to_string()));
             }
         }
     }
@@ -339,7 +331,11 @@ impl GamesEguiApp {
         let viewport = Viewport::new(size.x as u32, size.y as u32);
 
         match &self.screen {
-            EguiActiveScreen::TicTacToe { game, cursor, events } => {
+            EguiActiveScreen::TicTacToe {
+                game,
+                cursor,
+                events,
+            } => {
                 let _proof = render_ttt_egui(ui, game, cursor, events);
             }
             screen => {
@@ -352,7 +348,10 @@ impl GamesEguiApp {
                     EguiActiveScreen::StatsView(s) => s.to_verified_tree(viewport),
                     EguiActiveScreen::Settings(s) => s.to_verified_tree(viewport),
                     EguiActiveScreen::InGame(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::TicTacToe { .. } => unreachable!(),
+                    EguiActiveScreen::TicTacToe { .. } => {
+                        tracing::error!("TicTacToe screen reached egui render path — not implemented");
+                        return;
+                    }
                 };
                 let backend = EguiBackend::new();
                 match backend.render(&tree) {
@@ -420,9 +419,7 @@ fn ttt_handle_egui_key(
     ev: &egui::Event,
 ) -> ScreenTransition {
     let egui::Event::Key {
-        key,
-        pressed: true,
-        ..
+        key, pressed: true, ..
     } = ev
     else {
         return ScreenTransition::Stay;
@@ -443,7 +440,12 @@ fn ttt_handle_egui_key(
         }
         Enter | Space => {
             let pos = *cursor;
-            let cur_game = std::mem::replace(game, AnyGame::Setup { board: Board::default() });
+            let cur_game = std::mem::replace(
+                game,
+                AnyGame::Setup {
+                    board: Board::default(),
+                },
+            );
             let mover = cur_game.to_move();
             match cur_game.make_move_action(strictly_tictactoe::action::Move::new(
                 mover.unwrap_or(Player::X),
@@ -619,30 +621,44 @@ impl ApplicationHandler for GamesEguiApp {
         let attrs = WindowAttributes::default()
             .with_title("Strictly Games")
             .with_inner_size(winit::dpi::LogicalSize::new(1280_f64, 720_f64));
-        let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
+        let window = match event_loop.create_window(attrs) {
+            Ok(w) => Arc::new(w),
+            Err(e) => {
+                tracing::error!(error = %e, "failed to create window — egui frontend unavailable");
+                return;
+            }
+        };
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let surface = instance
-            .create_surface(window.clone())
-            .expect("create wgpu surface");
+        let surface = match instance.create_surface(window.clone()) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to create wgpu surface — egui frontend unavailable");
+                return;
+            }
+        };
 
         // wgpu async init — safe to block here: running on a plain std thread.
-        let (adapter, device, queue) = futures::executor::block_on(async {
-            let adapter = instance
-                .request_adapter(&wgpu::RequestAdapterOptions {
-                    compatible_surface: Some(&surface),
-                    ..Default::default()
-                })
-                .await
-                .expect(
-                    "no suitable wgpu adapter — ensure Vulkan/Metal/DX12 drivers are installed",
-                );
-            let (device, queue) = adapter
-                .request_device(&wgpu::DeviceDescriptor::default())
-                .await
-                .expect("could not create wgpu device");
-            (adapter, device, queue)
-        });
+        let adapter = match futures::executor::block_on(instance.request_adapter(
+            &wgpu::RequestAdapterOptions {
+                compatible_surface: Some(&surface),
+                ..Default::default()
+            },
+        )) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::error!(error = %e, "no suitable wgpu adapter — egui frontend unavailable");
+                return;
+            }
+        };
+        let (device, queue) =
+            match futures::executor::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())) {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!(error = %e, "wgpu device creation failed — egui frontend unavailable");
+                    return;
+                }
+            };
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
@@ -723,8 +739,12 @@ impl ApplicationHandler for GamesEguiApp {
             }
 
             WindowEvent::RedrawRequested => {
-                let raw = self.egui_state.as_mut().unwrap().take_egui_input(&window);
-                let ctx = self.egui_state.as_ref().unwrap().egui_ctx().clone();
+                let Some(egui_state) = self.egui_state.as_mut() else {
+                    tracing::warn!("RedrawRequested before egui state was initialised — skipping");
+                    return;
+                };
+                let raw = egui_state.take_egui_input(&window);
+                let ctx = egui_state.egui_ctx().clone();
 
                 let out = ctx.run_ui(raw, |ui| self.render_ui(ui));
 
@@ -733,10 +753,10 @@ impl ApplicationHandler for GamesEguiApp {
                     return;
                 }
 
-                self.egui_state
-                    .as_mut()
-                    .unwrap()
-                    .handle_platform_output(&window, out.platform_output);
+                let Some(egui_state) = self.egui_state.as_mut() else {
+                    return;
+                };
+                egui_state.handle_platform_output(&window, out.platform_output);
 
                 let (surface, device, queue, renderer, cfg) = match (
                     self.surface.as_ref(),
@@ -813,7 +833,10 @@ impl ApplicationHandler for GamesEguiApp {
 ///
 /// Returns an error if the winit event loop fails to start.
 #[instrument(skip(profile_service, agent_library))]
-pub fn run_egui(profile_service: ProfileService, agent_library: AgentLibrary) -> anyhow::Result<()> {
+pub fn run_egui(
+    profile_service: ProfileService,
+    agent_library: AgentLibrary,
+) -> anyhow::Result<()> {
     info!("Starting egui frontend");
     let event_loop = EventLoop::new()?;
     let mut app = GamesEguiApp::new_with_lobby(profile_service, agent_library);

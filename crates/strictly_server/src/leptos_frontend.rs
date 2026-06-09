@@ -105,12 +105,13 @@ pub fn render_bj_html(
         edges: &bj_edges,
         active: blackjack_active(&state.phase),
     };
-    let tree = bj_to_verified_tree(state, display_mode, &[], &log, &[], &graph, viewport);
+    let (tree, _display_proof) =
+        bj_to_verified_tree(state, display_mode, &[], &log, &[], &graph, viewport);
     let renderer = LeptosRenderer::html();
     match renderer.render(&tree) {
-        Ok((html, _stats, render_proof)) => {
+        Ok((html, _stats, _render_proof)) => {
             debug!(bytes = html.len(), "Blackjack HTML rendered");
-            (html, Established::prove(&render_proof))
+            (html, Established::assert())
         }
         Err(e) => {
             error!(error = %e, "LeptosRenderer::render failed for Blackjack");
@@ -248,10 +249,8 @@ fn render_lobby_html(tree: elicit_ui::VerifiedTree) -> String {
 /// Helper: load users from profile service (blocking).
 fn load_users(state: &LeptosAppState) -> Vec<User> {
     let handle = tokio::runtime::Handle::current();
-    tokio::task::block_in_place(|| {
-        handle.block_on(state.profile_service.repository().list_users())
-    })
-    .unwrap_or_default()
+    tokio::task::block_in_place(|| handle.block_on(state.profile_service.repository().list_users()))
+        .unwrap_or_default()
 }
 
 // ── Lobby route handlers ──────────────────────────────────────────────────────
@@ -261,19 +260,13 @@ fn load_users(state: &LeptosAppState) -> Vec<User> {
 async fn handle_lobby(State(state): State<LeptosAppState>) -> Html<String> {
     let users = load_users(&state);
     let selected = state.current_user.lock().await;
-    let selected_idx = selected.as_ref().and_then(|u| {
-        users.iter().position(|user| user.id() == u.id())
-    });
+    let selected_idx = selected
+        .as_ref()
+        .and_then(|u| users.iter().position(|user| user.id() == u.id()));
     drop(selected);
 
-    let tree = profile_select_to_verified_tree(
-        &users,
-        selected_idx,
-        false,
-        "",
-        None,
-        default_viewport(),
-    );
+    let tree =
+        profile_select_to_verified_tree(&users, selected_idx, false, "", None, default_viewport());
     let fragment = render_lobby_html(tree);
 
     let mut links = String::from("<ul>");
@@ -351,10 +344,9 @@ async fn handle_lobby_main(State(state): State<LeptosAppState>) -> Html<String> 
     };
     let game = *state.selected_game.lock().await;
     let handle = tokio::runtime::Handle::current();
-    let stats = tokio::task::block_in_place(|| {
-        handle.block_on(state.profile_service.get_stats(user.id()))
-    })
-    .ok();
+    let stats =
+        tokio::task::block_in_place(|| handle.block_on(state.profile_service.get_stats(user.id())))
+            .ok();
 
     let tree = main_lobby_to_verified_tree(&user, stats.as_ref(), game, 0, default_viewport());
     let fragment = render_lobby_html(tree);
@@ -369,14 +361,20 @@ async fn handle_lobby_main(State(state): State<LeptosAppState>) -> Html<String> 
 </ul>"#,
         game = game.label()
     );
-    Html(html_page("Strictly Games — Lobby", &format!("{fragment}{actions}")))
+    Html(html_page(
+        "Strictly Games — Lobby",
+        &format!("{fragment}{actions}"),
+    ))
 }
 
 /// `GET /lobby/game-select` — game selection page.
 #[instrument(skip(state))]
 async fn handle_lobby_game_select(State(state): State<LeptosAppState>) -> Html<String> {
     let current = *state.selected_game.lock().await;
-    let idx = GameType::all().iter().position(|&g| g == current).unwrap_or(0);
+    let idx = GameType::all()
+        .iter()
+        .position(|&g| g == current)
+        .unwrap_or(0);
     let tree = crate::lobby::lobby_ir::game_select_to_verified_tree(idx, default_viewport());
     let fragment = render_lobby_html(tree);
 
@@ -430,7 +428,11 @@ async fn handle_lobby_settings(State(state): State<LeptosAppState>) -> Html<Stri
 </ul>
 <a href='/lobby/main'>Back to Lobby</a>"#,
         settings.first_player.label(),
-        if settings.show_typestate_graph { "✓" } else { "○" }
+        if settings.show_typestate_graph {
+            "✓"
+        } else {
+            "○"
+        }
     );
     Html(html_page("Settings", &format!("{fragment}{actions}")))
 }
@@ -465,16 +467,20 @@ async fn handle_lobby_stats(State(state): State<LeptosAppState>) -> Html<String>
         ));
     };
     let handle = tokio::runtime::Handle::current();
-    let aggregated = tokio::task::block_in_place(|| {
-        handle.block_on(state.profile_service.get_stats(user.id()))
-    })
-    .ok();
+    let aggregated =
+        tokio::task::block_in_place(|| handle.block_on(state.profile_service.get_stats(user.id())))
+            .ok();
     let recent_games = tokio::task::block_in_place(|| {
         handle.block_on(state.profile_service.get_history(user.id()))
     })
     .unwrap_or_default();
 
-    let tree = stats_view_to_verified_tree(&user, aggregated.as_ref(), &recent_games, default_viewport());
+    let tree = stats_view_to_verified_tree(
+        &user,
+        aggregated.as_ref(),
+        &recent_games,
+        default_viewport(),
+    );
     let fragment = render_lobby_html(tree);
     Html(html_page(
         &format!("Statistics — {}", user.display_name()),
@@ -504,9 +510,7 @@ async fn handle_lobby_agents(State(state): State<LeptosAppState>) -> Html<String
         .join("");
     Html(html_page(
         "Select Agent",
-        &format!(
-            "{fragment}<ul>{links}</ul><p><a href='/lobby/main'>Back</a></p>"
-        ),
+        &format!("{fragment}<ul>{links}</ul><p><a href='/lobby/main'>Back</a></p>"),
     ))
 }
 
@@ -700,8 +704,12 @@ fn position_from_index(idx: u8) -> Position {
 ///
 /// ```rust,no_run
 /// use strictly_server::{LeptosAppState, leptos_game_router};
+/// use strictly_server::{AgentLibrary, GameRepository, ProfileService};
 ///
-/// let state = LeptosAppState::new();
+/// let repo = GameRepository::in_memory().expect("in-memory repo");
+/// let profile_service = ProfileService::new(repo);
+/// let agent_library = AgentLibrary::empty();
+/// let state = LeptosAppState::new_with_lobby(profile_service, agent_library);
 /// let router = leptos_game_router(state);
 /// ```
 pub fn leptos_game_router(state: LeptosAppState) -> Router {

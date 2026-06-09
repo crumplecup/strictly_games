@@ -4,10 +4,7 @@
 //! player's turn. Its [`ElicitSpec`] impl registers categories that map
 //! 1:1 to the explore variants in [`BlackjackAction`](crate::BlackjackAction).
 
-use elicitation::{
-    ElicitSpec, SpecCategoryBuilder, SpecEntryBuilder, TypeSpec, TypeSpecBuilder,
-    TypeSpecInventoryKey,
-};
+use elicitation::{ElicitSpec, SpecCategory, SpecEntry, TypeSpec, TypeSpecInventoryKey};
 #[cfg(not(kani))]
 use tracing::instrument;
 
@@ -164,91 +161,55 @@ fn format_hand_value(value: &HandValue) -> String {
 
 impl ElicitSpec for BlackjackPlayerView {
     fn type_spec() -> TypeSpec {
-        let your_hand = SpecCategoryBuilder::default()
-            .name("your_hand".to_string())
-            .entries(vec![
-                SpecEntryBuilder::default()
-                    .label("cards".to_string())
-                    .description("Cards in your hand with suit symbols".to_string())
-                    .build()
-                    .expect("valid SpecEntry"),
-                SpecEntryBuilder::default()
-                    .label("value".to_string())
-                    .description("Hand total (hard/soft if applicable)".to_string())
-                    .build()
-                    .expect("valid SpecEntry"),
-                SpecEntryBuilder::default()
-                    .label("status".to_string())
-                    .description("Blackjack, bust, or can-split indicators".to_string())
-                    .build()
-                    .expect("valid SpecEntry"),
-            ])
-            .build()
-            .expect("valid SpecCategory");
+        let your_hand = SpecCategory::new(
+            "your_hand",
+            vec![
+                SpecEntry::new("cards", "Cards in your hand with suit symbols"),
+                SpecEntry::new("value", "Hand total (hard/soft if applicable)"),
+                SpecEntry::new("status", "Blackjack, bust, or can-split indicators"),
+            ],
+        );
 
-        let dealer_showing = SpecCategoryBuilder::default()
-            .name("dealer_showing".to_string())
-            .entries(vec![
-                SpecEntryBuilder::default()
-                    .label("up_card".to_string())
-                    .description("The dealer's single visible card".to_string())
-                    .build()
-                    .expect("valid SpecEntry"),
-            ])
-            .build()
-            .expect("valid SpecCategory");
+        let dealer_showing = SpecCategory::new(
+            "dealer_showing",
+            vec![SpecEntry::new(
+                "up_card",
+                "The dealer's single visible card",
+            )],
+        );
 
-        let other_players = SpecCategoryBuilder::default()
-            .name("other_players".to_string())
-            .entries(vec![
-                SpecEntryBuilder::default()
-                    .label("visible_cards".to_string())
-                    .description("Other players' face-up cards and totals".to_string())
-                    .build()
-                    .expect("valid SpecEntry"),
-            ])
-            .build()
-            .expect("valid SpecCategory");
+        let other_players = SpecCategory::new(
+            "other_players",
+            vec![SpecEntry::new(
+                "visible_cards",
+                "Other players' face-up cards and totals",
+            )],
+        );
 
-        let shoe_status = SpecCategoryBuilder::default()
-            .name("shoe_status".to_string())
-            .entries(vec![
-                SpecEntryBuilder::default()
-                    .label("remaining".to_string())
-                    .description("Cards remaining in the shoe vs total".to_string())
-                    .build()
-                    .expect("valid SpecEntry"),
-            ])
-            .build()
-            .expect("valid SpecCategory");
+        let shoe_status = SpecCategory::new(
+            "shoe_status",
+            vec![SpecEntry::new(
+                "remaining",
+                "Cards remaining in the shoe vs total",
+            )],
+        );
 
-        let bankroll = SpecCategoryBuilder::default()
-            .name("bankroll".to_string())
-            .entries(vec![
-                SpecEntryBuilder::default()
-                    .label("chips".to_string())
-                    .description("Current chip count".to_string())
-                    .build()
-                    .expect("valid SpecEntry"),
-            ])
-            .build()
-            .expect("valid SpecCategory");
+        let bankroll = SpecCategory::new(
+            "bankroll",
+            vec![SpecEntry::new("chips", "Current chip count")],
+        );
 
-        TypeSpecBuilder::default()
-            .type_name("BlackjackPlayerView".to_string())
-            .summary(
-                "Visible game state during a blackjack player turn — hand, dealer, shoe, bankroll"
-                    .to_string(),
-            )
-            .categories(vec![
+        TypeSpec::new(
+            "BlackjackPlayerView",
+            "Visible game state during a blackjack player turn — hand, dealer, shoe, bankroll",
+            vec![
                 your_hand,
                 dealer_showing,
                 other_players,
                 shoe_status,
                 bankroll,
-            ])
-            .build()
-            .expect("valid TypeSpec")
+            ],
+        )
     }
 }
 

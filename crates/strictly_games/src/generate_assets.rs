@@ -19,11 +19,7 @@ use tracing::{info, instrument, warn};
 /// Convert all SVG assets under `input/{cards,dice}/` and write the resulting
 /// Rust constants to `rust_out`.
 #[instrument(skip_all, fields(columns, input = %input.display(), rust_out = %rust_out.display()))]
-pub fn run_generate_assets(
-    columns: u32,
-    input: &Path,
-    rust_out: &Path,
-) -> Result<()> {
+pub fn run_generate_assets(columns: u32, input: &Path, rust_out: &Path) -> Result<()> {
     let mut entries: Vec<AssetEntry> = Vec::new();
 
     collect_svgs(input.join("cards"), "CARD", &mut entries)?;
@@ -57,8 +53,7 @@ pub fn run_generate_assets(
             .with_context(|| format!("creating directory {}", parent.display()))?;
     }
     let source = build_rust_source(columns, &converted);
-    std::fs::write(rust_out, &source)
-        .with_context(|| format!("writing {}", rust_out.display()))?;
+    std::fs::write(rust_out, &source).with_context(|| format!("writing {}", rust_out.display()))?;
 
     println!(
         "Generated {} constants → {}",
@@ -126,7 +121,7 @@ fn stem_to_const(stem: &str, prefix: &str) -> String {
         stem
     };
 
-    let upper = stem.replace('-', "_").replace(' ', "_").to_uppercase();
+    let upper = stem.replace(['-', ' '], "_").to_uppercase();
     format!("{prefix}_{upper}")
 }
 
@@ -150,9 +145,7 @@ fn convert_svg(svg_path: &Path, columns: u32) -> Result<String> {
     let mut pixmap = Pixmap::new(width, height)
         .ok_or_else(|| anyhow::anyhow!("failed to allocate {}×{} pixmap", width, height))?;
     resvg::render(&tree, Transform::default(), &mut pixmap.as_mut());
-    let png_bytes = pixmap
-        .encode_png()
-        .context("encoding pixmap as PNG")?;
+    let png_bytes = pixmap.encode_png().context("encoding pixmap as PNG")?;
 
     // 2. Write PNG to a temp file (cascii requires a file path).
     let stem = svg_path
@@ -179,19 +172,19 @@ fn convert_svg(svg_path: &Path, columns: u32) -> Result<String> {
 /// Build the complete Rust source file content.
 fn build_rust_source(columns: u32, entries: &[(String, String)]) -> String {
     let mut src = String::new();
-    writeln!(
+    // writeln! on String is infallible (fmt::Error never fires for String)
+    let _ = writeln!(
         src,
         "//! ASCII art constants for terminal rendering.\n//!\
          \n//! GENERATED — run `strictly_games generate-assets --columns {columns}` to regenerate.\
          \n//! Do not edit manually.\n"
-    )
-    .unwrap();
+    );
 
     for (const_name, ascii) in entries {
         // Escape any `#"` sequences that would break the raw string delimiter.
         // Rust raw strings r#"..."# are safe as long as the content has no `"#`.
         // We use a higher fence if needed; for ASCII art this is never an issue.
-        writeln!(src, "pub const {const_name}: &str = r#\"{ascii}\"#;\n").unwrap();
+        let _ = writeln!(src, "pub const {const_name}: &str = r#\"{ascii}\"#;\n");
     }
     src
 }

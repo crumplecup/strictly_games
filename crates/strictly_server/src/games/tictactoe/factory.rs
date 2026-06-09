@@ -125,22 +125,27 @@ async fn handle_move(
     let mut session = ctx
         .sessions
         .get_session(&ctx.session_id)
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
         .ok_or_else(|| ErrorData::internal_error("Session not found", None))?;
 
     // Record as a commit (resets per-turn explore counter in ExploreStats).
-    ctx.sessions.record_play(&ctx.session_id);
+    ctx.sessions
+        .record_play(&ctx.session_id)
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
     // Record what the agent saw and chose — developer introspection into the
     // agent's decision process.
     let board_before = session.game.board().display();
-    ctx.sessions.push_dialogue(
+    if let Err(e) = ctx.sessions.push_dialogue(
         &ctx.session_id,
         DialogueEntry::agent(format!(
             "→ `ttt__{}` ({})\n\n{board_before}",
             position_snake(pos),
             pos.label()
         )),
-    );
+    ) {
+        tracing::warn!(error = %e, "push_dialogue failed");
+    }
 
     session
         .make_move(&ctx.player_id, pos)
@@ -150,7 +155,7 @@ async fn handle_move(
     let board = session.game.board().display();
     ctx.sessions
         .update_game_atomic(&ctx.session_id, session.game.clone())
-        .map_err(|e| ErrorData::internal_error(e, None))?;
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
     if game_over {
         // Clear all ttt tools — game is done.
@@ -170,8 +175,12 @@ async fn handle_move(
         } else {
             format!("🤝 Draw!\n\n{board}")
         };
-        ctx.sessions
-            .push_dialogue(&ctx.session_id, DialogueEntry::server(result_text.clone()));
+        if let Err(e) = ctx
+            .sessions
+            .push_dialogue(&ctx.session_id, DialogueEntry::server(result_text.clone()))
+        {
+            tracing::warn!(error = %e, "push_dialogue failed");
+        }
         return Ok(CallToolResult::success(vec![Content::text(result_text)]));
     }
 
@@ -183,8 +192,12 @@ async fn handle_move(
         "✓ Played {}. Waiting for opponent…\n\n{board}\n\nCall `{prefix}__await_turn` when ready.",
         pos.label()
     );
-    ctx.sessions
-        .push_dialogue(&ctx.session_id, DialogueEntry::server(msg.clone()));
+    if let Err(e) = ctx
+        .sessions
+        .push_dialogue(&ctx.session_id, DialogueEntry::server(msg.clone()))
+    {
+        tracing::warn!(error = %e, "push_dialogue failed");
+    }
     Ok(CallToolResult::success(vec![Content::text(msg)]))
 }
 
@@ -198,11 +211,14 @@ async fn handle_explore(
     ctx: TttGameContext,
 ) -> Result<CallToolResult, ErrorData> {
     // Count this as an explore (not a commit).
-    ctx.sessions.record_explore(&ctx.session_id);
+    ctx.sessions
+        .record_explore(&ctx.session_id)
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
 
     let session = ctx
         .sessions
         .get_session(&ctx.session_id)
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
         .ok_or_else(|| ErrorData::internal_error("Session not found", None))?;
 
     let current_player = session
@@ -216,10 +232,12 @@ async fn handle_explore(
         .unwrap_or_else(|| format!("Unknown category: {category}"));
 
     // Push to chat so the developer sees what the agent queried.
-    ctx.sessions.push_dialogue(
+    if let Err(e) = ctx.sessions.push_dialogue(
         &ctx.session_id,
         DialogueEntry::agent(format!("🔍 `ttt__view_{category}` → {response}")),
-    );
+    ) {
+        tracing::warn!(error = %e, "push_dialogue failed");
+    }
 
     Ok(CallToolResult::success(vec![Content::text(response)]))
 }
@@ -270,6 +288,7 @@ async fn handle_await_turn(
     let session = ctx
         .sessions
         .get_session(&ctx.session_id)
+        .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
         .ok_or_else(|| ErrorData::internal_error("Session not found", None))?;
 
     if !session.affirm_continue() {
@@ -309,12 +328,18 @@ async fn handle_await_turn(
         } else {
             format!("🤝 Draw!\n\n{board}")
         };
-        ctx.sessions.push_dialogue(
+        if let Err(e) = ctx.sessions.push_dialogue(
             &ctx.session_id,
             DialogueEntry::agent("→ `ttt__await_turn`".to_string()),
-        );
-        ctx.sessions
-            .push_dialogue(&ctx.session_id, DialogueEntry::server(result.clone()));
+        ) {
+            tracing::warn!(error = %e, "push_dialogue failed");
+        }
+        if let Err(e) = ctx
+            .sessions
+            .push_dialogue(&ctx.session_id, DialogueEntry::server(result.clone()))
+        {
+            tracing::warn!(error = %e, "push_dialogue failed");
+        }
         return Ok(CallToolResult::success(vec![Content::text(result)]));
     }
 
@@ -335,12 +360,18 @@ async fn handle_await_turn(
         let msg = format!(
             "Your turn!\n\n{board}\n\nChoose a square: call one of the `{prefix}__*` tools."
         );
-        ctx.sessions.push_dialogue(
+        if let Err(e) = ctx.sessions.push_dialogue(
             &ctx.session_id,
             DialogueEntry::agent("→ `ttt__await_turn`".to_string()),
-        );
-        ctx.sessions
-            .push_dialogue(&ctx.session_id, DialogueEntry::server(msg.clone()));
+        ) {
+            tracing::warn!(error = %e, "push_dialogue failed");
+        }
+        if let Err(e) = ctx
+            .sessions
+            .push_dialogue(&ctx.session_id, DialogueEntry::server(msg.clone()))
+        {
+            tracing::warn!(error = %e, "push_dialogue failed");
+        }
         Ok(CallToolResult::success(vec![Content::text(msg)]))
     } else {
         // Still waiting for opponent — don't flood the chat log with silent polls.
