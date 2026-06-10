@@ -342,7 +342,10 @@ async fn run_egui_lobby(db_path: String, agents_dir: Option<std::path::PathBuf>)
         })
     };
 
-    strictly_server::run_egui(profile_service, agent_library)
+    // Derive config path before consuming agents_dir in the if-let below.
+    let agent_config_path = std::path::PathBuf::from("agents/default.toml");
+
+    strictly_server::run_egui(profile_service, agent_library, 3000, agent_config_path)
 }
 
 /// Run the lobby TUI

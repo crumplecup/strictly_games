@@ -6,6 +6,7 @@ pub mod blackjack;
 pub mod contracts;
 pub mod craps;
 pub mod game_ir;
+pub mod game_session;
 mod input; // Cursor movement
 pub mod mcp_communicator;
 mod rest_client; // Type-safe REST client
@@ -13,6 +14,11 @@ mod standalone;
 mod typestate_widget;
 
 pub use blackjack::{BlackjackSessionOutcome, run_blackjack_mcp_session};
+pub use game_session::{
+    BlackjackAction, BlackjackSessionHandle, BlackjackViewState,
+    TttAction, TttSessionHandle, TttViewState,
+    start_blackjack_session, start_ttt_session,
+};
 pub use craps::{CrapsCoPlayer, CrapsSessionOutcome, run_craps_session, run_multi_craps_session};
 pub use typestate_widget::{
     EdgeDef, GameEvent, NodeDef, blackjack_active, blackjack_edges, blackjack_nodes, craps_active,

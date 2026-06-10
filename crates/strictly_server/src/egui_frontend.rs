@@ -27,19 +27,20 @@ use winit::{
     window::{Window, WindowAttributes, WindowId},
 };
 
-use strictly_tictactoe::{Board, Player, Position, TttDisplayMode};
+use strictly_tictactoe::{Position, TttDisplayMode};
 
-use crate::games::tictactoe::AnyGame;
 use crate::lobby::screen::{Screen, ScreenTransition};
 use crate::lobby::screens::{
-    AgentSelectScreen, BlackjackSetupScreen, GameSelectScreen, InGameScreen, MainLobbyScreen,
+    AgentSelectScreen, BlackjackSetupScreen, GameSelectScreen, MainLobbyScreen,
     ProfileSelectScreen, SettingsScreen, StatsViewScreen,
 };
-use crate::lobby::settings::{GameType, LobbySettings};
-use crate::tui::GameEvent;
-use crate::tui::contracts::TttUiConsistent;
+use crate::lobby::settings::LobbySettings;
+use crate::tui::contracts::{BjUiConsistent, TttUiConsistent};
 use crate::tui::game_ir::{EventLog, GraphParams, ttt_to_verified_tree};
-use crate::tui::{tictactoe_active, tictactoe_edges, tictactoe_nodes};
+use crate::tui::{
+    blackjack_edges, blackjack_nodes,
+    tictactoe_active, tictactoe_edges, tictactoe_nodes,
+};
 use crate::{AgentLibrary, ProfileService, User};
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
@@ -63,13 +64,12 @@ enum EguiActiveScreen {
     BlackjackSetup(BlackjackSetupScreen),
     StatsView(StatsViewScreen),
     Settings(SettingsScreen),
-    InGame(InGameScreen),
-    /// Local TTT game — rendered through the game IR pipeline.
-    TicTacToe {
-        game: AnyGame,
-        cursor: Position,
-        events: Vec<GameEvent>,
-    },
+    /// TTT game: session task owns server+agent, frontend reads shared state
+    /// and renders via IR → EguiBackend each frame.
+    TicTacToe(crate::tui::game_session::TttSessionHandle),
+    /// Blackjack game: session task owns server+agent, frontend reads shared
+    /// state and renders via IR → EguiBackend each frame.
+    BlackjackGame(crate::tui::game_session::BlackjackSessionHandle),
 }
 
 // ── Application struct ────────────────────────────────────────────────────────
@@ -86,6 +86,10 @@ struct GamesEguiApp {
     agent_library: AgentLibrary,
     current_user: Option<User>,
     settings: LobbySettings,
+    /// Port for the in-process HTTP game server.
+    server_port: u16,
+    /// Fallback agent config path when the selected agent has no explicit config.
+    agent_config_path: std::path::PathBuf,
 
     // ── wgpu / egui-winit resources (None until `resumed`) ───────────────────
     window: Option<Arc<Window>>,
@@ -98,13 +102,20 @@ struct GamesEguiApp {
 }
 
 impl GamesEguiApp {
-    fn new_with_lobby(profile_service: ProfileService, agent_library: AgentLibrary) -> Self {
+    fn new_with_lobby(
+        profile_service: ProfileService,
+        agent_library: AgentLibrary,
+        server_port: u16,
+        agent_config_path: std::path::PathBuf,
+    ) -> Self {
         let screen = EguiActiveScreen::ProfileSelect(ProfileSelectScreen::new(&profile_service));
         Self {
             screen,
             should_quit: false,
             profile_service,
             agent_library,
+            server_port,
+            agent_config_path,
             current_user: None,
             settings: LobbySettings::default(),
             window: None,
@@ -172,11 +183,14 @@ impl GamesEguiApp {
     fn transition_for_event(&mut self, ev: &egui::Event) -> ScreenTransition {
         let profile_service = &self.profile_service;
         match &mut self.screen {
-            EguiActiveScreen::TicTacToe {
-                game,
-                cursor,
-                events,
-            } => ttt_handle_egui_key(game, cursor, events, ev),
+            EguiActiveScreen::TicTacToe(handle) => {
+                ttt_handle_egui_key(handle, ev);
+                ScreenTransition::Stay
+            }
+            EguiActiveScreen::BlackjackGame(handle) => {
+                bj_handle_egui_key(handle, ev);
+                ScreenTransition::Stay
+            }
             EguiActiveScreen::ProfileSelect(s) => egui_ev_to_key(ev)
                 .map(|k| s.handle_key(k, profile_service))
                 .unwrap_or(ScreenTransition::Stay),
@@ -196,9 +210,6 @@ impl GamesEguiApp {
                 .map(|k| s.handle_key(k, profile_service))
                 .unwrap_or(ScreenTransition::Stay),
             EguiActiveScreen::Settings(s) => egui_ev_to_key(ev)
-                .map(|k| s.handle_key(k, profile_service))
-                .unwrap_or(ScreenTransition::Stay),
-            EguiActiveScreen::InGame(s) => egui_ev_to_key(ev)
                 .map(|k| s.handle_key(k, profile_service))
                 .unwrap_or(ScreenTransition::Stay),
         }
@@ -278,18 +289,37 @@ impl GamesEguiApp {
             }
 
             ScreenTransition::GoToInGame { agent_name } => {
-                if self.settings.selected_game == GameType::TicTacToe {
-                    self.screen = EguiActiveScreen::TicTacToe {
-                        game: AnyGame::InProgress {
-                            board: Board::default(),
-                            to_move: Player::X,
-                            history: Vec::new(),
-                        },
-                        cursor: Position::Center,
-                        events: vec![GameEvent::story(format!("🎮 Game begins vs {agent_name}"))],
-                    };
-                } else {
-                    self.screen = EguiActiveScreen::InGame(InGameScreen::new(agent_name));
+                use crate::tui::game_session::start_ttt_session;
+
+                let agent_config = self.agent_library.get_by_name(&agent_name);
+                let config_path = agent_config
+                    .and_then(|a| a.config_path().clone())
+                    .unwrap_or_else(|| self.agent_config_path.clone());
+
+                let player_name = self
+                    .current_user
+                    .as_ref()
+                    .map(|u| u.display_name().clone())
+                    .unwrap_or_else(|| "Player".to_string());
+
+                let port = self.server_port;
+                let first_player = self.settings.first_player;
+                let show_graph = self.settings.show_typestate_graph;
+
+                let handle = tokio::runtime::Handle::current();
+                match handle.block_on(start_ttt_session(
+                    config_path,
+                    player_name,
+                    port,
+                    first_player,
+                    show_graph,
+                )) {
+                    Ok(session) => {
+                        self.screen = EguiActiveScreen::TicTacToe(session);
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to start TTT session");
+                    }
                 }
             }
 
@@ -305,10 +335,27 @@ impl GamesEguiApp {
                 ));
             }
 
-            ScreenTransition::GoToBlackjackTable { .. } => {
-                // Async multi-player session not yet implemented in egui frontend.
-                self.screen =
-                    EguiActiveScreen::InGame(InGameScreen::new("Blackjack Table".to_string()));
+            ScreenTransition::GoToBlackjackTable { players } => {
+                use crate::tui::game_session::start_blackjack_session;
+
+                let port = self.server_port;
+                let fallback = self.agent_config_path.clone();
+                let show_graph = self.settings.show_typestate_graph;
+
+                let handle = tokio::runtime::Handle::current();
+                match handle.block_on(start_blackjack_session(
+                    players,
+                    port,
+                    fallback,
+                    show_graph,
+                )) {
+                    Ok(session) => {
+                        self.screen = EguiActiveScreen::BlackjackGame(session);
+                    }
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to start Blackjack session");
+                    }
+                }
             }
         }
     }
@@ -330,37 +377,29 @@ impl GamesEguiApp {
         let size = ui.available_size();
         let viewport = Viewport::new(size.x as u32, size.y as u32);
 
-        match &self.screen {
-            EguiActiveScreen::TicTacToe {
-                game,
-                cursor,
-                events,
-            } => {
-                let _proof = render_ttt_egui(ui, game, cursor, events);
+        let tree = match &self.screen {
+            EguiActiveScreen::TicTacToe(handle) => {
+                let _proof = render_ttt_egui(ui, handle, viewport);
+                return;
             }
-            screen => {
-                let tree = match screen {
-                    EguiActiveScreen::ProfileSelect(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::MainLobby(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::GameSelect(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::AgentSelect(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::BlackjackSetup(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::StatsView(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::Settings(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::InGame(s) => s.to_verified_tree(viewport),
-                    EguiActiveScreen::TicTacToe { .. } => {
-                        tracing::error!("TicTacToe screen reached egui render path — not implemented");
-                        return;
-                    }
-                };
-                let backend = EguiBackend::new();
-                match backend.render(&tree) {
-                    Ok((widget, _stats, _proof)) => widget(ui),
-                    Err(e) => {
-                        error!(error = %e, "EguiBackend render failed");
-                        ui.label(format!("Render error: {e}"));
-                    }
-                }
+            EguiActiveScreen::BlackjackGame(handle) => {
+                let _proof = render_bj_egui(ui, handle, viewport);
+                return;
+            }
+            EguiActiveScreen::ProfileSelect(s) => s.to_verified_tree(viewport),
+            EguiActiveScreen::MainLobby(s) => s.to_verified_tree(viewport),
+            EguiActiveScreen::GameSelect(s) => s.to_verified_tree(viewport),
+            EguiActiveScreen::AgentSelect(s) => s.to_verified_tree(viewport),
+            EguiActiveScreen::BlackjackSetup(s) => s.to_verified_tree(viewport),
+            EguiActiveScreen::StatsView(s) => s.to_verified_tree(viewport),
+            EguiActiveScreen::Settings(s) => s.to_verified_tree(viewport),
+        };
+        let backend = EguiBackend::new();
+        match backend.render(&tree) {
+            Ok((widget, _stats, _proof)) => widget(ui),
+            Err(e) => {
+                error!(error = %e, "EguiBackend render failed");
+                ui.label(format!("Render error: {e}"));
             }
         }
     }
@@ -408,136 +447,134 @@ fn egui_ev_to_key(ev: &egui::Event) -> Option<KeyEvent> {
     })
 }
 
-/// Handle an egui event while the TTT game is active.
+/// Handle an egui key event during a TTT session.
 ///
-/// Converts movement / action keys to game moves and returns a
-/// [`ScreenTransition`] for Escape / Quit.
+/// Cursor moves are applied immediately to shared state.
+/// Enter/Space sends a PlaceMove action to the session task.
 fn ttt_handle_egui_key(
-    game: &mut AnyGame,
-    cursor: &mut Position,
-    events: &mut Vec<GameEvent>,
+    handle: &crate::tui::game_session::TttSessionHandle,
     ev: &egui::Event,
-) -> ScreenTransition {
+) {
+    use crate::tui::game_session::TttAction;
     let egui::Event::Key {
         key, pressed: true, ..
     } = ev
     else {
-        return ScreenTransition::Stay;
+        return;
     };
     use egui::Key::*;
+    let cursor = handle.state.read().unwrap().cursor;
     match key {
         ArrowUp | K | W => {
-            *cursor = cursor_up(*cursor);
+            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_up(cursor)));
         }
         ArrowDown | J => {
-            *cursor = cursor_down(*cursor);
+            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_down(cursor)));
         }
         ArrowLeft | H | A => {
-            *cursor = cursor_left(*cursor);
+            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_left(cursor)));
         }
         ArrowRight | L | D => {
-            *cursor = cursor_right(*cursor);
+            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_right(cursor)));
         }
         Enter | Space => {
-            let pos = *cursor;
-            let cur_game = std::mem::replace(
-                game,
-                AnyGame::Setup {
-                    board: Board::default(),
-                },
-            );
-            let mover = cur_game.to_move();
-            match cur_game.make_move_action(strictly_tictactoe::action::Move::new(
-                mover.unwrap_or(Player::X),
-                pos,
-            )) {
-                Ok(next) => {
-                    let player = if mover == Some(Player::X) { "X" } else { "O" };
-                    events.push(GameEvent::story(format!(
-                        "  {} {player} plays {pos}",
-                        if player == "X" { "✕" } else { "◯" },
-                        pos = pos.label(),
-                    )));
-                    if next.is_over() {
-                        if let Some(winner) = next.winner() {
-                            events.push(GameEvent::result(format!("🏆 {winner:?} wins!")));
-                        } else {
-                            events.push(GameEvent::result("🤝 Draw — the board is full"));
-                        }
-                    }
-                    *game = next;
-                }
-                Err(e) => {
-                    warn!(error = %e, "Illegal move");
-                    events.push(GameEvent::story(format!("⚠ {e}")));
-                    *game = AnyGame::InProgress {
-                        board: Board::default(),
-                        to_move: Player::X,
-                        history: Vec::new(),
-                    };
-                }
-            }
+            let _ = handle.action_tx.try_send(TttAction::PlaceMove);
         }
-        N => {
-            *game = AnyGame::InProgress {
-                board: Board::default(),
-                to_move: Player::X,
-                history: Vec::new(),
-            };
-            *cursor = Position::Center;
-            events.clear();
-            events.push(GameEvent::story("🎮 New game — X moves first"));
+        Escape | Q => {
+            let _ = handle.action_tx.try_send(TttAction::Quit);
         }
-        Escape => return ScreenTransition::GoToMainLobby,
-        Q => return ScreenTransition::Quit,
         _ => {}
     }
-    ScreenTransition::Stay
+}
+
+/// Handle an egui key event during a Blackjack session.
+///
+/// Number/letter keys map to tool indices in the Controls panel.
+/// The tool name is looked up from the shared state and dispatched via the action channel.
+fn bj_handle_egui_key(
+    handle: &crate::tui::game_session::BlackjackSessionHandle,
+    ev: &egui::Event,
+) {
+    use crate::tui::game_session::BlackjackAction;
+    let egui::Event::Key {
+        key, pressed: true, ..
+    } = ev
+    else {
+        return;
+    };
+
+    let idx = match key {
+        egui::Key::Num1 => Some(0usize),
+        egui::Key::Num2 => Some(1),
+        egui::Key::Num3 => Some(2),
+        egui::Key::Num4 => Some(3),
+        egui::Key::Num5 => Some(4),
+        egui::Key::Num6 => Some(5),
+        egui::Key::Num7 => Some(6),
+        egui::Key::Num8 => Some(7),
+        egui::Key::Num9 => Some(8),
+        egui::Key::Escape | egui::Key::Q => {
+            let _ = handle.action_tx.try_send(BlackjackAction::Quit);
+            return;
+        }
+        _ => None,
+    };
+
+    if let Some(i) = idx {
+        let state = handle.state.read().unwrap();
+        if let Some(tool) = state.available_tools.get(i) {
+            let name = tool.name.clone();
+            // For bet placement, default bet of 100 — a proper egui input dialog
+            // will be added when the IR supports text-input fields.
+            let args = if name.ends_with("__place") {
+                serde_json::json!({ "amount": 100u64 })
+            } else {
+                serde_json::json!({})
+            };
+            drop(state);
+            let _ = handle.action_tx.try_send(BlackjackAction::CallTool { name, args });
+        }
+    }
 }
 
 // ── IR render helpers ──────────────────────────────────────────────────────────
+//
+// Each function reads from the shared session state, converts to a VerifiedTree
+// via the game-agnostic IR builder, and renders through EguiBackend.
+// No frontend-specific game logic lives here — only IR → Bridge → render.
 
-/// Gate function: renders TTT state through the WCAG IR pipeline into `ui`.
-///
-/// Returns `Established<TttUiConsistent>` — the game-level proof that a
-/// complete IR-to-egui render occurred.
-#[instrument(skip(ui, game, events))]
+/// Render one TTT frame: session state → IR → EguiBackend.
+#[instrument(skip(ui, handle, viewport))]
 fn render_ttt_egui(
     ui: &mut egui::Ui,
-    game: &AnyGame,
-    cursor: &Position,
-    events: &[GameEvent],
+    handle: &crate::tui::game_session::TttSessionHandle,
+    viewport: elicit_ui::Viewport,
 ) -> elicitation::contracts::Established<TttUiConsistent> {
-    use elicit_ui::{UiTreeRenderer as _, Viewport};
-    use elicitation::contracts::Established;
+    use elicit_egui::EguiBackend;
+    use elicit_ui::UiTreeRenderer as _;
+    use elicitation::contracts::{both, Established};
 
-    let size = ui.available_size();
-    let vp = Viewport::new(size.x as u32, size.y as u32);
-
+    let state = handle.state.read().unwrap();
     let ttt_nodes = tictactoe_nodes();
     let ttt_edges = tictactoe_edges();
     let log = EventLog {
-        events,
-        dialogue: &[],
+        events: &state.event_log,
+        dialogue: &state.dialogue,
     };
     let graph = GraphParams {
         nodes: &ttt_nodes,
         edges: &ttt_edges,
-        active: tictactoe_active(game),
+        active: tictactoe_active(&state.game),
     };
-
     let (tree, wraps_proof) = ttt_to_verified_tree(
-        game,
-        &TttDisplayMode::BoardWithCursor(*cursor),
+        &state.game,
+        &TttDisplayMode::BoardWithCursor(state.cursor),
         &log,
         &graph,
-        vp,
+        viewport,
     );
+    drop(state);
 
-    // Proof chain: VerifiedTree → WcagVerified (inside UiTreeRenderer) →
-    // RenderComplete ∧ PanelTextWraps → TttUiConsistent.
-    use elicit_egui::EguiBackend;
-    use elicitation::contracts::both;
     let backend = EguiBackend::new();
     match backend.render(&tree) {
         Ok((widget, _stats, render_proof)) => {
@@ -545,7 +582,62 @@ fn render_ttt_egui(
             Established::prove(&both(render_proof, wraps_proof))
         }
         Err(e) => {
-            error!(error = %e, "EguiBackend::render failed");
+            error!(error = %e, "EguiBackend render failed for TTT");
+            ui.label(format!("Render error: {e}"));
+            Established::assert()
+        }
+    }
+}
+
+/// Render one Blackjack frame: session state → IR → EguiBackend.
+#[instrument(skip(ui, handle, viewport))]
+fn render_bj_egui(
+    ui: &mut egui::Ui,
+    handle: &crate::tui::game_session::BlackjackSessionHandle,
+    viewport: elicit_ui::Viewport,
+) -> elicitation::contracts::Established<BjUiConsistent> {
+    use crate::tui::game_ir::bj_to_verified_tree;
+    use elicit_egui::EguiBackend;
+    use elicit_ui::UiTreeRenderer as _;
+    use elicitation::contracts::{both, Established};
+    use strictly_blackjack::BlackjackDisplayMode;
+
+    let state = handle.state.read().unwrap();
+    let bj_nodes = blackjack_nodes();
+    let bj_edges = blackjack_edges();
+    let agent_triples: Vec<(&str, &str, &str)> = state
+        .agent_triples
+        .iter()
+        .map(|(n, p, d)| (n.as_str(), p.as_str(), d.as_str()))
+        .collect();
+    let log = EventLog {
+        events: &state.event_log,
+        dialogue: &state.merged_dialogue,
+    };
+    let graph = GraphParams {
+        nodes: &bj_nodes,
+        edges: &bj_edges,
+        active: state.active_node,
+    };
+    let (tree, display_proof, wraps_proof) = bj_to_verified_tree(
+        &state.bj_view,
+        &BlackjackDisplayMode::Table,
+        &agent_triples,
+        &log,
+        &state.tool_descs,
+        &graph,
+        viewport,
+    );
+    drop(state);
+
+    let backend = EguiBackend::new();
+    match backend.render(&tree) {
+        Ok((widget, _stats, render_proof)) => {
+            widget(ui);
+            Established::prove(&both(both(render_proof, display_proof), wraps_proof))
+        }
+        Err(e) => {
+            error!(error = %e, "EguiBackend render failed for Blackjack");
             ui.label(format!("Render error: {e}"));
             Established::assert()
         }
@@ -837,10 +929,13 @@ impl ApplicationHandler for GamesEguiApp {
 pub fn run_egui(
     profile_service: ProfileService,
     agent_library: AgentLibrary,
+    server_port: u16,
+    agent_config_path: std::path::PathBuf,
 ) -> anyhow::Result<()> {
     info!("Starting egui frontend");
     let event_loop = EventLoop::new()?;
-    let mut app = GamesEguiApp::new_with_lobby(profile_service, agent_library);
+    let mut app =
+        GamesEguiApp::new_with_lobby(profile_service, agent_library, server_port, agent_config_path);
     event_loop.run_app(&mut app)?;
     Ok(())
 }

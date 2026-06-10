@@ -381,7 +381,7 @@ where
 // ─────────────────────────────────────────────────────────────
 
 /// Build a [`GameEvent`] that narrates a phase transition for `player`.
-fn phase_transition_story(player: &str, from: &str, to: &str, description: &str) -> GameEvent {
+pub(crate) fn phase_transition_story(player: &str, from: &str, to: &str, description: &str) -> GameEvent {
     match to {
         "betting" if from == "idle" || from == "finished" => {
             GameEvent::story(format!("🃏  {player} — ready to bet"))
