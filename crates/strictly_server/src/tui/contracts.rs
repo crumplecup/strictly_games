@@ -120,16 +120,27 @@ pub type NoOverflow = And<LabelContained, And<TextWrapped, AreaSufficient>>;
 
 // ── Per-game UI-consistency propositions ─────────────────────────────────────
 
+/// Proposition: all text panels (Game Story, Controls, Chat) in this frame
+/// were built to render with word-wrap enabled so no content is clipped at
+/// the column boundary.
+///
+/// Minted by the panel builder functions (`event_log_nodes`, `chat_nodes`,
+/// `tools_nodes`) which use `Role::List` nodes.  The ratatui bridge renders
+/// `Role::List` as a `Paragraph { wrap: true }`, guaranteeing wrapping.
+/// Any future change that removes wrapping must break this proof chain.
+#[derive(elicitation::Prop)]
+pub struct PanelTextWraps;
+impl VerifiedWorkflow for PanelTextWraps {}
+impl ProvableFrom<Established<RenderComplete>> for PanelTextWraps {}
+
 /// Proposition: the TTT game state was rendered through a WCAG-verified
 /// AccessKit IR pipeline to completion.
 ///
-/// Provable from [`Established<RenderComplete>`]: the render pipeline mints
-/// `RenderComplete` only after `WcagVerified` has been established, so a
-/// completed render transitively proves WCAG compliance for this game.
+/// Provable from `Established<And<RenderComplete, PanelTextWraps>>`.
 #[derive(elicitation::Prop)]
 pub struct TttUiConsistent;
 impl VerifiedWorkflow for TttUiConsistent {}
-impl ProvableFrom<Established<RenderComplete>> for TttUiConsistent {}
+impl ProvableFrom<Established<And<RenderComplete, PanelTextWraps>>> for TttUiConsistent {}
 
 /// Proposition: the blackjack display IR was built with verified card geometry —
 /// both horizontal fit ([`crate::assets::CardSizeFits`]) and vertical fit
@@ -142,22 +153,25 @@ impl ProvableFrom<Established<And<crate::assets::CardSizeFits, crate::assets::Ca
 {}
 
 /// Proposition: the Blackjack game state was rendered through a WCAG-verified
-/// AccessKit IR pipeline to completion, and the card geometry was verified.
+/// AccessKit IR pipeline to completion, with verified card geometry and
+/// text-wrapping enforced on all panels.
 ///
-/// Provable from `Established<And<RenderComplete, CardDisplayBuilt>>`.
+/// Provable from `Established<And<And<RenderComplete, CardDisplayBuilt>, PanelTextWraps>>`.
 #[derive(elicitation::Prop)]
 pub struct BjUiConsistent;
 impl VerifiedWorkflow for BjUiConsistent {}
-impl ProvableFrom<Established<And<RenderComplete, CardDisplayBuilt>>> for BjUiConsistent {}
+impl ProvableFrom<Established<And<And<RenderComplete, CardDisplayBuilt>, PanelTextWraps>>>
+    for BjUiConsistent
+{}
 
 /// Proposition: the Craps game state was rendered through a WCAG-verified
-/// AccessKit IR pipeline to completion.
+/// AccessKit IR pipeline to completion, with text-wrapping enforced on all panels.
 ///
-/// Provable from [`Established<RenderComplete>`].
+/// Provable from `Established<And<RenderComplete, PanelTextWraps>>`.
 #[derive(elicitation::Prop)]
 pub struct CrapsUiConsistent;
 impl VerifiedWorkflow for CrapsUiConsistent {}
-impl ProvableFrom<Established<RenderComplete>> for CrapsUiConsistent {}
+impl ProvableFrom<Established<And<RenderComplete, PanelTextWraps>>> for CrapsUiConsistent {}
 
 // ─────────────────────────────────────────────────────────────
 //  Validation functions

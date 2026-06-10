@@ -70,12 +70,13 @@ pub fn render_ttt_html(
     graph: &GraphParams<'_>,
     viewport: Viewport,
 ) -> (String, Established<TttUiConsistent>) {
-    let tree = ttt_to_verified_tree(game, display_mode, log, graph, viewport);
+    use elicitation::contracts::both;
+    let (tree, wraps_proof) = ttt_to_verified_tree(game, display_mode, log, graph, viewport);
     let renderer = LeptosRenderer::html();
     match renderer.render(&tree) {
         Ok((html, _stats, render_proof)) => {
             debug!(bytes = html.len(), "TTT HTML rendered");
-            (html, Established::prove(&render_proof))
+            (html, Established::prove(&both(render_proof, wraps_proof)))
         }
         Err(e) => {
             error!(error = %e, "LeptosRenderer::render failed for TTT");
@@ -105,7 +106,7 @@ pub fn render_bj_html(
         edges: &bj_edges,
         active: blackjack_active(&state.phase),
     };
-    let (tree, _display_proof) =
+    let (tree, _display_proof, _wraps_proof) =
         bj_to_verified_tree(state, display_mode, &[], &log, &[], &graph, viewport);
     let renderer = LeptosRenderer::html();
     match renderer.render(&tree) {
@@ -138,12 +139,13 @@ pub fn render_craps_html(
         edges: &craps_es,
         active: craps_active(&state.phase),
     };
-    let tree = craps_to_verified_tree(state, display_mode, log, &graph, viewport);
+    use elicitation::contracts::both;
+    let (tree, wraps_proof) = craps_to_verified_tree(state, display_mode, log, &graph, viewport);
     let renderer = LeptosRenderer::html();
     match renderer.render(&tree) {
         Ok((html, _stats, render_proof)) => {
             debug!(bytes = html.len(), "Craps HTML rendered");
-            (html, Established::prove(&render_proof))
+            (html, Established::prove(&both(render_proof, wraps_proof)))
         }
         Err(e) => {
             error!(error = %e, "LeptosRenderer::render failed for Craps");

@@ -572,7 +572,7 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
         active: data.graph.active,
     };
 
-    let tree = ttt_to_verified_tree(
+    let (tree, wraps_proof) = ttt_to_verified_tree(
         data.game,
         &TttDisplayMode::BoardWithCursor(data.cursor),
         &log,
@@ -590,8 +590,7 @@ fn render_tictactoe_frame(f: &mut ratatui::Frame, data: &FrameData) {
         Established::assert()
     });
 
-    // RenderComplete was minted from Established<WcagVerified> inside render(),
-    // which was minted from the VerifiedTree.  TttUiConsistent: ProvableFrom<Established<RenderComplete>>
-    // threads that guarantee through to the game-level proposition.
-    let _ui_proof: Established<TttUiConsistent> = Established::prove(&render_proof);
+    use elicitation::contracts::both;
+    let _ui_proof: Established<TttUiConsistent> =
+        Established::prove(&both(render_proof, wraps_proof));
 }

@@ -653,12 +653,14 @@ where
         .draw(|f| {
             let area = f.area();
             let viewport = Viewport::new(area.width as u32, area.height as u32);
-            let tree =
+            let (tree, wraps_proof) =
                 craps_to_verified_tree(&view, &CrapsDisplayMode::Table, &log, &graph, viewport);
             let backend = RatatuiBackend::new();
             match backend.render(&tree) {
                 Ok((tui_node, _stats, render_proof)) => {
-                    let _: Established<CrapsUiConsistent> = Established::prove(&render_proof);
+                    use elicitation::contracts::both;
+                    let _: Established<CrapsUiConsistent> =
+                        Established::prove(&both(render_proof, wraps_proof));
                     verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
                         render_resize_prompt(f, &e);
                         Established::assert()

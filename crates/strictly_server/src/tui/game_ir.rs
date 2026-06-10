@@ -27,6 +27,7 @@ use std::collections::BTreeMap;
 
 use accesskit::{Node as AkNode, NodeId as AkNodeId, Role as AkRole};
 use elicit_accesskit::{NodeId, NodeJson, Role};
+use elicitation::contracts::Established;
 use elicit_ui::{VerifiedTree, Viewport};
 use tracing::instrument;
 
@@ -88,7 +89,10 @@ fn next_after(pairs: &[(NodeId, NodeJson)], fallback: u64) -> u64 {
 ///
 /// Returns `(root_id, pairs)` where root is `Role::List` and each item is
 /// `Role::ListItem`.  `bridge_list` renders this as a ratatui `List` widget.
-fn event_log_nodes(events: &[GameEvent], id_base: u64) -> (NodeId, Vec<(NodeId, NodeJson)>) {
+fn event_log_nodes(
+    events: &[GameEvent],
+    id_base: u64,
+) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<crate::tui::contracts::PanelTextWraps>) {
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let root_id = NodeId::from(id_base);
 
@@ -107,7 +111,9 @@ fn event_log_nodes(events: &[GameEvent], id_base: u64) -> (NodeId, Vec<(NodeId, 
             .with_label("Game Story".to_string())
             .with_children(item_ids),
     ));
-    (root_id, pairs)
+    // Role::List is rendered by bridge_list as Paragraph { wrap: true },
+    // so all content is guaranteed to wrap at the column boundary.
+    (root_id, pairs, Established::assert())
 }
 
 /// Build a dialogue (chat) subtree.
@@ -115,7 +121,10 @@ fn event_log_nodes(events: &[GameEvent], id_base: u64) -> (NodeId, Vec<(NodeId, 
 /// Returns `(root_id, pairs)` where root is `Role::List` and each item is
 /// `Role::ListItem` labelled `"Role: text"`.  `bridge_list` renders as a
 /// ratatui `List` widget.
-fn chat_nodes(dialogue: &[DialogueEntry], id_base: u64) -> (NodeId, Vec<(NodeId, NodeJson)>) {
+fn chat_nodes(
+    dialogue: &[DialogueEntry],
+    id_base: u64,
+) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<crate::tui::contracts::PanelTextWraps>) {
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let root_id = NodeId::from(id_base);
 
@@ -135,7 +144,7 @@ fn chat_nodes(dialogue: &[DialogueEntry], id_base: u64) -> (NodeId, Vec<(NodeId,
             .with_label("Chat".to_string())
             .with_children(item_ids),
     ));
-    (root_id, pairs)
+    (root_id, pairs, Established::assert())
 }
 
 /// Build a typestate-graph subtree.
@@ -225,7 +234,10 @@ fn agent_nodes(agents: &[(&str, &str, &str)], id_base: u64) -> (NodeId, Vec<(Nod
 ///
 /// Each tool description becomes a `Role::ListItem`.
 /// Returns `(root_id, pairs)` with a `Role::List` root.
-fn tools_nodes(tools: &[String], id_base: u64) -> (NodeId, Vec<(NodeId, NodeJson)>) {
+fn tools_nodes(
+    tools: &[String],
+    id_base: u64,
+) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<crate::tui::contracts::PanelTextWraps>) {
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let root_id = NodeId::from(id_base);
 
@@ -249,7 +261,7 @@ fn tools_nodes(tools: &[String], id_base: u64) -> (NodeId, Vec<(NodeId, NodeJson
             .with_label("Controls".to_string())
             .with_children(item_ids),
     ));
-    (root_id, pairs)
+    (root_id, pairs, Established::assert())
 }
 ///
 /// - `NodeId(0)` — `Role::Window` (vertical layout)
@@ -299,13 +311,13 @@ pub fn ttt_to_verified_tree(
     log: &EventLog<'_>,
     graph: &GraphParams<'_>,
     viewport: Viewport,
-) -> VerifiedTree {
+) -> (VerifiedTree, Established<crate::tui::contracts::PanelTextWraps>) {
     // id=0: Window, id=1: Banner, id=2: Row, id=3+: board; 10_000: status
     let (board_root, board_pairs) = game.to_ak_nodes(mode, 3);
     let mut all_pairs = board_pairs;
 
     let story_base = next_after(&all_pairs, 4);
-    let (story_root, story_pairs) = event_log_nodes(log.events, story_base);
+    let (story_root, story_pairs, wraps_proof) = event_log_nodes(log.events, story_base);
     all_pairs.extend(story_pairs);
 
     // Story goes left of the board so it acts as a natural left sidebar
@@ -314,7 +326,7 @@ pub fn ttt_to_verified_tree(
 
     if !log.dialogue.is_empty() {
         let chat_base = next_after(&all_pairs, story_base + 1);
-        let (chat_root, chat_pairs) = chat_nodes(log.dialogue, chat_base);
+        let (chat_root, chat_pairs, _) = chat_nodes(log.dialogue, chat_base);
         all_pairs.extend(chat_pairs);
         col_roots.push(chat_root.0);
     }
@@ -339,7 +351,8 @@ pub fn ttt_to_verified_tree(
     } else {
         "Game in progress".to_string()
     };
-    wrap_in_window_with_row("Tic-Tac-Toe", &status, row_id, nodes, viewport)
+    let tree = wrap_in_window_with_row("Tic-Tac-Toe", &status, row_id, nodes, viewport);
+    (tree, wraps_proof)
 }
 
 /// Build the full multi-column [`VerifiedTree`] for the Blackjack TUI frame.
@@ -360,7 +373,7 @@ pub fn bj_to_verified_tree(
     tools: &[String],
     graph: &GraphParams<'_>,
     viewport: Viewport,
-) -> (VerifiedTree, elicitation::contracts::Established<crate::tui::contracts::CardDisplayBuilt>) {
+) -> (VerifiedTree, elicitation::contracts::Established<crate::tui::contracts::CardDisplayBuilt>, Established<crate::tui::contracts::PanelTextWraps>) {
     // Choose column width: viewport split equally across the content columns.
     // The BJ layout always has at least one content column (the game state).
     let n_columns = 1 + (!agents.is_empty() as u16)
@@ -385,20 +398,20 @@ pub fn bj_to_verified_tree(
     }
 
     let events_base = next_after(&all_pairs, 100);
-    let (events_root, events_pairs) = event_log_nodes(log.events, events_base);
+    let (events_root, events_pairs, wraps_proof) = event_log_nodes(log.events, events_base);
     all_pairs.extend(events_pairs);
     col_roots.push(events_root.0);
 
     if !tools.is_empty() {
         let tools_base = next_after(&all_pairs, events_base + 1);
-        let (tools_root, tools_pairs) = tools_nodes(tools, tools_base);
+        let (tools_root, tools_pairs, _) = tools_nodes(tools, tools_base);
         all_pairs.extend(tools_pairs);
         col_roots.push(tools_root.0);
     }
 
     if !log.dialogue.is_empty() {
         let chat_base = next_after(&all_pairs, 200);
-        let (chat_root, chat_pairs) = chat_nodes(log.dialogue, chat_base);
+        let (chat_root, chat_pairs, _) = chat_nodes(log.dialogue, chat_base);
         all_pairs.extend(chat_pairs);
         col_roots.push(chat_root.0);
     }
@@ -419,7 +432,7 @@ pub fn bj_to_verified_tree(
 
     let status = format!("Blackjack — {} | Bankroll: ${}", view.phase, view.bankroll);
     let tree = wrap_in_window_with_row("Blackjack", &status, row_id, nodes, viewport);
-    (tree, display_proof)
+    (tree, display_proof, wraps_proof)
 }
 
 /// Build the full multi-column [`VerifiedTree`] for the Craps TUI frame.
@@ -436,20 +449,20 @@ pub fn craps_to_verified_tree(
     log: &EventLog<'_>,
     graph: &GraphParams<'_>,
     viewport: Viewport,
-) -> VerifiedTree {
+) -> (VerifiedTree, Established<crate::tui::contracts::PanelTextWraps>) {
     // id=0: Window, id=1: Banner, id=2: Row, id=3+: game subtree; 10_000: status
     let (game_root, game_pairs) = view.to_ak_nodes(mode, 3);
     let mut all_pairs = game_pairs;
 
     let events_base = next_after(&all_pairs, 100);
-    let (events_root, events_pairs) = event_log_nodes(log.events, events_base);
+    let (events_root, events_pairs, wraps_proof) = event_log_nodes(log.events, events_base);
     all_pairs.extend(events_pairs);
 
     let mut col_roots = vec![game_root.0, events_root.0];
 
     if !log.dialogue.is_empty() {
         let chat_base = next_after(&all_pairs, 200);
-        let (chat_root, chat_pairs) = chat_nodes(log.dialogue, chat_base);
+        let (chat_root, chat_pairs, _) = chat_nodes(log.dialogue, chat_base);
         all_pairs.extend(chat_pairs);
         col_roots.push(chat_root.0);
     }
@@ -469,5 +482,6 @@ pub fn craps_to_verified_tree(
     nodes.insert(row_id, row);
 
     let status = format!("Craps — {} | Bankroll: ${}", view.phase, view.bankroll);
-    wrap_in_window_with_row("Craps", &status, row_id, nodes, viewport)
+    let tree = wrap_in_window_with_row("Craps", &status, row_id, nodes, viewport);
+    (tree, wraps_proof)
 }

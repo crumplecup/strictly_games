@@ -526,7 +526,7 @@ fn render_ttt_egui(
         active: tictactoe_active(game),
     };
 
-    let tree = ttt_to_verified_tree(
+    let (tree, wraps_proof) = ttt_to_verified_tree(
         game,
         &TttDisplayMode::BoardWithCursor(*cursor),
         &log,
@@ -535,13 +535,14 @@ fn render_ttt_egui(
     );
 
     // Proof chain: VerifiedTree → WcagVerified (inside UiTreeRenderer) →
-    // RenderComplete → TttUiConsistent.
+    // RenderComplete ∧ PanelTextWraps → TttUiConsistent.
     use elicit_egui::EguiBackend;
+    use elicitation::contracts::both;
     let backend = EguiBackend::new();
     match backend.render(&tree) {
         Ok((widget, _stats, render_proof)) => {
             widget(ui);
-            Established::prove(&render_proof)
+            Established::prove(&both(render_proof, wraps_proof))
         }
         Err(e) => {
             error!(error = %e, "EguiBackend::render failed");

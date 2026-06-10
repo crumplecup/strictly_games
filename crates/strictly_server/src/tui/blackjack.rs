@@ -294,7 +294,7 @@ where
                     edges: bj_graph_edges,
                     active: active_node,
                 };
-                let (tree, display_proof) = bj_to_verified_tree(
+                let (tree, display_proof, wraps_proof) = bj_to_verified_tree(
                     &bj_view,
                     &BlackjackDisplayMode::Table,
                     &agent_triples,
@@ -308,7 +308,7 @@ where
                     Ok((tui_node, _stats, render_proof)) => {
                         use elicitation::contracts::both;
                         let _: Established<BjUiConsistent> =
-                            Established::prove(&both(render_proof, display_proof));
+                            Established::prove(&both(both(render_proof, display_proof), wraps_proof));
                         verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
                             use crate::tui::contracts::render_resize_prompt;
                             render_resize_prompt(f, &e);

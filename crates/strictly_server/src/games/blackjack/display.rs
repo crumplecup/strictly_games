@@ -100,7 +100,10 @@ impl BlackjackStateView {
                     player_section_ids.push(row_id);
                 }
 
-                if self.player_hands.is_empty() {
+                // Always show the description — during player_turn it contains
+                // hand totals ("Your hand: J♣+4♣ (value: 14)\nDealer shows: J♦")
+                // which are the primary way the player reads card values.
+                if !self.description.is_empty() {
                     let desc_id = NodeId::from(ctr);
                     ctr += 1;
                     nodes.push((
