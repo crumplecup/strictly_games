@@ -27,8 +27,8 @@ use std::collections::BTreeMap;
 
 use accesskit::{Node as AkNode, NodeId as AkNodeId, Orientation as AkOrientation, Role as AkRole};
 use elicit_accesskit::{NodeId, NodeJson, Role};
-use elicitation::contracts::Established;
 use elicit_ui::{VerifiedTree, Viewport};
+use elicitation::contracts::Established;
 use tracing::instrument;
 
 use crate::games::blackjack::BlackjackStateView;
@@ -92,7 +92,11 @@ fn next_after(pairs: &[(NodeId, NodeJson)], fallback: u64) -> u64 {
 fn event_log_nodes(
     events: &[GameEvent],
     id_base: u64,
-) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<crate::tui::contracts::PanelTextWraps>) {
+) -> (
+    NodeId,
+    Vec<(NodeId, NodeJson)>,
+    Established<crate::tui::contracts::PanelTextWraps>,
+) {
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let root_id = NodeId::from(id_base);
 
@@ -124,7 +128,11 @@ fn event_log_nodes(
 fn chat_nodes(
     dialogue: &[DialogueEntry],
     id_base: u64,
-) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<crate::tui::contracts::PanelTextWraps>) {
+) -> (
+    NodeId,
+    Vec<(NodeId, NodeJson)>,
+    Established<crate::tui::contracts::PanelTextWraps>,
+) {
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let root_id = NodeId::from(id_base);
 
@@ -237,7 +245,11 @@ fn agent_nodes(agents: &[(&str, &str, &str)], id_base: u64) -> (NodeId, Vec<(Nod
 fn tools_nodes(
     tools: &[String],
     id_base: u64,
-) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<crate::tui::contracts::PanelTextWraps>) {
+) -> (
+    NodeId,
+    Vec<(NodeId, NodeJson)>,
+    Established<crate::tui::contracts::PanelTextWraps>,
+) {
     let mut pairs: Vec<(NodeId, NodeJson)> = Vec::new();
     let root_id = NodeId::from(id_base);
 
@@ -312,7 +324,10 @@ pub fn ttt_to_verified_tree(
     log: &EventLog<'_>,
     graph: &GraphParams<'_>,
     viewport: Viewport,
-) -> (VerifiedTree, Established<crate::tui::contracts::PanelTextWraps>) {
+) -> (
+    VerifiedTree,
+    Established<crate::tui::contracts::PanelTextWraps>,
+) {
     // id=0: Window, id=1: Banner, id=2: Row, id=3+: board; 10_000: status
     let (board_root, board_pairs) = game.to_ak_nodes(mode, 3);
     let mut all_pairs = board_pairs;
@@ -375,7 +390,11 @@ pub fn bj_to_verified_tree(
     tools: &[String],
     graph: &GraphParams<'_>,
     viewport: Viewport,
-) -> (VerifiedTree, elicitation::contracts::Established<crate::tui::contracts::CardDisplayBuilt>, Established<crate::tui::contracts::PanelTextWraps>) {
+) -> (
+    VerifiedTree,
+    elicitation::contracts::Established<crate::tui::contracts::CardDisplayBuilt>,
+    Established<crate::tui::contracts::PanelTextWraps>,
+) {
     // Choose column width: viewport split equally across the content columns.
     // The BJ layout always has at least one content column (the game state).
     let n_columns = 1 + (!agents.is_empty() as u16)
@@ -452,7 +471,10 @@ pub fn craps_to_verified_tree(
     log: &EventLog<'_>,
     graph: &GraphParams<'_>,
     viewport: Viewport,
-) -> (VerifiedTree, Established<crate::tui::contracts::PanelTextWraps>) {
+) -> (
+    VerifiedTree,
+    Established<crate::tui::contracts::PanelTextWraps>,
+) {
     // id=0: Window, id=1: Banner, id=2: Row, id=3+: game subtree; 10_000: status
     let (game_root, game_pairs) = view.to_ak_nodes(mode, 3);
     let mut all_pairs = game_pairs;

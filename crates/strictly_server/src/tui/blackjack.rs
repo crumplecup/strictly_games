@@ -307,8 +307,10 @@ where
                 match backend.render(&tree) {
                     Ok((tui_node, _stats, render_proof)) => {
                         use elicitation::contracts::both;
-                        let _: Established<BjUiConsistent> =
-                            Established::prove(&both(both(render_proof, display_proof), wraps_proof));
+                        let _: Established<BjUiConsistent> = Established::prove(&both(
+                            both(render_proof, display_proof),
+                            wraps_proof,
+                        ));
                         verified_draw(f, area, &tui_node).unwrap_or_else(|e| {
                             use crate::tui::contracts::render_resize_prompt;
                             render_resize_prompt(f, &e);
@@ -320,7 +322,10 @@ where
                         use crate::tui::contracts::{LayoutError, render_resize_prompt};
                         render_resize_prompt(
                             f,
-                            &LayoutError::AreaInsufficient { needed: 1, available: 0 },
+                            &LayoutError::AreaInsufficient {
+                                needed: 1,
+                                available: 0,
+                            },
                         );
                     }
                 }
@@ -381,7 +386,12 @@ where
 // ─────────────────────────────────────────────────────────────
 
 /// Build a [`GameEvent`] that narrates a phase transition for `player`.
-pub(crate) fn phase_transition_story(player: &str, from: &str, to: &str, description: &str) -> GameEvent {
+pub(crate) fn phase_transition_story(
+    player: &str,
+    from: &str,
+    to: &str,
+    description: &str,
+) -> GameEvent {
     match to {
         "betting" if from == "idle" || from == "finished" => {
             GameEvent::story(format!("🃏  {player} — ready to bet"))

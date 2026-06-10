@@ -43,7 +43,10 @@ fn card_asset_paths_resolve_to_existing_files() {
         }
     }
 
-    assert!(all_ok, "one or more card assets not found — see stderr for details");
+    assert!(
+        all_ok,
+        "one or more card assets not found — see stderr for details"
+    );
 }
 
 #[test]
@@ -56,14 +59,12 @@ fn card_asset_bytes_are_readable() {
     for (rel, kind) in samples {
         let uri = make_file_uri(rel);
         let path = uri_to_path(&uri);
-        let bytes = std::fs::read(path)
-            .unwrap_or_else(|e| panic!("failed to read {path}: {e}"));
+        let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("failed to read {path}: {e}"));
         assert!(!bytes.is_empty(), "{path} is empty");
 
         match *kind {
             "svg" => {
-                let text = std::str::from_utf8(&bytes)
-                    .expect("SVG should be valid UTF-8");
+                let text = std::str::from_utf8(&bytes).expect("SVG should be valid UTF-8");
                 assert!(
                     text.contains("<svg") || text.contains("<?xml"),
                     "{path} does not look like SVG (first 100 chars: {})",
@@ -71,7 +72,11 @@ fn card_asset_bytes_are_readable() {
                 );
             }
             "png" => {
-                assert_eq!(&bytes[0..4], b"\x89PNG", "{path} does not start with PNG magic bytes");
+                assert_eq!(
+                    &bytes[0..4],
+                    b"\x89PNG",
+                    "{path} does not start with PNG magic bytes"
+                );
             }
             _ => {}
         }

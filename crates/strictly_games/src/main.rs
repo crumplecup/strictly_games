@@ -230,8 +230,11 @@ async fn run_http_server(host: String, port: u16) -> Result<()> {
                     use axum::Json;
                     use strictly_server::SharedTableSeatView;
                     if let Some(table) = sessions.get_shared_table().ok().flatten() {
-                        let seat_index =
-                            sessions.get_seat_index(&session_id).ok().flatten().unwrap_or(0);
+                        let seat_index = sessions
+                            .get_seat_index(&session_id)
+                            .ok()
+                            .flatten()
+                            .unwrap_or(0);
                         let guard = table.lock().await;
                         Json(SharedTableSeatView::from_table(&guard, seat_index))
                     } else {
@@ -999,7 +1002,11 @@ fn initialize_agent_tracing() {
     use tracing_subscriber::fmt::format::FmtSpan;
 
     // Log agent to file since TUI owns stderr
-    let log_file = match OpenOptions::new().create(true).append(true).open("agent.log") {
+    let log_file = match OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("agent.log")
+    {
         Ok(f) => f,
         Err(e) => {
             eprintln!("Failed to open agent.log: {e}");

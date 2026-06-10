@@ -38,8 +38,7 @@ use crate::lobby::settings::LobbySettings;
 use crate::tui::contracts::{BjUiConsistent, TttUiConsistent};
 use crate::tui::game_ir::{EventLog, GraphParams, ttt_to_verified_tree};
 use crate::tui::{
-    blackjack_edges, blackjack_nodes,
-    tictactoe_active, tictactoe_edges, tictactoe_nodes,
+    blackjack_edges, blackjack_nodes, tictactoe_active, tictactoe_edges, tictactoe_nodes,
 };
 use crate::{AgentLibrary, ProfileService, User};
 
@@ -335,10 +334,7 @@ impl GamesEguiApp {
                 let show_graph = self.settings.show_typestate_graph;
 
                 self.screen = EguiActiveScreen::BlackjackGame(start_blackjack_session(
-                    players,
-                    port,
-                    fallback,
-                    show_graph,
+                    players, port, fallback, show_graph,
                 ));
             }
         }
@@ -471,10 +467,7 @@ fn egui_ev_to_key(ev: &egui::Event) -> Option<KeyEvent> {
 ///
 /// Cursor moves are applied immediately to shared state.
 /// Enter/Space sends a PlaceMove action to the session task.
-fn ttt_handle_egui_key(
-    handle: &crate::tui::game_session::TttSessionHandle,
-    ev: &egui::Event,
-) {
+fn ttt_handle_egui_key(handle: &crate::tui::game_session::TttSessionHandle, ev: &egui::Event) {
     use crate::tui::game_session::TttAction;
     let egui::Event::Key {
         key, pressed: true, ..
@@ -486,16 +479,24 @@ fn ttt_handle_egui_key(
     let cursor = handle.state.read().unwrap().cursor;
     match key {
         ArrowUp | K | W => {
-            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_up(cursor)));
+            let _ = handle
+                .action_tx
+                .try_send(TttAction::MoveCursor(cursor_up(cursor)));
         }
         ArrowDown | J => {
-            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_down(cursor)));
+            let _ = handle
+                .action_tx
+                .try_send(TttAction::MoveCursor(cursor_down(cursor)));
         }
         ArrowLeft | H | A => {
-            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_left(cursor)));
+            let _ = handle
+                .action_tx
+                .try_send(TttAction::MoveCursor(cursor_left(cursor)));
         }
         ArrowRight | L | D => {
-            let _ = handle.action_tx.try_send(TttAction::MoveCursor(cursor_right(cursor)));
+            let _ = handle
+                .action_tx
+                .try_send(TttAction::MoveCursor(cursor_right(cursor)));
         }
         Enter | Space => {
             let _ = handle.action_tx.try_send(TttAction::PlaceMove);
@@ -511,10 +512,7 @@ fn ttt_handle_egui_key(
 ///
 /// Number/letter keys map to tool indices in the Controls panel.
 /// The tool name is looked up from the shared state and dispatched via the action channel.
-fn bj_handle_egui_key(
-    handle: &crate::tui::game_session::BlackjackSessionHandle,
-    ev: &egui::Event,
-) {
+fn bj_handle_egui_key(handle: &crate::tui::game_session::BlackjackSessionHandle, ev: &egui::Event) {
     use crate::tui::game_session::BlackjackAction;
     let egui::Event::Key {
         key, pressed: true, ..
@@ -552,7 +550,9 @@ fn bj_handle_egui_key(
                 serde_json::json!({})
             };
             drop(state);
-            let _ = handle.action_tx.try_send(BlackjackAction::CallTool { name, args });
+            let _ = handle
+                .action_tx
+                .try_send(BlackjackAction::CallTool { name, args });
         }
     }
 }
@@ -572,7 +572,7 @@ fn render_ttt_egui(
 ) -> elicitation::contracts::Established<TttUiConsistent> {
     use elicit_egui::EguiBackend;
     use elicit_ui::UiTreeRenderer as _;
-    use elicitation::contracts::{both, Established};
+    use elicitation::contracts::{Established, both};
 
     let state = handle.state.read().unwrap();
     let ttt_nodes = tictactoe_nodes();
@@ -619,7 +619,7 @@ fn render_bj_egui(
     use crate::tui::game_ir::bj_to_verified_tree;
     use elicit_egui::EguiBackend;
     use elicit_ui::UiTreeRenderer as _;
-    use elicitation::contracts::{both, Established};
+    use elicitation::contracts::{Established, both};
     use strictly_blackjack::BlackjackDisplayMode;
 
     let state = handle.state.read().unwrap();
@@ -764,14 +764,15 @@ impl ApplicationHandler for GamesEguiApp {
                 return;
             }
         };
-        let (device, queue) =
-            match futures::executor::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())) {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::error!(error = %e, "wgpu device creation failed — egui frontend unavailable");
-                    return;
-                }
-            };
+        let (device, queue) = match futures::executor::block_on(
+            adapter.request_device(&wgpu::DeviceDescriptor::default()),
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!(error = %e, "wgpu device creation failed — egui frontend unavailable");
+                return;
+            }
+        };
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
@@ -958,8 +959,12 @@ pub fn run_egui(
 ) -> anyhow::Result<()> {
     info!("Starting egui frontend");
     let event_loop = EventLoop::new()?;
-    let mut app =
-        GamesEguiApp::new_with_lobby(profile_service, agent_library, server_port, agent_config_path);
+    let mut app = GamesEguiApp::new_with_lobby(
+        profile_service,
+        agent_library,
+        server_port,
+        agent_config_path,
+    );
     event_loop.run_app(&mut app)?;
     Ok(())
 }

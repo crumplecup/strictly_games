@@ -19,7 +19,10 @@ use tracing::{debug, info, instrument, warn};
 /// (mutex name) instead.  `PoisonError` itself has `source() → None`, meaning
 /// no further error chain exists — the original panic is already gone.
 #[derive(Debug, Clone, derive_more::Display, derive_more::Error)]
-#[display("mutex '{}' poisoned — another thread panicked while holding this lock", name)]
+#[display(
+    "mutex '{}' poisoned — another thread panicked while holding this lock",
+    name
+)]
 pub struct PoisonedMutex {
     /// Name of the poisoned mutex, for diagnostics.
     #[error(not(source))]
@@ -57,7 +60,11 @@ impl SessionError {
     #[track_caller]
     pub fn new(kind: SessionErrorKind) -> Self {
         let loc = std::panic::Location::caller();
-        Self { kind, line: loc.line(), file: loc.file() }
+        Self {
+            kind,
+            line: loc.line(),
+            file: loc.file(),
+        }
     }
 }
 
@@ -826,7 +833,11 @@ impl SessionManager {
 
     /// Appends a dialogue entry for the given session.
     #[instrument(skip(self, entry), fields(role = %entry.role))]
-    pub fn push_dialogue(&self, session_id: &str, entry: DialogueEntry) -> Result<(), SessionError> {
+    pub fn push_dialogue(
+        &self,
+        session_id: &str,
+        entry: DialogueEntry,
+    ) -> Result<(), SessionError> {
         let mut dialogue = self.dialogue.lock().map_err(poison_err("dialogue"))?;
         dialogue
             .entry(session_id.to_string())
@@ -859,7 +870,10 @@ impl SessionManager {
     /// Returns the `SharedTable` handle.
     #[instrument(skip(self))]
     pub fn init_shared_table(&self, num_seats: usize) -> Result<SharedTable, SessionError> {
-        let mut guard = self.shared_table.lock().map_err(poison_err("shared_table"))?;
+        let mut guard = self
+            .shared_table
+            .lock()
+            .map_err(poison_err("shared_table"))?;
         if let Some(ref table) = *guard {
             debug!(num_seats, "Shared table already initialised");
             return Ok(table.clone());
@@ -873,7 +887,11 @@ impl SessionManager {
     /// Returns the shared table handle, if one has been initialised.
     #[instrument(skip(self))]
     pub fn get_shared_table(&self) -> Result<Option<SharedTable>, SessionError> {
-        Ok(self.shared_table.lock().map_err(poison_err("shared_table"))?.clone())
+        Ok(self
+            .shared_table
+            .lock()
+            .map_err(poison_err("shared_table"))?
+            .clone())
     }
 
     /// Records that `session_id` owns seat `seat_index`.
@@ -883,7 +901,10 @@ impl SessionManager {
         session_id: SessionId,
         seat_index: usize,
     ) -> Result<(), SessionError> {
-        let mut map = self.seat_indices.lock().map_err(poison_err("seat_indices"))?;
+        let mut map = self
+            .seat_indices
+            .lock()
+            .map_err(poison_err("seat_indices"))?;
         map.insert(session_id, seat_index);
         debug!(seat_index, "Registered seat index");
         Ok(())

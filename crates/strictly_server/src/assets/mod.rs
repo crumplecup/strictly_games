@@ -339,7 +339,11 @@ impl CardSize {
         n_card_rows: usize,
         col_width: u16,
         viewport_height: u16,
-    ) -> (Self, elicitation::contracts::Established<CardSizeFits>, elicitation::contracts::Established<CardHeightFits>) {
+    ) -> (
+        Self,
+        elicitation::contracts::Established<CardSizeFits>,
+        elicitation::contracts::Established<CardHeightFits>,
+    ) {
         const WINDOW_CHROME: usize = 2;
         let col = col_width as usize;
         let vp = viewport_height as usize;
@@ -350,19 +354,40 @@ impl CardSize {
         let v_fits = |s: Self| rows * (s.height() + 1) + WINDOW_CHROME <= vp;
 
         let size = if h_fits(Self::Large) && v_fits(Self::Large) {
-            tracing::debug!(n, n_card_rows, col_width, viewport_height, tier = "Large",
-                h_needed = n * Self::Large.width(), v_needed = rows * (Self::Large.height() + 1) + WINDOW_CHROME,
-                "CardSize::for_hand: Large fits");
+            tracing::debug!(
+                n,
+                n_card_rows,
+                col_width,
+                viewport_height,
+                tier = "Large",
+                h_needed = n * Self::Large.width(),
+                v_needed = rows * (Self::Large.height() + 1) + WINDOW_CHROME,
+                "CardSize::for_hand: Large fits"
+            );
             Self::Large
         } else if h_fits(Self::Medium) && v_fits(Self::Medium) {
-            tracing::debug!(n, n_card_rows, col_width, viewport_height, tier = "Medium",
-                h_needed = n * Self::Medium.width(), v_needed = rows * (Self::Medium.height() + 1) + WINDOW_CHROME,
-                "CardSize::for_hand: Medium fits");
+            tracing::debug!(
+                n,
+                n_card_rows,
+                col_width,
+                viewport_height,
+                tier = "Medium",
+                h_needed = n * Self::Medium.width(),
+                v_needed = rows * (Self::Medium.height() + 1) + WINDOW_CHROME,
+                "CardSize::for_hand: Medium fits"
+            );
             Self::Medium
         } else {
-            tracing::debug!(n, n_card_rows, col_width, viewport_height, tier = "Small (fallback)",
-                h_needed = n * Self::Small.width(), v_needed = rows * (Self::Small.height() + 1) + WINDOW_CHROME,
-                "CardSize::for_hand: using Small");
+            tracing::debug!(
+                n,
+                n_card_rows,
+                col_width,
+                viewport_height,
+                tier = "Small (fallback)",
+                h_needed = n * Self::Small.width(),
+                v_needed = rows * (Self::Small.height() + 1) + WINDOW_CHROME,
+                "CardSize::for_hand: using Small"
+            );
             Self::Small
         };
         (
@@ -402,9 +427,7 @@ pub fn bj_card_ascii_sized(
 ///
 /// Prefer [`bj_card_ascii_sized`] when the column width is known so the tier
 /// is chosen to fit the available space.
-pub fn bj_card_ascii(
-    card: Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>,
-) -> String {
+pub fn bj_card_ascii(card: Option<(strictly_blackjack::Rank, strictly_blackjack::Suit)>) -> String {
     bj_card_ascii_sized(card, CardSize::Medium)
 }
 

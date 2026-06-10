@@ -54,7 +54,11 @@ impl CrapsSessionError {
     #[track_caller]
     fn new(kind: CrapsSessionErrorKind) -> Self {
         let loc = std::panic::Location::caller();
-        Self { kind, line: loc.line(), file: loc.file() }
+        Self {
+            kind,
+            line: loc.line(),
+            file: loc.file(),
+        }
     }
 
     #[track_caller]
@@ -69,14 +73,17 @@ impl CrapsSessionError {
 
     #[track_caller]
     fn seat_type_mismatch(index: usize, expected: &'static str, found: &'static str) -> Self {
-        Self::new(CrapsSessionErrorKind::SeatTypeMismatch { index, expected, found })
+        Self::new(CrapsSessionErrorKind::SeatTypeMismatch {
+            index,
+            expected,
+            found,
+        })
     }
 
     #[track_caller]
     fn io(e: std::io::Error) -> Self {
         Self::new(CrapsSessionErrorKind::Io(e))
     }
-
 }
 use crossterm::event::{self, Event, KeyCode};
 use elicit_ratatui::TuiCommunicator;
@@ -1259,8 +1266,8 @@ where
         // ── Execute typestate flow ───────────────────────────
         let setup = GameSetup::new(seat_comms.len(), table.max_odds());
         let betting_state = setup.start_betting(table.bankroll_vec());
-        let (comeout_state, bets_proof) =
-            execute_place_bets(betting_state, all_seat_bets.clone()).map_err(CrapsSessionError::game)?;
+        let (comeout_state, bets_proof) = execute_place_bets(betting_state, all_seat_bets.clone())
+            .map_err(CrapsSessionError::game)?;
 
         current_phase = "ComeOut".to_string();
         event_log.push(GameEvent::phase_change("Betting", "ComeOut"));
@@ -1564,7 +1571,9 @@ where
                             for i in 0..seat_comms.len() {
                                 table
                                     .seat_mut(i)
-                                    .ok_or_else(|| CrapsSessionError::seat_not_found(i, seat_count))?
+                                    .ok_or_else(|| {
+                                        CrapsSessionError::seat_not_found(i, seat_count)
+                                    })?
                                     .record_round();
                             }
 

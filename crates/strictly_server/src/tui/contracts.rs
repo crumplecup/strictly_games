@@ -150,7 +150,8 @@ pub struct CardDisplayBuilt;
 impl VerifiedWorkflow for CardDisplayBuilt {}
 impl ProvableFrom<Established<And<crate::assets::CardSizeFits, crate::assets::CardHeightFits>>>
     for CardDisplayBuilt
-{}
+{
+}
 
 /// Proposition: the Blackjack game state was rendered through a WCAG-verified
 /// AccessKit IR pipeline to completion, with verified card geometry and
@@ -162,7 +163,8 @@ pub struct BjUiConsistent;
 impl VerifiedWorkflow for BjUiConsistent {}
 impl ProvableFrom<Established<And<And<RenderComplete, CardDisplayBuilt>, PanelTextWraps>>>
     for BjUiConsistent
-{}
+{
+}
 
 /// Proposition: the Craps game state was rendered through a WCAG-verified
 /// AccessKit IR pipeline to completion, with text-wrapping enforced on all panels.

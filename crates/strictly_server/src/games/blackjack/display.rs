@@ -6,8 +6,11 @@ use elicitation::contracts::Established;
 use strictly_blackjack::BlackjackDisplayMode;
 use tracing::{debug, instrument};
 
-use crate::assets::{CardHeightFits, CardSize, CardSizeFits, bj_card_ascii_sized, bj_rank, bj_suit, card_absolute_path, card_svg_path};
 use crate::assets::Card;
+use crate::assets::{
+    CardHeightFits, CardSize, CardSizeFits, bj_card_ascii_sized, bj_rank, bj_suit,
+    card_absolute_path, card_svg_path,
+};
 use crate::games::blackjack::BlackjackStateView;
 use crate::games::display::GameDisplay;
 use crate::tui::contracts::CardDisplayBuilt;
@@ -41,7 +44,11 @@ impl BlackjackStateView {
         id_base: u64,
         col_width: u16,
         viewport_height: u16,
-    ) -> (NodeId, Vec<(NodeId, NodeJson)>, Established<CardDisplayBuilt>) {
+    ) -> (
+        NodeId,
+        Vec<(NodeId, NodeJson)>,
+        Established<CardDisplayBuilt>,
+    ) {
         let mut nodes: Vec<(NodeId, NodeJson)> = Vec::new();
         let root_id = NodeId::from(id_base);
         let mut ctr = id_base + 1;
@@ -82,8 +89,14 @@ impl BlackjackStateView {
                     dealer_label_id,
                     NodeJson::new(Role(AkRole::Paragraph)).with_label("Dealer:".to_string()),
                 ));
-                let dealer_row_id =
-                    hand_card_nodes(&self.dealer_hand, size, &size_proof, &height_proof, &mut ctr, &mut nodes);
+                let dealer_row_id = hand_card_nodes(
+                    &self.dealer_hand,
+                    size,
+                    &size_proof,
+                    &height_proof,
+                    &mut ctr,
+                    &mut nodes,
+                );
 
                 // ── Player hands ──────────────────────────────────────────────
                 let player_label_id = NodeId::from(ctr);
@@ -96,8 +109,14 @@ impl BlackjackStateView {
                 let mut player_section_ids = vec![player_label_id];
                 for hand in self.player_hands.iter() {
                     let hand_cards: Vec<Option<_>> = hand.iter().map(|&c| Some(c)).collect();
-                    let row_id =
-                        hand_card_nodes(&hand_cards, size, &size_proof, &height_proof, &mut ctr, &mut nodes);
+                    let row_id = hand_card_nodes(
+                        &hand_cards,
+                        size,
+                        &size_proof,
+                        &height_proof,
+                        &mut ctr,
+                        &mut nodes,
+                    );
                     player_section_ids.push(row_id);
                 }
 
@@ -109,8 +128,7 @@ impl BlackjackStateView {
                     ctr += 1;
                     nodes.push((
                         desc_id,
-                        NodeJson::new(Role(AkRole::Paragraph))
-                            .with_label(self.description.clone()),
+                        NodeJson::new(Role(AkRole::Paragraph)).with_label(self.description.clone()),
                     ));
                     player_section_ids.push(desc_id);
                 }
@@ -225,9 +243,10 @@ fn hand_card_nodes(
             size = ?size,
             "hand_card_nodes card art"
         );
-        let font_path = crate::assets::card_absolute_path("assets/fonts/LiberationSans-Regular.ttf")
-            .to_string_lossy()
-            .into_owned();
+        let font_path =
+            crate::assets::card_absolute_path("assets/fonts/LiberationSans-Regular.ttf")
+                .to_string_lossy()
+                .into_owned();
         nodes.push((
             id,
             NodeJson::new(Role(AkRole::Image))

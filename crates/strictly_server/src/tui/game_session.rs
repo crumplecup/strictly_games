@@ -318,9 +318,9 @@ async fn blackjack_poll_task(
     _show_typestate_graph: bool,
     _guards: crate::tui::standalone::ProcessGuards,
 ) {
+    use crate::session::SharedTableSeatView;
     use crate::tui::blackjack::phase_transition_story;
     use crate::tui::typestate_widget::blackjack_active;
-    use crate::session::SharedTableSeatView;
     use tokio::time::Duration;
 
     let idle_state = SharedTableSeatView {
@@ -422,7 +422,10 @@ async fn blackjack_poll_task(
             .enumerate()
         {
             if s.phase != *prev {
-                let name = agent_slots.get(i).map(|a| a.name.as_str()).unwrap_or("Agent");
+                let name = agent_slots
+                    .get(i)
+                    .map(|a| a.name.as_str())
+                    .unwrap_or("Agent");
                 event_log.push(phase_transition_story(name, prev, &s.phase, &s.description));
                 *prev = s.phase.clone();
             }
@@ -506,7 +509,9 @@ impl Default for TttViewState {
                 history: Vec::new(),
             },
             cursor: Position::Center,
-            event_log: vec![GameEvent::story("🎮 Connecting to game server…".to_string())],
+            event_log: vec![GameEvent::story(
+                "🎮 Connecting to game server…".to_string(),
+            )],
             dialogue: vec![],
             human_mark: TicTacToePlayer::X,
             is_over: false,
@@ -593,19 +598,16 @@ async fn ttt_setup_task(
 
     let (client, guards) = match first_player {
         FirstPlayer::Human => {
-            let client = match RestGameClient::register(
-                server_url,
-                "tui_session".to_string(),
-                player_name,
-            )
-            .await
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to register TTT client");
-                    return;
-                }
-            };
+            let client =
+                match RestGameClient::register(server_url, "tui_session".to_string(), player_name)
+                    .await
+                {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to register TTT client");
+                        return;
+                    }
+                };
             let agent = match spawn_agent(port, agent_config_path, GameMode::TicTacToe).await {
                 Ok(a) => a,
                 Err(e) => {
@@ -623,19 +625,16 @@ async fn ttt_setup_task(
                     return;
                 }
             };
-            let client = match RestGameClient::register(
-                server_url,
-                "tui_session".to_string(),
-                player_name,
-            )
-            .await
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to register TTT client");
-                    return;
-                }
-            };
+            let client =
+                match RestGameClient::register(server_url, "tui_session".to_string(), player_name)
+                    .await
+                {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!(error = %e, "Failed to register TTT client");
+                        return;
+                    }
+                };
             (client, ProcessGuards::new(server, agent))
         }
     };
@@ -643,7 +642,9 @@ async fn ttt_setup_task(
     let human_mark = client.player_mark;
     if let Ok(mut s) = state.write() {
         s.human_mark = human_mark;
-        s.event_log = vec![GameEvent::story("🎮 Game begins — X moves first".to_string())];
+        s.event_log = vec![GameEvent::story(
+            "🎮 Game begins — X moves first".to_string(),
+        )];
     }
 
     ttt_poll_task(state, action_rx, client, guards, show_typestate_graph).await;
@@ -658,8 +659,8 @@ async fn ttt_poll_task(
     _guards: crate::tui::standalone::ProcessGuards,
     _show_typestate_graph: bool,
 ) {
-    use tokio::time::Duration;
     use crate::games::tictactoe::Player;
+    use tokio::time::Duration;
 
     let mut prev_move_count: usize = 0;
     let mut prev_phase: Option<&'static str> = None;

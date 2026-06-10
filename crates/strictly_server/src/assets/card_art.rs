@@ -19,8 +19,8 @@ use tracing::instrument;
 /// `width` display columns wide (assuming 1-column-wide suit symbols).
 #[instrument(fields(?card, width, height))]
 pub fn render_card(card: Card, width: usize, height: usize) -> String {
-    let iw = width - 2;       // interior width
-    let ip = height - 4;      // pip rows (between the two rank lines)
+    let iw = width - 2; // interior width
+    let ip = height - 4; // pip rows (between the two rank lines)
 
     match card {
         Card::Playing(rank, suit) => render_playing(rank, suit, iw, ip),
@@ -54,28 +54,28 @@ pub fn render_card_back(width: usize, height: usize) -> String {
 
 fn suit_char(suit: Suit) -> char {
     match suit {
-        Suit::Clubs    => '♣',
+        Suit::Clubs => '♣',
         Suit::Diamonds => '♦',
-        Suit::Hearts   => '♥',
-        Suit::Spades   => '♠',
+        Suit::Hearts => '♥',
+        Suit::Spades => '♠',
     }
 }
 
 fn rank_str(rank: Rank) -> &'static str {
     match rank {
-        Rank::Ace   => "A",
-        Rank::Two   => "2",
+        Rank::Ace => "A",
+        Rank::Two => "2",
         Rank::Three => "3",
-        Rank::Four  => "4",
-        Rank::Five  => "5",
-        Rank::Six   => "6",
+        Rank::Four => "4",
+        Rank::Five => "5",
+        Rank::Six => "6",
         Rank::Seven => "7",
         Rank::Eight => "8",
-        Rank::Nine  => "9",
-        Rank::Ten   => "10",
-        Rank::Jack  => "J",
+        Rank::Nine => "9",
+        Rank::Ten => "10",
+        Rank::Jack => "J",
         Rank::Queen => "Q",
-        Rank::King  => "K",
+        Rank::King => "K",
     }
 }
 
@@ -87,17 +87,47 @@ fn rank_str(rank: Rank) -> &'static str {
 /// Face cards and Ace are handled separately.
 fn pip_positions(rank: Rank) -> &'static [(usize, usize)] {
     match rank {
-        Rank::Ace   => &[(2, 1)],
-        Rank::Two   => &[(0, 1), (4, 1)],
+        Rank::Ace => &[(2, 1)],
+        Rank::Two => &[(0, 1), (4, 1)],
         Rank::Three => &[(0, 1), (2, 1), (4, 1)],
-        Rank::Four  => &[(0, 0), (0, 2), (4, 0), (4, 2)],
-        Rank::Five  => &[(0, 0), (0, 2), (2, 1), (4, 0), (4, 2)],
-        Rank::Six   => &[(0, 0), (0, 2), (2, 0), (2, 2), (4, 0), (4, 2)],
+        Rank::Four => &[(0, 0), (0, 2), (4, 0), (4, 2)],
+        Rank::Five => &[(0, 0), (0, 2), (2, 1), (4, 0), (4, 2)],
+        Rank::Six => &[(0, 0), (0, 2), (2, 0), (2, 2), (4, 0), (4, 2)],
         Rank::Seven => &[(0, 0), (0, 2), (1, 1), (2, 0), (2, 2), (4, 0), (4, 2)],
-        Rank::Eight => &[(0, 0), (0, 2), (1, 1), (2, 0), (2, 2), (3, 1), (4, 0), (4, 2)],
-        Rank::Nine  => &[(0, 0), (0, 2), (1, 0), (1, 2), (2, 1), (3, 0), (3, 2), (4, 0), (4, 2)],
-        Rank::Ten   => &[(0, 0), (0, 2), (1, 0), (1, 1), (1, 2), (3, 0), (3, 1), (3, 2), (4, 0), (4, 2)],
-        _           => &[],
+        Rank::Eight => &[
+            (0, 0),
+            (0, 2),
+            (1, 1),
+            (2, 0),
+            (2, 2),
+            (3, 1),
+            (4, 0),
+            (4, 2),
+        ],
+        Rank::Nine => &[
+            (0, 0),
+            (0, 2),
+            (1, 0),
+            (1, 2),
+            (2, 1),
+            (3, 0),
+            (3, 2),
+            (4, 0),
+            (4, 2),
+        ],
+        Rank::Ten => &[
+            (0, 0),
+            (0, 2),
+            (1, 0),
+            (1, 1),
+            (1, 2),
+            (3, 0),
+            (3, 1),
+            (3, 2),
+            (4, 0),
+            (4, 2),
+        ],
+        _ => &[],
     }
 }
 
@@ -125,7 +155,7 @@ fn grid_row(gr: usize, ip: usize) -> usize {
 
 fn render_playing(rank: Rank, suit: Suit, iw: usize, ip: usize) -> String {
     let sym = suit_char(suit);
-    let rs  = rank_str(rank);
+    let rs = rank_str(rank);
 
     // Build the pip grid (interior rows × interior cols, all spaces initially).
     let mut grid: Vec<Vec<char>> = vec![vec![' '; iw]; ip];
@@ -147,17 +177,28 @@ fn render_playing(rank: Rank, suit: Suit, iw: usize, ip: usize) -> String {
 }
 
 fn render_joker_card(color: JokerColor, iw: usize, ip: usize) -> String {
-    let sym = match color { JokerColor::Black => '*', JokerColor::Red => '#' };
+    let sym = match color {
+        JokerColor::Black => '*',
+        JokerColor::Red => '#',
+    };
     let mut grid: Vec<Vec<char>> = vec![vec![' '; iw]; ip];
 
     // Star pattern around centre.
     let cr = ip / 2;
     let cc = iw / 2;
     grid[cr][cc] = sym;
-    if cr > 0             { grid[cr - 1][cc] = sym; }
-    if cr + 1 < ip        { grid[cr + 1][cc] = sym; }
-    if cc > 0             { grid[cr][cc - 1] = sym; }
-    if cc + 1 < iw        { grid[cr][cc + 1] = sym; }
+    if cr > 0 {
+        grid[cr - 1][cc] = sym;
+    }
+    if cr + 1 < ip {
+        grid[cr + 1][cc] = sym;
+    }
+    if cc > 0 {
+        grid[cr][cc - 1] = sym;
+    }
+    if cc + 1 < iw {
+        grid[cr][cc + 1] = sym;
+    }
 
     assemble("Jkr", sym, &grid, iw)
 }
@@ -165,10 +206,10 @@ fn render_joker_card(color: JokerColor, iw: usize, ip: usize) -> String {
 /// Render the pip area for J / Q / K: a centred letter in a small box.
 fn render_face_pips(grid: &mut [Vec<char>], rank: Rank, sym: char, iw: usize, ip: usize) {
     let face = match rank {
-        Rank::Jack  => 'J',
+        Rank::Jack => 'J',
         Rank::Queen => 'Q',
-        Rank::King  => 'K',
-        _           => '?',
+        Rank::King => 'K',
+        _ => '?',
     };
     let cr = ip / 2;
     let cc = iw / 2;
@@ -198,7 +239,9 @@ fn render_face_pips(grid: &mut [Vec<char>], rank: Rank, sym: char, iw: usize, ip
         }
 
         // Suit symbol below the box
-        if cr + 2 < ip { grid[cr + 2][cc] = sym; }
+        if cr + 2 < ip {
+            grid[cr + 2][cc] = sym;
+        }
     } else {
         // Fallback: just the face letter centred
         grid[cr][cc] = face;
@@ -218,21 +261,27 @@ fn assemble(rank_s: &str, sym: char, grid: &[Vec<char>], iw: usize) -> String {
     out.push('|');
     out.push_str(rank_s);
     out.push(sym);
-    for _ in used..iw { out.push(' '); }
+    for _ in used..iw {
+        out.push(' ');
+    }
     out.push('|');
     out.push('\n');
 
     // Pip rows
     for row in grid {
         out.push('|');
-        for &ch in row { out.push(ch); }
+        for &ch in row {
+            out.push(ch);
+        }
         out.push('|');
         out.push('\n');
     }
 
     // Bottom rank line: |{spaces}{suit}{rank}|
     out.push('|');
-    for _ in used..iw { out.push(' '); }
+    for _ in used..iw {
+        out.push(' ');
+    }
     out.push(sym);
     out.push_str(rank_s);
     out.push('|');
@@ -244,21 +293,27 @@ fn assemble(rank_s: &str, sym: char, grid: &[Vec<char>], iw: usize) -> String {
 
 fn push_top_border(out: &mut String, iw: usize) {
     out.push('.');
-    for _ in 0..iw { out.push('-'); }
+    for _ in 0..iw {
+        out.push('-');
+    }
     out.push('.');
     out.push('\n');
 }
 
 fn push_bottom_border(out: &mut String, iw: usize) {
     out.push('`');
-    for _ in 0..iw { out.push('-'); }
+    for _ in 0..iw {
+        out.push('-');
+    }
     out.push('\'');
     out.push('\n');
 }
 
 fn push_row(out: &mut String, iw: usize, fill: impl Fn(usize) -> char) {
     out.push('|');
-    for c in 0..iw { out.push(fill(c)); }
+    for c in 0..iw {
+        out.push(fill(c));
+    }
     out.push('|');
     out.push('\n');
 }
