@@ -24,7 +24,26 @@
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use anyhow::Result;
+/// Verify `port` is free; if not, ask the OS for an unused port.
+///
+/// When the user specifies a port via CLI it is used as-is.  Only if that
+/// port is already bound do we fall back to an OS-allocated free port.
+fn ensure_free_port(port: u16) -> u16 {
+    if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+        port
+    } else {
+        tracing::warn!(
+            requested_port = port,
+            "port already in use, selecting a free port"
+        );
+        std::net::TcpListener::bind(("127.0.0.1", 0))
+            .ok()
+            .and_then(|l| l.local_addr().ok())
+            .map(|a| a.port())
+            .unwrap_or(port)
+    }
+}
+
 use tracing::instrument;
 
 use crate::AnyGame;
@@ -110,22 +129,61 @@ pub struct BlackjackSessionHandle {
 
 /// Start a blackjack session and return a handle the frontend can render from.
 ///
-/// Spawns the HTTP game server, connects the human REST client, optionally
-/// spawns agent subprocesses, then launches a background tokio task that polls
-/// game state and writes to the shared [`BlackjackViewState`].
+/// Returns immediately — the handle's shared state starts in "connecting" mode
+/// while a background tokio task spawns the HTTP server, connects the client,
+/// spawns agent subprocesses, and then polls game state continuously.
+///
+/// Call this from a synchronous context (e.g. a winit event callback running
+/// inside a tokio runtime) — it uses `tokio::spawn` internally, never `block_on`.
 #[instrument(skip_all, fields(port, num_players = players.len()))]
-pub async fn start_blackjack_session(
+pub fn start_blackjack_session(
     players: Vec<crate::PlayerSlot>,
     port: u16,
     fallback_agent_config: PathBuf,
     show_typestate_graph: bool,
-) -> Result<BlackjackSessionHandle> {
+) -> BlackjackSessionHandle {
+    // Create the handle immediately — synchronous, no await.
+    // The shared state starts in "connecting" mode while the background task
+    // does the async server/client setup.
+    let state = Arc::new(RwLock::new(BlackjackViewState::default()));
+    let (action_tx, action_rx) = tokio::sync::mpsc::channel(32);
+
+    let state_task = state.clone();
+    tokio::spawn(blackjack_setup_task(
+        state_task,
+        action_rx,
+        players,
+        port,
+        fallback_agent_config,
+        show_typestate_graph,
+    ));
+
+    BlackjackSessionHandle { state, action_tx }
+}
+
+/// Background task: async server/agent setup followed by the poll loop.
+///
+/// Runs as a tokio task so the frontend never blocks waiting for setup.
+#[instrument(skip_all)]
+async fn blackjack_setup_task(
+    state: Arc<RwLock<BlackjackViewState>>,
+    action_rx: tokio::sync::mpsc::Receiver<BlackjackAction>,
+    players: Vec<crate::PlayerSlot>,
+    port: u16,
+    fallback_agent_config: PathBuf,
+    show_typestate_graph: bool,
+) {
     use crate::PlayerKind;
     use crate::PlayerSlot;
     use crate::tui::rest_client::{BlackjackObserver, HumanBlackjackClient};
     use crate::tui::standalone::{GameMode, ProcessGuards, spawn_agent, spawn_server};
 
     const HUMAN_SESSION: &str = "human_bj";
+
+    // Use the requested port if free; fall back to an OS-allocated port only
+    // if the requested port is already bound.
+    let port = ensure_free_port(port);
+    tracing::debug!(port, "blackjack session port selected");
 
     let human_slot = players
         .iter()
@@ -139,16 +197,55 @@ pub async fn start_blackjack_session(
 
     let agent_slots: Vec<PlayerSlot> = players
         .into_iter()
-        .filter(|s| matches!(s.kind, PlayerKind::Agent { .. }))
+        .filter(|s| matches!(s.kind, PlayerKind::Agent(_)))
         .collect();
 
     let player_name = human_slot.name.clone();
     let initial_bankroll = human_slot.bankroll;
     let server_url = format!("http://localhost:{port}");
 
-    let server = spawn_server(port).await?;
+    let server = match spawn_server(port).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to spawn game server");
+            if let Ok(mut s) = state.write() {
+                s.bj_view.description = format!("Error: {e}");
+            }
+            return;
+        }
+    };
 
-    let human = HumanBlackjackClient::connect(server_url.clone()).await?;
+    let human = match HumanBlackjackClient::connect(server_url.clone()).await {
+        Ok(h) => h,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to connect to game server");
+            if let Ok(mut s) = state.write() {
+                s.bj_view.description = format!("Error: {e}");
+            }
+            return;
+        }
+    };
+
+    // Initialise the shared table — must be called before spawning agents.
+    let num_seats = (1 + agent_slots.len()) as u64;
+    if let Err(e) = human
+        .call_tool(
+            "blackjack_deal",
+            serde_json::json!({
+                "initial_bankroll": initial_bankroll,
+                "session_id": HUMAN_SESSION,
+                "num_seats": num_seats,
+                "player_name": player_name
+            }),
+        )
+        .await
+    {
+        tracing::error!(error = %e, "blackjack_deal init failed");
+        if let Ok(mut s) = state.write() {
+            s.bj_view.description = format!("Error starting game: {e}");
+        }
+        return;
+    }
 
     let mut agent_children: Vec<tokio::process::Child> = Vec::new();
     let mut agent_session_ids: Vec<String> = Vec::new();
@@ -161,7 +258,7 @@ pub async fn start_blackjack_session(
                 .unwrap_or_else(|| fallback_agent_config.clone()),
             PlayerKind::Human => fallback_agent_config.clone(),
         };
-        let agent = spawn_agent(
+        match spawn_agent(
             port,
             config_path,
             GameMode::Blackjack {
@@ -169,9 +266,16 @@ pub async fn start_blackjack_session(
                 session_id: sid.clone(),
             },
         )
-        .await?;
-        agent_children.push(agent);
-        agent_session_ids.push(sid);
+        .await
+        {
+            Ok(child) => {
+                agent_children.push(child);
+                agent_session_ids.push(sid);
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to spawn agent");
+            }
+        }
     }
     let guards = ProcessGuards::many(server, agent_children);
 
@@ -181,18 +285,14 @@ pub async fn start_blackjack_session(
         .map(|sid| BlackjackObserver::new(server_url.clone(), sid.clone()))
         .collect();
 
-    let state = Arc::new(RwLock::new(BlackjackViewState {
-        event_log: vec![GameEvent::story(format!(
+    if let Ok(mut s) = state.write() {
+        s.event_log = vec![GameEvent::story(format!(
             "🃏  Blackjack — {player_name} joined (bankroll: ${initial_bankroll})"
-        ))],
-        ..BlackjackViewState::default()
-    }));
+        ))];
+    }
 
-    let (action_tx, action_rx) = tokio::sync::mpsc::channel(32);
-
-    let state_task = state.clone();
-    tokio::spawn(blackjack_poll_task(
-        state_task,
+    blackjack_poll_task(
+        state,
         action_rx,
         human,
         human_observer,
@@ -201,9 +301,8 @@ pub async fn start_blackjack_session(
         player_name,
         show_typestate_graph,
         guards,
-    ));
-
-    Ok(BlackjackSessionHandle { state, action_tx })
+    )
+    .await;
 }
 
 /// Background task: polls game server state and writes to shared view state.
@@ -216,7 +315,7 @@ async fn blackjack_poll_task(
     agent_observers: Vec<crate::tui::rest_client::BlackjackObserver>,
     agent_slots: Vec<crate::PlayerSlot>,
     player_name: String,
-    show_typestate_graph: bool,
+    _show_typestate_graph: bool,
     _guards: crate::tui::standalone::ProcessGuards,
 ) {
     use crate::tui::blackjack::phase_transition_story;
@@ -435,58 +534,119 @@ pub struct TttSessionHandle {
 }
 
 /// Start a TTT session and return a handle the frontend can render from.
+///
+/// Returns immediately — the handle's shared state starts in "connecting" mode
+/// while a background tokio task does the async server/client/agent setup.
 #[instrument(skip_all, fields(port))]
-pub async fn start_ttt_session(
+pub fn start_ttt_session(
     agent_config_path: PathBuf,
     player_name: String,
     port: u16,
     first_player: FirstPlayer,
     show_typestate_graph: bool,
-) -> Result<TttSessionHandle> {
+) -> TttSessionHandle {
+    let state = Arc::new(RwLock::new(TttViewState::default()));
+    let (action_tx, action_rx) = tokio::sync::mpsc::channel(32);
+
+    let state_task = state.clone();
+    tokio::spawn(ttt_setup_task(
+        state_task,
+        action_rx,
+        agent_config_path,
+        player_name,
+        port,
+        first_player,
+        show_typestate_graph,
+    ));
+
+    TttSessionHandle { state, action_tx }
+}
+
+/// Background task: async setup then poll loop for TTT.
+#[instrument(skip_all)]
+async fn ttt_setup_task(
+    state: Arc<RwLock<TttViewState>>,
+    action_rx: tokio::sync::mpsc::Receiver<TttAction>,
+    agent_config_path: PathBuf,
+    player_name: String,
+    port: u16,
+    first_player: FirstPlayer,
+    show_typestate_graph: bool,
+) {
     use crate::tui::rest_client::RestGameClient;
     use crate::tui::standalone::{GameMode, ProcessGuards, spawn_agent, spawn_server};
 
+    // Use the requested port if free; fall back to an OS-allocated port only
+    // if the requested port is already bound.
+    let port = ensure_free_port(port);
+    tracing::debug!(port, "TTT session port selected");
+
     let server_url = format!("http://localhost:{port}");
-    let server = spawn_server(port).await?;
+
+    let server = match spawn_server(port).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to spawn TTT server");
+            return;
+        }
+    };
 
     let (client, guards) = match first_player {
         FirstPlayer::Human => {
-            let client =
-                RestGameClient::register(server_url, "tui_session".to_string(), player_name)
-                    .await?;
-            let agent =
-                spawn_agent(port, agent_config_path, GameMode::TicTacToe).await?;
+            let client = match RestGameClient::register(
+                server_url,
+                "tui_session".to_string(),
+                player_name,
+            )
+            .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to register TTT client");
+                    return;
+                }
+            };
+            let agent = match spawn_agent(port, agent_config_path, GameMode::TicTacToe).await {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to spawn TTT agent");
+                    return;
+                }
+            };
             (client, ProcessGuards::new(server, agent))
         }
         FirstPlayer::Agent => {
-            let agent =
-                spawn_agent(port, agent_config_path, GameMode::TicTacToe).await?;
-            let client =
-                RestGameClient::register(server_url, "tui_session".to_string(), player_name)
-                    .await?;
+            let agent = match spawn_agent(port, agent_config_path, GameMode::TicTacToe).await {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to spawn TTT agent");
+                    return;
+                }
+            };
+            let client = match RestGameClient::register(
+                server_url,
+                "tui_session".to_string(),
+                player_name,
+            )
+            .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to register TTT client");
+                    return;
+                }
+            };
             (client, ProcessGuards::new(server, agent))
         }
     };
 
     let human_mark = client.player_mark;
-    let state = Arc::new(RwLock::new(TttViewState {
-        human_mark,
-        event_log: vec![GameEvent::story("🎮 Game begins — X moves first".to_string())],
-        ..TttViewState::default()
-    }));
+    if let Ok(mut s) = state.write() {
+        s.human_mark = human_mark;
+        s.event_log = vec![GameEvent::story("🎮 Game begins — X moves first".to_string())];
+    }
 
-    let (action_tx, action_rx) = tokio::sync::mpsc::channel(32);
-    let state_task = state.clone();
-
-    tokio::spawn(ttt_poll_task(
-        state_task,
-        action_rx,
-        client,
-        guards,
-        show_typestate_graph,
-    ));
-
-    Ok(TttSessionHandle { state, action_tx })
+    ttt_poll_task(state, action_rx, client, guards, show_typestate_graph).await;
 }
 
 /// Background task: polls TTT game state and writes to shared view state.
