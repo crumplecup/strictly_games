@@ -6,7 +6,8 @@ use elicitation::contracts::Established;
 use strictly_blackjack::BlackjackDisplayMode;
 use tracing::{debug, instrument};
 
-use crate::assets::{CardHeightFits, CardSize, CardSizeFits, bj_card_ascii_sized};
+use crate::assets::{CardHeightFits, CardSize, CardSizeFits, bj_card_ascii_sized, bj_rank, bj_suit, card_absolute_path, card_svg_path};
+use crate::assets::Card;
 use crate::games::blackjack::BlackjackStateView;
 use crate::games::display::GameDisplay;
 use crate::tui::contracts::CardDisplayBuilt;
@@ -203,30 +204,38 @@ fn hand_card_nodes(
     for card in &cards {
         let id = NodeId::from(*ctr);
         *ctr += 1;
+        // ASCII art goes in the label — TUI bridge renders it as monospace.
+        // SVG/PNG path goes in the URL — visual bridges (egui, leptos) load it.
         let art = bj_card_ascii_sized(*card, size);
-        let art_line_count = art.lines().count();
-        let art_max_display_w = art
-            .lines()
-            .map(|l| unicode_width::UnicodeWidthStr::width(l))
-            .max()
-            .unwrap_or(0);
+        let svg_url = match card {
+            Some((rank, suit)) => {
+                let rel = card_svg_path(Card::Playing(bj_rank(*rank), bj_suit(*suit)));
+                card_absolute_path(rel.to_str().unwrap_or(""))
+                    .to_string_lossy()
+                    .into_owned()
+            }
+            None => card_absolute_path("assets/cards/USPCC_card_backs_Bicycle_Rider.png")
+                .to_string_lossy()
+                .into_owned(),
+        };
         debug!(
             card = ?card,
-            art_lines = art_line_count,
-            art_max_display_w,
+            url = %svg_url,
+            art_lines = art.lines().count(),
             size = ?size,
             "hand_card_nodes card art"
         );
-        // Log every line at trace level so the full art is visible in the log.
-        for (i, line) in art.lines().enumerate() {
-            tracing::trace!(
-                card = ?card,
-                line = i,
-                content = line,
-                "hand_card_nodes art line"
-            );
-        }
-        nodes.push((id, NodeJson::new(Role(AkRole::Paragraph)).with_label(art)));
+        let font_path = crate::assets::card_absolute_path("assets/fonts/LiberationSans-Regular.ttf")
+            .to_string_lossy()
+            .into_owned();
+        nodes.push((
+            id,
+            NodeJson::new(Role(AkRole::Image))
+                .with_url(svg_url)
+                .with_label(art)
+                .with_font_family("Liberation Sans".to_string())
+                .with_font_path(font_path),
+        ));
         card_ids.push(id);
     }
 
