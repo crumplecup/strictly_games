@@ -16,6 +16,27 @@ pub(crate) mod card_art;
 
 use std::path::Path;
 
+/// Absolute path to the `assets/` directory, resolved at compile time.
+///
+/// The workspace root is two levels above `crates/strictly_server/`, so
+/// `CARGO_MANIFEST_DIR/../../assets` gives a stable absolute path regardless
+/// of where the binary is invoked.
+const ASSETS_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+
+/// Resolve a relative card asset path (e.g. `"assets/cards/9_of_diamonds.svg"`)
+/// to a canonical absolute path, removing any `..` components so the result
+/// is safe to use in `file://` URIs (which URI parsers do not resolve `..` in).
+///
+/// Returns the canonical [`std::path::PathBuf`] if the file exists, or the
+/// unresolved path as a fallback (used during tests before assets are present).
+pub fn card_absolute_path(rel_path: &str) -> std::path::PathBuf {
+    let rel = rel_path.strip_prefix("assets/").unwrap_or(rel_path);
+    let raw = std::path::PathBuf::from(ASSETS_ROOT).join(rel);
+    // canonicalize removes `..` components; falls back to raw path if the file
+    // doesn't exist (e.g. a missing asset during development).
+    raw.canonicalize().unwrap_or(raw)
+}
+
 // ── Card types ────────────────────────────────────────────────────────────────
 
 /// Playing card rank.
