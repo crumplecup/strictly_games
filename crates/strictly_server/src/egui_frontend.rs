@@ -306,21 +306,13 @@ impl GamesEguiApp {
                 let first_player = self.settings.first_player;
                 let show_graph = self.settings.show_typestate_graph;
 
-                let handle = tokio::runtime::Handle::current();
-                match handle.block_on(start_ttt_session(
+                self.screen = EguiActiveScreen::TicTacToe(start_ttt_session(
                     config_path,
                     player_name,
                     port,
                     first_player,
                     show_graph,
-                )) {
-                    Ok(session) => {
-                        self.screen = EguiActiveScreen::TicTacToe(session);
-                    }
-                    Err(e) => {
-                        tracing::error!(error = %e, "Failed to start TTT session");
-                    }
-                }
+                ));
             }
 
             ScreenTransition::GoToBlackjackSetup => {
@@ -342,20 +334,12 @@ impl GamesEguiApp {
                 let fallback = self.agent_config_path.clone();
                 let show_graph = self.settings.show_typestate_graph;
 
-                let handle = tokio::runtime::Handle::current();
-                match handle.block_on(start_blackjack_session(
+                self.screen = EguiActiveScreen::BlackjackGame(start_blackjack_session(
                     players,
                     port,
                     fallback,
                     show_graph,
-                )) {
-                    Ok(session) => {
-                        self.screen = EguiActiveScreen::BlackjackGame(session);
-                    }
-                    Err(e) => {
-                        tracing::error!(error = %e, "Failed to start Blackjack session");
-                    }
-                }
+                ));
             }
         }
     }
@@ -376,6 +360,42 @@ impl GamesEguiApp {
 
         let size = ui.available_size();
         let viewport = Viewport::new(size.x as u32, size.y as u32);
+
+        // Check whether a running game session has ended (quit or natural finish)
+        // and transition back to the lobby before rendering this frame.
+        match &self.screen {
+            EguiActiveScreen::TicTacToe(handle) => {
+                if handle.state.read().unwrap().is_over {
+                    if let Some(user) = self.current_user.clone() {
+                        self.screen = EguiActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                            user,
+                            self.settings.selected_game,
+                            &self.profile_service,
+                        ));
+                    } else {
+                        self.screen = EguiActiveScreen::GameSelect(GameSelectScreen::new(
+                            self.settings.selected_game,
+                        ));
+                    }
+                }
+            }
+            EguiActiveScreen::BlackjackGame(handle) => {
+                if handle.state.read().unwrap().outcome.is_some() {
+                    if let Some(user) = self.current_user.clone() {
+                        self.screen = EguiActiveScreen::MainLobby(MainLobbyScreen::with_game(
+                            user,
+                            self.settings.selected_game,
+                            &self.profile_service,
+                        ));
+                    } else {
+                        self.screen = EguiActiveScreen::GameSelect(GameSelectScreen::new(
+                            self.settings.selected_game,
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
 
         let tree = match &self.screen {
             EguiActiveScreen::TicTacToe(handle) => {
@@ -757,10 +777,12 @@ impl ApplicationHandler for GamesEguiApp {
 
         let size = window.inner_size();
         let caps = surface.get_capabilities(&adapter);
+        // egui handles gamma correction in its shaders; use a non-sRGB surface
+        // to avoid double gamma encoding.  Fall back to the first available format.
         let format = caps
             .formats
             .iter()
-            .find(|f| f.is_srgb())
+            .find(|f| !f.is_srgb())
             .copied()
             .unwrap_or(caps.formats[0]);
         let config = wgpu::SurfaceConfiguration {
@@ -776,6 +798,8 @@ impl ApplicationHandler for GamesEguiApp {
         surface.configure(&device, &config);
 
         let egui_ctx = egui::Context::default();
+        egui_extras::install_image_loaders(&egui_ctx);
+        tracing::info!("egui image loaders installed (svg + png support active)");
         Self::apply_theme(&egui_ctx);
         let egui_state = EguiWinitState::new(
             egui_ctx,
