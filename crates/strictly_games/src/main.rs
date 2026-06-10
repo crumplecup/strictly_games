@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
                 let agent_config = std::path::PathBuf::from("agent_config.toml");
                 run_lobby(db_path, agents_dir, port, agent_config).await
             }
-            FrontendMode::Egui => run_egui_lobby(db_path, agents_dir).await,
+            FrontendMode::Egui => run_egui_lobby(db_path, agents_dir, port).await,
             FrontendMode::Leptos => run_leptos_lobby(db_path, agents_dir, port).await,
         },
         Command::Agent {
@@ -322,10 +322,25 @@ async fn run_leptos_lobby(
 
 /// Run the egui native-window frontend with the full lobby.
 #[instrument(skip_all, fields(db_path = %db_path))]
-async fn run_egui_lobby(db_path: String, agents_dir: Option<std::path::PathBuf>) -> Result<()> {
+async fn run_egui_lobby(
+    db_path: String,
+    agents_dir: Option<std::path::PathBuf>,
+    port: u16,
+) -> Result<()> {
     use strictly_server::{AgentLibrary, GameRepository, ProfileService};
 
-    init_logging();
+    // Log to file so the session can be read post-hoc (same pattern as run_lobby).
+    let log_file = std::fs::File::create("strictly_games_egui.log")?;
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug")),
+        )
+        .with_writer(std::sync::Arc::new(log_file))
+        .with_ansi(false)
+        .try_init();
+
+    info!(port, "Starting egui lobby");
 
     let repository = GameRepository::open(&db_path)?;
     let profile_service = ProfileService::new(repository);
@@ -342,10 +357,9 @@ async fn run_egui_lobby(db_path: String, agents_dir: Option<std::path::PathBuf>)
         })
     };
 
-    // Derive config path before consuming agents_dir in the if-let below.
     let agent_config_path = std::path::PathBuf::from("agents/default.toml");
 
-    strictly_server::run_egui(profile_service, agent_library, 3000, agent_config_path)
+    strictly_server::run_egui(profile_service, agent_library, port, agent_config_path)
 }
 
 /// Run the lobby TUI
