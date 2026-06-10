@@ -15,9 +15,8 @@ mod typestate_widget;
 
 pub use blackjack::{BlackjackSessionOutcome, run_blackjack_mcp_session};
 pub use game_session::{
-    BlackjackAction, BlackjackSessionHandle, BlackjackViewState,
-    TttAction, TttSessionHandle, TttViewState,
-    start_blackjack_session, start_ttt_session,
+    BlackjackAction, BlackjackSessionHandle, BlackjackViewState, start_blackjack_session,
+    TttAction, TttSessionHandle, TttViewState, start_ttt_session,
 };
 pub use craps::{CrapsCoPlayer, CrapsSessionOutcome, run_craps_session, run_multi_craps_session};
 pub use typestate_widget::{

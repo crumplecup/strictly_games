@@ -25,7 +25,7 @@
 
 use std::collections::BTreeMap;
 
-use accesskit::{Node as AkNode, NodeId as AkNodeId, Role as AkRole};
+use accesskit::{Node as AkNode, NodeId as AkNodeId, Orientation as AkOrientation, Role as AkRole};
 use elicit_accesskit::{NodeId, NodeJson, Role};
 use elicitation::contracts::Established;
 use elicit_ui::{VerifiedTree, Viewport};
@@ -287,6 +287,7 @@ fn wrap_in_window_with_row(
 
     let window_id = AkNodeId::from(0u64);
     let mut window = AkNode::new(AkRole::Window);
+    window.set_orientation(AkOrientation::Vertical);
     window.set_children(vec![banner_id, row_id, status_id]);
     nodes.insert(window_id, window);
 
@@ -343,6 +344,7 @@ pub fn ttt_to_verified_tree(
     // Row (id=2) — horizontal content container
     let row_id = AkNodeId::from(2u64);
     let mut row = AkNode::new(AkRole::Row);
+    row.set_orientation(AkOrientation::Horizontal);
     row.set_children(col_roots);
     nodes.insert(row_id, row);
 
@@ -427,6 +429,7 @@ pub fn bj_to_verified_tree(
 
     let row_id = AkNodeId::from(2u64);
     let mut row = AkNode::new(AkRole::Row);
+    row.set_orientation(AkOrientation::Horizontal);
     row.set_children(col_roots);
     nodes.insert(row_id, row);
 
@@ -478,6 +481,7 @@ pub fn craps_to_verified_tree(
 
     let row_id = AkNodeId::from(2u64);
     let mut row = AkNode::new(AkRole::Row);
+    row.set_orientation(AkOrientation::Horizontal);
     row.set_children(col_roots);
     nodes.insert(row_id, row);
 
