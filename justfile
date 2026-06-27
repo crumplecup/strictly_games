@@ -19,8 +19,13 @@ rustc := if path_exists(home_directory() / ".rustup/toolchains/stable-x86_64-unk
     "rustc"
 }
 
+# Nightly is required only for strictly_proofs (Kani, Creusot). Normal builds
+# and examples use stable via rust-toolchain.toml and {{cargo}} above.
+proofs_toolchain := "nightly-2026-04-21"
+
 export RUSTC := rustc
 export CARGO_TARGET_DIR := justfile_directory() / "target"
+export RUSTUP_TOOLCHAIN := "stable"
 
 # List all available recipes
 default:
@@ -73,6 +78,14 @@ run-http:
 run-tui:
     {{cargo}} run -- tui
 
+# Run elicitation tutorial example (interactive TUI)
+example-elicitation-tutorial:
+    {{cargo}} run -p strictly_games --example elicitation_tutorial
+
+# Run elicitation tutorial example (MCP stdio for external agents)
+example-elicitation-tutorial-mcp:
+    {{cargo}} run -p strictly_games --example elicitation_tutorial -- --mcp
+
 # Clean build artifacts
 clean:
     {{cargo}} clean
@@ -84,27 +97,27 @@ clean:
 # Run all Kani verification harnesses
 verify:
     @echo "Running Kani formal verification..."
-    {{cargo}} kani -p strictly_proofs
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs
 
 # Run compositional proof (types verified through framework)
 verify-compositional:
     @echo "Verifying types through compositional proof chain..."
-    {{cargo}} kani -p strictly_proofs --harness verify_tictactoe_composition_capstone
-    {{cargo}} kani -p strictly_proofs --harness verify_blackjack_legos
-    {{cargo}} kani -p strictly_proofs --harness verify_craps_legos
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness verify_tictactoe_composition_capstone
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness verify_blackjack_legos
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness verify_craps_legos
 
 # Run game invariant proofs (game rules correctness)
 verify-invariants:
     @echo "Verifying game-specific invariants..."
-    {{cargo}} kani -p strictly_proofs --harness player_opponent_is_involutive
-    {{cargo}} kani -p strictly_proofs --harness position_to_index_is_always_valid
-    {{cargo}} kani -p strictly_proofs --harness is_full_iff_no_empty_squares
-    {{cargo}} kani -p strictly_proofs --harness is_full_false_on_new_board
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness player_opponent_is_involutive
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness position_to_index_is_always_valid
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness is_full_iff_no_empty_squares
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness is_full_false_on_new_board
 
 # Run TicTacToe wrapper-layer proofs (contracts, typestate, replay, terminal transitions)
 verify-tictactoe-contracts:
     @echo "Verifying TicTacToe wrapper layer (contracts + typestate + terminal transitions)..."
-    {{cargo}} kani -p strictly_proofs \
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs \
         --harness validate_square_empty_ok_when_empty \
         --harness validate_square_empty_err_when_occupied \
         --harness validate_player_turn_ok_when_correct_player \
@@ -128,13 +141,13 @@ verify-tictactoe-contracts:
 # Requires -Z function-contracts (contracts are still an unstable Kani feature).
 verify-tictactoe-function-contracts:
     @echo "Verifying TicTacToe function contracts (proof_for_contract leaf proofs)..."
-    {{cargo}} kani -p strictly_proofs -Z function-contracts \
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs -Z function-contracts \
         --harness contract_validate_square_empty \
         --harness contract_validate_player_turn \
         --harness contract_validate_move \
         --harness contract_execute_move
     @echo "Verifying compositional make_move proof (stub_verified capstone)..."
-    {{cargo}} kani -p strictly_proofs -Z function-contracts \
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs -Z function-contracts \
         --harness make_move_alternates_player_compositional
 
 # ─────────────────────────────────────────────────────────────
@@ -160,7 +173,7 @@ generate-all:
 # Run generated kani_proof() foundation harnesses (newtype wrappers and constructibility)
 verify-generated:
     @echo "Verifying generated kani_proof() foundation harnesses..."
-    {{cargo}} kani -p strictly_proofs \
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs \
         --harness verify_player_constructible \
         --harness verify_position_constructible \
         --harness verify_board_newtype_wrapper \
@@ -176,7 +189,7 @@ verify-generated:
 # Run financial typestate proofs (BankrollLedger double-deduction safety)
 verify-financial:
     @echo "Verifying financial typestate proofs (BankrollLedger)..."
-    {{cargo}} kani -p strictly_proofs --harness verify_bankroll_legos \
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness verify_bankroll_legos \
         --harness verify_debit_arithmetic \
         --harness verify_debit_zero_bet_rejected \
         --harness verify_debit_overdraft_rejected \
@@ -194,7 +207,7 @@ verify-financial:
 # Run craps invariant, scenario, and financial proofs
 verify-craps:
     @echo "Verifying craps game logic..."
-    {{cargo}} kani -p strictly_proofs \
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs \
         --harness die_face_value_bounded \
         --harness dice_roll_sum_bounded \
         --harness die_face_roundtrip \
@@ -241,24 +254,24 @@ verify-craps:
 # Run passive-affirm escape hatch proofs
 verify-passive-affirm:
     @echo "Verifying passive-Affirm escape hatch pattern..."
-    {{cargo}} kani -p strictly_proofs --harness affirm_continue_always_returns
-    {{cargo}} kani -p strictly_proofs --harness cancellation_is_monotonic
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness affirm_continue_always_returns
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness cancellation_is_monotonic
 
 # Run TUI breakpoint truth-table proofs (NoOverflow layout arithmetic) — Kani
 verify-tui-breakpoints:
     @echo "Verifying TUI layout contracts across all 7 terminal breakpoints..."
-    {{cargo}} kani -p strictly_proofs --harness truncation_always_satisfies_label_contained
-    {{cargo}} kani -p strictly_proofs --harness node_box_width_no_u16_overflow
-    {{cargo}} kani -p strictly_proofs --harness area_sufficient_zero_height_fails
-    {{cargo}} kani -p strictly_proofs --harness area_sufficient_nonzero_height_passes
-    {{cargo}} kani -p strictly_proofs --harness breakpoint_minimum_blackjack_layout
-    {{cargo}} kani -p strictly_proofs --harness breakpoint_small_layout
-    {{cargo}} kani -p strictly_proofs --harness breakpoint_medium_layout
-    {{cargo}} kani -p strictly_proofs --harness breakpoint_large_layout
-    {{cargo}} kani -p strictly_proofs --harness breakpoint_ultrawide_layout
-    {{cargo}} kani -p strictly_proofs --harness breakpoint_tiny_graceful_degrade
-    {{cargo}} kani -p strictly_proofs --harness breakpoint_micro_expected_failure
-    {{cargo}} kani -p strictly_proofs --harness symbolic_must_pass_range_safe
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness truncation_always_satisfies_label_contained
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness node_box_width_no_u16_overflow
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness area_sufficient_zero_height_fails
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness area_sufficient_nonzero_height_passes
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness breakpoint_minimum_blackjack_layout
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness breakpoint_small_layout
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness breakpoint_medium_layout
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness breakpoint_large_layout
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness breakpoint_ultrawide_layout
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness breakpoint_tiny_graceful_degrade
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness breakpoint_micro_expected_failure
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani -p strictly_proofs --harness symbolic_must_pass_range_safe
 
 # Run TUI breakpoint proofs — Creusot (Why3 deductive verification)
 # Requires: {{cargo}} install cargo-creusot
@@ -268,7 +281,7 @@ verify-tui-breakpoints-creusot:
     @echo "            truncation_satisfies_label_contained (universal),"
     @echo "            node_box_no_overflow, area_sufficient checks,"
     @echo "            breakpoint witnesses (minimum, micro, tiny)"
-    {{cargo}} creusot -p strictly_proofs
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} creusot -p strictly_proofs
 
 # Run TUI breakpoint proofs — Verus (Z3 SMT specification-based)
 # Requires: verus binary on PATH  (see crates/strictly_proofs/src/verus_proofs/README.md)
@@ -476,7 +489,7 @@ verify-kani-tracked csv="kani_verification_results.csv" timeout="300":
         IDX=$((IDX + 1))
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if timeout "{{timeout}}" {{cargo}} kani --harness "$harness" -p strictly_proofs -Z function-contracts -Z stubbing &>/dev/null; then
+        if timeout "{{timeout}}" RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani --harness "$harness" -p strictly_proofs -Z function-contracts -Z stubbing &>/dev/null; then
             END=$(date +%s)
             ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
@@ -686,7 +699,7 @@ verify-kani-resume csv="kani_verification_results.csv" timeout="300":
         fi
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if timeout "{{timeout}}" {{cargo}} kani --harness "$harness" -p strictly_proofs -Z function-contracts -Z stubbing &>/dev/null; then
+        if timeout "{{timeout}}" RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani --harness "$harness" -p strictly_proofs -Z function-contracts -Z stubbing &>/dev/null; then
             END=$(date +%s); ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
             printf "✅ PASS (%ds)\n" "$ELAPSED"
@@ -784,7 +797,7 @@ verify-kani-vsm csv="vsm_kani_results.csv" timeout="240":
         IDX=$((IDX + 1))
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if timeout "{{timeout}}" {{cargo}} kani --harness "$harness" -p strictly_proofs \
+        if timeout "{{timeout}}" RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani --harness "$harness" -p strictly_proofs \
                 -Z function-contracts -Z stubbing &>/dev/null; then
             END=$(date +%s); ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
@@ -841,7 +854,7 @@ verify-kani-vsm-resume csv="vsm_kani_results.csv" timeout="240":
         fi
         printf "  [%d/%d] %-50s" "$IDX" "$TOTAL" "$harness"
         START=$(date +%s)
-        if timeout "{{timeout}}" {{cargo}} kani --harness "$harness" -p strictly_proofs \
+        if timeout "{{timeout}}" RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani --harness "$harness" -p strictly_proofs \
                 -Z function-contracts -Z stubbing &>/dev/null; then
             END=$(date +%s); ELAPSED=$((END - START))
             echo "kani_proofs,$harness,PASS,$ELAPSED,$(date -Iseconds)" >> "$CSV"
@@ -1193,7 +1206,7 @@ verify-creusot-tracked csv="creusot_verification_results.csv":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    if ! opam exec -- {{cargo}} creusot version &>/dev/null 2>&1; then
+    if ! opam exec -- RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} creusot version &>/dev/null 2>&1; then
         echo "❌ cargo-creusot not found via opam."
         echo "   Install: opam install creusot  (or {{cargo}} install cargo-creusot)"
         exit 1
@@ -1207,8 +1220,8 @@ verify-creusot-tracked csv="creusot_verification_results.csv":
     for module in "${MODULES[@]}"; do
         echo -n "  🔬 $module ... "
         START=$(date +%s%3N)
-        # {{cargo}} creusot compiles with creusot cfg and checks contracts
-        OUTPUT=$(opam exec -- {{cargo}} creusot -- -p strictly_proofs 2>&1) || RC=$?
+        # RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} creusot compiles with creusot cfg and checks contracts
+        OUTPUT=$(opam exec -- RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} creusot -- -p strictly_proofs 2>&1) || RC=$?
         END=$(date +%s%3N)
         ELAPSED=$(( (END - START) / 1000 ))
         TS=$(date -Iseconds)
@@ -1245,7 +1258,7 @@ verify-creusot-prove csv="creusot_module_results.csv" goals="creusot_goal_result
         exit 1
     fi
 
-    echo "🔬 Running Creusot prove pass ({{cargo}} creusot prove)..."
+    echo "🔬 Running Creusot prove pass (RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} creusot prove)..."
     echo "   Module CSV: {{csv}}"
     echo "   Goals CSV:  {{goals}}"
     echo ""
@@ -1261,7 +1274,7 @@ verify-creusot-prove csv="creusot_module_results.csv" goals="creusot_goal_result
     for module in "${MODULES[@]}"; do
         echo "  📐 $module"
         START=$(date +%s%3N)
-        OUTPUT=$(opam exec -- {{cargo}} creusot prove -- -p strictly_proofs 2>&1) || RC=$?
+        OUTPUT=$(opam exec -- RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} creusot prove -- -p strictly_proofs 2>&1) || RC=$?
         END=$(date +%s%3N)
         ELAPSED=$(( (END - START) / 1000 ))
         TS=$(date -Iseconds)
@@ -1312,7 +1325,7 @@ verify-creusot-prove csv="creusot_module_results.csv" goals="creusot_goal_result
 # Generates verif/strictly_proofs_rlib/creusot_proofs/...
 verify-vsm-creusot-compile:
     PATH="${HOME}/.local/share/creusot/bin:${PATH}" \
-    {{cargo}} creusot prove -- -p strictly_proofs
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} creusot prove -- -p strictly_proofs
 
 # Prove VSM game companions (generated/) via why3find
 verify-vsm-creusot-prove:
@@ -1446,9 +1459,9 @@ verify-dashboard:
 install-kani:
     @echo "Installing Kani Rust Verifier..."
     {{cargo}} install --locked kani-verifier
-    {{cargo}} kani setup
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani setup
     @echo "Kani installed. Run 'just verify' to run proofs."
 
 # Show Kani version
 kani-version:
-    {{cargo}} kani --version
+    RUSTUP_TOOLCHAIN={{proofs_toolchain}} {{cargo}} kani --version
